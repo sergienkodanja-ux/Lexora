@@ -1,0 +1,40 @@
+{
+  "gui_open": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:gui_open" ]
+  },
+  "enable": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:enable" ]
+  },
+  "disable": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:disable" ]
+  },
+  "hit_bubble": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:bubble" ]
+  },
+  "hit_crime": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:crime" ]
+  },
+  "hit_metallic": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:metallic" ]
+  },
+  "hit_bell": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:bell" ]
+  },
+  "hit_bonk": {
+    "category": "master",
+    "sounds": [ "lexoravisauls:bonk" ]
+  },
+  "notification": {
+    "category": "player",
+    "sounds": [
+      "lexoravisauls:notification"
+    ]
+  }
+}

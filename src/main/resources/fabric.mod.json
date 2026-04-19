@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "lexoravisauls",
+  "version": "${version}",
+  "name": "LexoraVisauls",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/lexoravisauls/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-datagen": [
+      "com.lexoravisauls.client.LexoravisaulsDataGenerator"
+    ],
+    "client": [
+      "com.lexoravisauls.client.LexoravisaulsClient"
+    ],
+    "main": [
+      "com.lexoravisauls.Lexoravisauls"
+    ]
+  },
+  "mixins": [
+    "lexoravisauls.mixins.json",
+    {
+      "config": "lexoravisauls.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
