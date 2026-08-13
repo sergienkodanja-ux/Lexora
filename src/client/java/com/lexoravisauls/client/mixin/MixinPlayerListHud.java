@@ -3,6 +3,7 @@ package com.lexoravisauls.client.mixin;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.modules.StreamerMode;
 import com.lexoravisauls.client.utils.TabAnimState;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.PlayerListHud;
 import net.minecraft.client.network.PlayerListEntry;
@@ -19,7 +20,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class MixinPlayerListHud {
 
     @Inject(method = "render", at = @At("HEAD"))
-    private void preRender(DrawContext context, int windowWidth, Scoreboard scoreboard, ScoreboardObjective objective, CallbackInfo ci) {
+    private void preRender(DrawContext context, int windowWidth, Scoreboard scoreboard,
+                           ScoreboardObjective objective, CallbackInfo ci) {
         TabAnimState.lastScoreboard = scoreboard;
         TabAnimState.lastObjective = objective;
 
@@ -28,14 +30,27 @@ public class MixinPlayerListHud {
             return;
         }
 
+        float scale = TabAnimState.scaleY;
+        if (scale <= 0.01f) return;
+
+        float cx = windowWidth / 2f;
+        // cy = 0 → масштабирование от верхнего края, таб "растёт сверху вниз"
+        float cy = 0f;
+
         context.getMatrices().push();
-        context.getMatrices().translate(0, TabAnimState.animY, 400.0f);
+        context.getMatrices().translate(cx, cy, 0);
+        context.getMatrices().scale(scale, scale, 1.0f);
+        context.getMatrices().translate(-cx, -cy, 0);
     }
 
     @Inject(method = "render", at = @At("RETURN"))
-    private void postRender(DrawContext context, int windowWidth, Scoreboard scoreboard, ScoreboardObjective objective, CallbackInfo ci) {
-        if (LexoraGui.moduleStates.getOrDefault("Animations", true)
-                && LexoraGui.moduleStates.getOrDefault("Anim Tab", true)) {
+    private void postRender(DrawContext context, int windowWidth, Scoreboard scoreboard,
+                            ScoreboardObjective objective, CallbackInfo ci) {
+        if (!LexoraGui.moduleStates.getOrDefault("Animations", true)
+                || !LexoraGui.moduleStates.getOrDefault("Anim Tab", true)) {
+            return;
+        }
+        if (TabAnimState.scaleY > 0.01f) {
             context.getMatrices().pop();
         }
     }

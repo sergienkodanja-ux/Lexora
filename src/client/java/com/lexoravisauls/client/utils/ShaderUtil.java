@@ -4,11 +4,17 @@ import org.apache.commons.io.IOUtils;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 public class ShaderUtil {
+
+    // Логгер вместо System.err — попадает в latest.log, видно без окна консоли.
+    private static final Logger LOGGER = LoggerFactory.getLogger("LexoraShaders");
+
     private final int programID;
     private boolean deleted = false;
 
@@ -38,8 +44,8 @@ public class ShaderUtil {
         GL20.glLinkProgram(program);
 
         if (GL20.glGetProgrami(program, GL20.GL_LINK_STATUS) == GL11.GL_FALSE) {
-            System.err.println("[Lexora] Program link failed: " + vertexPath + " / " + fragmentPath);
-            System.err.println(GL20.glGetProgramInfoLog(program));
+            LOGGER.error("[Lexora] Program link failed: {} / {}", vertexPath, fragmentPath);
+            LOGGER.error(GL20.glGetProgramInfoLog(program));
 
             GL20.glDetachShader(program, vertexShader);
             GL20.glDetachShader(program, fragmentShader);
@@ -128,7 +134,7 @@ public class ShaderUtil {
 
         try (InputStream stream = ShaderUtil.class.getResourceAsStream(fullPath)) {
             if (stream == null) {
-                System.err.println("[Lexora] Shader file not found: " + fullPath);
+                LOGGER.error("[Lexora] Shader file not found: {}", fullPath);
                 return 0;
             }
 
@@ -136,7 +142,7 @@ public class ShaderUtil {
 
             int shaderID = GL20.glCreateShader(type);
             if (shaderID == 0) {
-                System.err.println("[Lexora] glCreateShader failed for: " + path);
+                LOGGER.error("[Lexora] glCreateShader failed for: {}", path);
                 return 0;
             }
 
@@ -144,16 +150,15 @@ public class ShaderUtil {
             GL20.glCompileShader(shaderID);
 
             if (GL20.glGetShaderi(shaderID, GL20.GL_COMPILE_STATUS) == GL11.GL_FALSE) {
-                System.err.println("[Lexora] Shader compile failed: " + path);
-                System.err.println(GL20.glGetShaderInfoLog(shaderID));
+                LOGGER.error("[Lexora] Shader compile failed: {}", path);
+                LOGGER.error(GL20.glGetShaderInfoLog(shaderID));
                 GL20.glDeleteShader(shaderID);
                 return 0;
             }
 
             return shaderID;
         } catch (Exception e) {
-            System.err.println("[Lexora] Failed to load shader: " + path);
-            e.printStackTrace();
+            LOGGER.error("[Lexora] Failed to load shader: {}", path, e);
             return 0;
         }
     }

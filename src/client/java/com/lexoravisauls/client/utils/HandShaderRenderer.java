@@ -16,6 +16,8 @@ public class HandShaderRenderer {
     private static int vboID = -1;
     private static int dummyDepthTex = -1;
 
+
+
     private static void setupQuad() {
         if (vaoID != -1) return;
 

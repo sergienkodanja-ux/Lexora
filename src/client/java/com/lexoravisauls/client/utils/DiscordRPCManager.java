@@ -5,7 +5,7 @@ import club.minnced.discord.rpc.DiscordRPC;
 import club.minnced.discord.rpc.DiscordRichPresence;
 
 public final class DiscordRPCManager {
-    private static final String APPLICATION_ID = "1488844440285216769";
+    private static final String APPLICATION_ID = "1501922406493847642";
     private static final long UPDATE_COOLDOWN_MS = 5000L;
 
     private static DiscordRPC lib;

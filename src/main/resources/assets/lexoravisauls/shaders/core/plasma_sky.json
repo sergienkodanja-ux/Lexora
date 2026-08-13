@@ -1,0 +1,15 @@
+{
+  "blend": {"func":"add","srcrgb":"srcalpha","dstrgb":"1-srcalpha"},
+  "vertex": "lexoravisauls:core/sky_base",
+  "fragment": "lexoravisauls:core/plasma_sky",
+  "attributes": ["Position"],
+  "uniforms": [
+    {"name": "GameTime",       "type": "float",     "count": 1,  "values": [0.0]},
+    {"name": "u_InvProjView",  "type": "matrix4x4", "count": 16, "values": [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name": "PlasmaSpeed",    "type": "float",     "count": 1,  "values": [1.0]},
+    {"name": "PlasmaIntensity","type": "float",     "count": 1,  "values": [1.0]},
+    {"name": "PlasmaIter",     "type": "float",     "count": 1,  "values": [19.0]},
+    {"name": "ThemeColor",     "type": "float",     "count": 3,  "values": [1.0,0.5,1.0]},
+    {"name": "UseTheme",       "type": "float",     "count": 1,  "values": [0.0]}
+  ]
+}

@@ -1,5 +1,6 @@
 package com.lexoravisauls.client.mixin;
 
+import com.lexoravisauls.client.modules.ArmorDurabilityColor;
 import com.lexoravisauls.client.modules.HitColorHandler;
 import net.minecraft.client.model.ModelPart;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,10 +13,21 @@ public class MixinModelPart {
     // Внедряемся в параметр color
     @ModifyVariable(method = "render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumer;III)V", at = @At("HEAD"), ordinal = 2, argsOnly = true)
     private int modifyColor(int color) {
-        if (HitColorHandler.isHurt) {
-            return HitColorHandler.getColor(color);
+        int result = color;
+
+        // Durability-тон брони — накладывается первым
+        if (ArmorDurabilityColor.isTinting) {
+            result = ArmorDurabilityColor.applyTint(result);
         }
-        return color;
+
+        // Поверх — вспышка от Hit Color (если оба активны одновременно, например
+        // ударили моба в повреждённой броне — тона перемножатся, порядок можно поменять местами,
+        // если захочешь, чтобы durability-тон был поверх вспышки, а не наоборот)
+        if (HitColorHandler.isHurt) {
+            result = HitColorHandler.getColor(result);
+        }
+
+        return result;
     }
 
     // Внедряемся в параметр overlay

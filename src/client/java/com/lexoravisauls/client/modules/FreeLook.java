@@ -4,6 +4,7 @@ import com.lexoravisauls.client.gui.LexoraGui;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.Perspective;
 import net.minecraft.client.util.InputUtil;
+import org.lwjgl.glfw.GLFW;
 
 public class FreeLook {
     public static boolean isPerspective = false;
@@ -22,9 +23,11 @@ public class FreeLook {
             return;
         }
 
-        // 🔥 Вот эта исправленная строка с "Action" вместо "Key" 🔥
+        // Получаем бинд
         int bindKey = LexoraGui.numSettings.getOrDefault("Free Look Action", -1f).intValue();
-        boolean isPressed = bindKey != -1 && InputUtil.isKeyPressed(mc.getWindow().getHandle(), bindKey);
+
+        // ИСПРАВЛЕНИЕ: Используем наш БЕЗОПАСНЫЙ метод проверки кнопок
+        boolean isPressed = bindKey != -1 && mc.currentScreen == null && isBindPressed(mc, bindKey);
 
         if (isPressed && !wasPressed) {
             // Включаем обзор
@@ -44,6 +47,37 @@ public class FreeLook {
         if (isPerspective) {
             isPerspective = false;
             mc.options.setPerspective(previousPerspective);
+        }
+    }
+
+    // 🔥 БЕЗОПАСНЫЙ МЕТОД ПРОВЕРКИ (Убирает лаги и ошибку -1002) 🔥
+    private static boolean isBindPressed(MinecraftClient mc, int key) {
+        if (key == -1) return false;
+        long window = mc.getWindow().getHandle();
+
+        try {
+            if (key < 0) {
+                int mouseButton = Math.abs(key);
+
+                // Переводим -1002 в нормальный индекс кнопки мыши
+                if (mouseButton >= 100) {
+                    mouseButton -= 100;
+                } else {
+                    mouseButton -= 1;
+                }
+
+                // GLFW поддерживает только мыши от 0 до 7 (защита от краша)
+                if (mouseButton >= 0 && mouseButton <= 7) {
+                    return GLFW.glfwGetMouseButton(window, mouseButton) == GLFW.GLFW_PRESS;
+                }
+                return false;
+            }
+
+            // Если это обычная кнопка клавиатуры (положительное число)
+            return InputUtil.isKeyPressed(window, key);
+
+        } catch (Exception e) {
+            return false;
         }
     }
 }

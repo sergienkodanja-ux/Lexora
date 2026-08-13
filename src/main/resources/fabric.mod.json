@@ -1,9 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "lexoravisauls",
-  "version": "${version}",
+  "version": "1.0.0",
   "name": "LexoraVisauls",
-  "description": "",
+  "accessWidener": "lexoravisauls.accesswidener",
+  "description": "Lexora Visuals Client",
   "authors": [],
   "contact": {},
   "license": "All-Rights-Reserved",
@@ -28,8 +29,13 @@
     }
   ],
   "depends": {
-    "fabricloader": ">=${loader_version}",
+    "fabricloader": ">=0.18.4",
     "fabric-api": "*",
-    "minecraft": "${minecraft_version}"
+    "minecraft": "1.21.4"
+  },
+  "custom": {
+    "fabric-renderer-api-v1:shaders": [
+      "lexoravisauls:core/msdf"
+    ]
   }
 }

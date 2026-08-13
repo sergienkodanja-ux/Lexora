@@ -1,5 +1,6 @@
 package com.lexoravisauls.client.gui;
 
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.modules.ItemHighlighter;
 import com.lexoravisauls.client.utils.ConfigManager;
 import com.lexoravisauls.client.utils.DynamicIslandManager;
@@ -36,13 +37,19 @@ public class LexoraGui extends Screen {
     private static final Identifier ICON_CLOSE = Identifier.of("lexoravisauls", "textures/gui/error.png");
     private static final Identifier ICON_GEAR = Identifier.of("lexoravisauls", "textures/gui/keybinds.png");
 
-    public static Map<String, Boolean> moduleStates = new HashMap<>();
-    public static Map<String, Float> numSettings = new HashMap<>();
-    public static Map<String, String> modeSettings = new HashMap<>();
-    public static Map<String, float[]> colorSettings = new HashMap<>();
+    public static Map<String, Boolean> moduleStates = ClientData.moduleStates;
+    public static Map<String, Float> numSettings = ClientData.numSettings;
+    public static Map<String, String> modeSettings = ClientData.modeSettings;
+    public static Map<String, float[]> colorSettings = ClientData.colorSettings;
 
-    public static Map<String, Integer> moduleBinds = new HashMap<>();
+    public static Map<String, Integer> moduleBinds = ClientData.moduleBinds;
     public static String bindingModule = null;
+
+    public static List<String> savedConfigs = ClientData.savedConfigs;
+    public static List<String> savedThemes = ClientData.savedThemes;
+    public static String configInputText = "";
+    public static boolean isTypingConfig = false;
+
 
     private float paletteOpenAnim = 0.0f; // 🔥 Переменная для анимации палитры
 
@@ -50,17 +57,12 @@ public class LexoraGui extends Screen {
     private final String[] mainCategories = {"HUD", "Visual", "Utils"};
     private final String[] settingsCategories = {"Color", "Config Manager"};
     private String currentCategory = "Visual";
-
     // expandedModule теперь будет отвечать за то, какое отдельное окно открыто
     private String expandedModule = null;
     private String draggingSlider = null;
     private String draggingColorPicker = null;
     private String draggingHuePicker = null;
     private String draggingPad = null;
-
-    public static List<String> savedConfigs = new ArrayList<>(Arrays.asList("default", "legit"));
-    public static String configInputText = "";
-    public static boolean isTypingConfig = false;
 
     private boolean draggingItemSV = false;
     private boolean draggingItemHue = false;
@@ -94,9 +96,9 @@ public class LexoraGui extends Screen {
     private final Map<String, int[]> huePickerBounds = new HashMap<>();
 
     static {
-        categories.put("HUD", Arrays.asList("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Notifications", "Hearth Hud", "Saturation HUD"));
-        categories.put("Visual", Arrays.asList("Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer"));
-        categories.put("Utils", Arrays.asList("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter","Healing Helper", "Streamer Mode", "No Render"));
+        categories.put("HUD", Arrays.asList("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Saturation HUD", "GPS", "Scoreboard HUD", "Lexora IRC","Emotes","Hit Indicator","TNT Detect"));
+        categories.put("Visual", Arrays.asList("Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones","Kill Effect","Motion Blur", "Taksa"));
+        categories.put("Utils", Arrays.asList("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter","Healing Helper", "Streamer Mode", "No Render", "Zoom", "Tape Mouse","Self Nametags","Armor Durability","Totem Sound"));
         categories.put("Color", Arrays.asList("Gradient Theme"));
         categories.put("Config Manager", new ArrayList<>());
 
@@ -113,6 +115,33 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("Gradient Theme")) moduleStates.put("Gradient Theme", true);
 
         if (!moduleStates.containsKey("Saturation HUD")) moduleStates.put("Saturation HUD", true);
+
+        if (!moduleStates.containsKey("AuraParticles")) moduleStates.put("AuraParticles", false);
+
+        if (!numSettings.containsKey("Aura Particles Count")) numSettings.put("Aura Particles Count", 24.0f);
+        if (!numSettings.containsKey("Aura Particles Size")) numSettings.put("Aura Particles Size", 0.18f);
+        if (!numSettings.containsKey("Aura Particles Radius")) numSettings.put("Aura Particles Radius", 1.45f);
+        if (!numSettings.containsKey("Aura Particles Delay")) numSettings.put("Aura Particles Delay", 2.0f);
+
+        if (!modeSettings.containsKey("Aura Particles Color Mode")) modeSettings.put("Aura Particles Color Mode", "Client");
+        if (!colorSettings.containsKey("Aura Particles Custom Color")) colorSettings.put("Aura Particles Custom Color", new float[]{0f, 1f, 1f});
+
+        if (!moduleStates.containsKey("China Hat Show 1st Person")) moduleStates.put("China Hat Show 1st Person", false);
+        if (!modeSettings.containsKey("China Hat Color Mode")) modeSettings.put("China Hat Color Mode", "Theme");
+        if (!colorSettings.containsKey("China Hat Custom Color")) colorSettings.put("China Hat Custom Color", new float[]{0f, 1f, 1f});
+
+        if (!modeSettings.containsKey("Jump Circle Color Mode")) modeSettings.put("Jump Circle Color Mode", "Theme");
+        if (!colorSettings.containsKey("Jump Circle Custom Color")) colorSettings.put("Jump Circle Custom Color", new float[]{0f, 1f, 1f});
+
+        if (!numSettings.containsKey("Zoom Action")) numSettings.put("Zoom Action", -1f);
+
+        if (!ClientData.moduleStates.containsKey("Markers")) ClientData.moduleStates.put("Markers", false);
+        if (!ClientData.moduleStates.containsKey("Death Marker")) ClientData.moduleStates.put("Death Marker", true);
+        if (!ClientData.moduleStates.containsKey("Manual Marker")) ClientData.moduleStates.put("Manual Marker", true);
+        if (!ClientData.moduleStates.containsKey("Event Marker")) ClientData.moduleStates.put("Event Marker", true);
+        if (!ClientData.moduleStates.containsKey("Marker Show Distance")) ClientData.moduleStates.put("Marker Show Distance", true);
+
+        if (!ClientData.numSettings.containsKey("Marker Size")) ClientData.numSettings.put("Marker Size", 1.2f);
 
         if (!moduleStates.containsKey("Notifications")) moduleStates.put("Notifications", true);
         if (!moduleStates.containsKey("Notif Swap")) moduleStates.put("Notif Swap", true);
@@ -145,6 +174,13 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("No Grass")) moduleStates.put("No Grass", false);
         if (!moduleStates.containsKey("No Bad Effects")) moduleStates.put("No Bad Effects", true);
         if (!moduleStates.containsKey("No Hurt Cam")) moduleStates.put("No Hurt Cam", true);
+
+        if (!moduleStates.containsKey("Zoom")) moduleStates.put("Zoom", false);
+        if (!modeSettings.containsKey("Zoom Mode")) modeSettings.put("Zoom Mode", "Hold");
+        if (!numSettings.containsKey("Zoom Value")) numSettings.put("Zoom Value", 4.0f);
+        if (!numSettings.containsKey("Zoom Smooth")) numSettings.put("Zoom Smooth", 0.18f);
+        if (!numSettings.containsKey("Zoom Scroll Step")) numSettings.put("Zoom Scroll Step", 0.35f);
+        if (!moduleBinds.containsKey("Zoom")) moduleBinds.put("Zoom", GLFW.GLFW_KEY_C);
 
         if (!moduleStates.containsKey("Healing Helper")) moduleStates.put("Healing Helper", false);
         if (!moduleStates.containsKey("HH Pulsation")) moduleStates.put("HH Pulsation", true);
@@ -247,8 +283,6 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("Disable Vanilla Totem")) moduleStates.put("Disable Vanilla Totem", true);
 
         if (!modeSettings.containsKey("Part. Texture")) modeSettings.put("Part. Texture", "Star");
-        if (!numSettings.containsKey("Part. Wind X")) numSettings.put("Part. Wind X", 0.0f);
-        if (!numSettings.containsKey("Part. Wind Z")) numSettings.put("Part. Wind Z", 0.0f);
 
         if (!numSettings.containsKey("Amb Chance")) numSettings.put("Amb Chance", 8.0f);
         if (!numSettings.containsKey("Amb Size")) numSettings.put("Amb Size", 1.0f);
@@ -312,6 +346,17 @@ public class LexoraGui extends Screen {
         if (!numSettings.containsKey("Watermark Scale")) numSettings.put("Watermark Scale", 1.0f);
         if (!numSettings.containsKey("Item Swap Action")) numSettings.put("Item Swap Action", -1f);
 
+        if (!moduleStates.containsKey("Motion Clones")) moduleStates.put("Motion Clones", false);
+
+        if (!numSettings.containsKey("Clone Count")) numSettings.put("Clone Count", 6.0f);
+        if (!numSettings.containsKey("Clone Delay")) numSettings.put("Clone Delay", 2.0f);
+        if (!numSettings.containsKey("Clone Life")) numSettings.put("Clone Life", 14.0f);
+        if (!numSettings.containsKey("Clone Scale")) numSettings.put("Clone Scale", 1.0f);
+        if (!numSettings.containsKey("Clone Alpha")) numSettings.put("Clone Alpha", 0.85f);
+
+        if (!modeSettings.containsKey("Clone Color Mode")) modeSettings.put("Clone Color Mode", "Client");
+        if (!colorSettings.containsKey("Clone Custom Color")) colorSettings.put("Clone Custom Color", new float[]{0.33f, 0.85f, 1.0f});
+
         if (!moduleStates.containsKey("Elytra Swap")) moduleStates.put("Elytra Swap", false);
         if (!numSettings.containsKey("Elytra Swap Action")) numSettings.put("Elytra Swap Action", -1f);
 
@@ -333,7 +378,7 @@ public class LexoraGui extends Screen {
         if (!modeSettings.containsKey("Swap From")) modeSettings.put("Swap From", "Тотем");
         if (!modeSettings.containsKey("Swap To")) modeSettings.put("Swap To", "Шар");
         if (!modeSettings.containsKey("Ratio Mode")) modeSettings.put("Ratio Mode", "Default");
-        if (!modeSettings.containsKey("Hit Sound Mode")) modeSettings.put("Hit Sound Mode", "Bubble");
+        if (!modeSettings.containsKey("Hit Sound Mode")) modeSettings.put("Hit Sound Mode", "Crime");
 
         if (!moduleStates.containsKey("Block Overlay")) moduleStates.put("Block Overlay", false);
         if (!modeSettings.containsKey("Overlay Mode")) modeSettings.put("Overlay Mode", "Web");
@@ -406,6 +451,15 @@ public class LexoraGui extends Screen {
             case "E-Gapple HP": return "ХП для Чарки";
             case "Potion HP": return "ХП для Зелья";
 
+            case "Motion Clones": return "Клоны";
+            case "Clone Count": return "Кол-во";
+            case "Clone Delay": return "Задержка";
+            case "Clone Life": return "Жизнь";
+            case "Clone Scale": return "Размер";
+            case "Clone Alpha": return "Яркость";
+            case "Clone Color Mode": return "Режим Цвета";
+            case "Clone Custom Color": return "Свой Цвет";
+
             case "Notifications": return "Уведомления";
             case "Notif Swap": return "Увед. о свапе";
             case "Notif HP": return "Увед. о ХП";
@@ -413,6 +467,14 @@ public class LexoraGui extends Screen {
             case "Notif Potions": return "Увед. о Зельях";
             case "Notif Solid Bg": return "Сплошной фон";
             case "Notif Scale": return "Масштаб";
+
+            case "AuraParticles": return "Аура Частицы";
+            case "Aura Particles Count": return "Кол-во";
+            case "Aura Particles Size": return "Размер";
+            case "Aura Particles Radius": return "Радиус";
+            case "Aura Particles Delay": return "Задержка";
+            case "Aura Particles Color Mode": return "Режим Цвета";
+            case "Aura Particles Custom Color": return "Свой Цвет";
 
             case "No Render": return "Анти-Рендер";
             case "No Fire": return "Убрать Огонь";
@@ -450,6 +512,12 @@ public class LexoraGui extends Screen {
             case "Ratio Mode": return "Режим";
             case "Aspect Ratio Val": return "Значение";
 
+            case "Zoom Mode": return "Режим Зума";
+            case "Zoom Value": return "Сила Зума";
+            case "Zoom Smooth": return "Плавность";
+            case "Zoom Scroll Step": return "Шаг Колеса";
+            case "Zoom Action": return "Кнопка Зума";
+
             case "Right Hand Z": return "Правая рука Z";
             case "Left Hand Z": return "Левая рука Z";
             case "Right Hand X": return "Правая рука X";
@@ -473,8 +541,7 @@ public class LexoraGui extends Screen {
             case "Swap To": return "Свапать На";
 
             case "Part. Texture": return "Текстура";
-            case "Part. Wind X": return "Ветер X";
-            case "Part. Wind Z": return "Ветер Z";
+
 
             case "Part. Ambient": return "Эмбиент";
             case "Amb Chance": return "Шанс";
@@ -566,6 +633,9 @@ public class LexoraGui extends Screen {
 
             case "Обычный": return "Обычный";
             case "Драконий": return "Драконий";
+
+            case "Hold": return "Зажатие";
+            case "Toggle": return "Переключение";
 
             case "Все удары": return "Все удары";
             case "Только криты": return "Только криты";
@@ -951,6 +1021,12 @@ public class LexoraGui extends Screen {
                     if (modeSettings.getOrDefault("Ratio Mode", "Default").equals("Custom")) {
                         sY = drawMiniSlider(context, tr, "Aspect Ratio Val", 0.5f, 3.0f, sX, sY, sW, mx, my, fadeAlpha);
                     }
+                } else if (modName.equals("Zoom")) {
+                    sY = drawMiniMode(context, tr, "Zoom Mode", sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Zoom Value", 1.0f, 12.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Zoom Smooth", 0.01f, 1.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Zoom Scroll Step", 0.05f, 1.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawBindButton(context, tr, "Zoom Action", "Кнопка Зума", sX, sY, sW, mx, my, fadeAlpha);
                 } else if (modName.equals("View Model")) {
                     sY = drawMiniMode(context, tr, "VM Anim", sX, sY, sW, mx, my, fadeAlpha);
                     sY = draw2DPad(context, tr, "Right Hand X", "Right Hand Y", "Позиция правой руки", -2.5f, 2.5f, -2.0f, 2.0f, sX, sY, sW, mx, my, fadeAlpha);
@@ -970,10 +1046,26 @@ public class LexoraGui extends Screen {
                     sY = drawMiniMode(context, tr, "Swap From", sX, sY, sW, mx, my, fadeAlpha);
                     sY = drawMiniMode(context, tr, "Swap To", sX, sY, sW, mx, my, fadeAlpha);
                     sY = drawBindButton(context, tr, modName + " Action", "Кнопка Свапа", sX, sY, sW, mx, my, fadeAlpha);
+                    if (!moduleStates.containsKey("Zoom")) moduleStates.put("Zoom", false);
+                    if (!modeSettings.containsKey("Zoom Mode")) modeSettings.put("Zoom Mode", "Hold");
+                    if (!numSettings.containsKey("Zoom Value")) numSettings.put("Zoom Value", 4.0f);
+                    if (!numSettings.containsKey("Zoom Smooth")) numSettings.put("Zoom Smooth", 0.18f);
+                    if (!numSettings.containsKey("Zoom Scroll Step")) numSettings.put("Zoom Scroll Step", 0.35f);
+                    if (!numSettings.containsKey("Zoom Action")) numSettings.put("Zoom Action", -1f);
                 } else if (modName.equals("Elytra Swap")) {
                     sY = drawBindButton(context, tr, modName + " Action", "Кнопка Элитр", sX, sY, sW, mx, my, fadeAlpha);
                 } else if (modName.equals("Auto Eat")) {
                     sY = drawMiniSlider(context, tr, "Eat Threshold", 1.0f, 20.0f, sX, sY, sW, mx, my, fadeAlpha);
+                } else if (modName.equals("AuraParticles")) {
+                    sY = drawMiniSlider(context, tr, "Aura Particles Count", 1.0f, 80.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Aura Particles Size", 0.05f, 0.60f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Aura Particles Radius", 1.0f, 2.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Aura Particles Delay", 1.0f, 8.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniMode(context, tr, "Aura Particles Color Mode", sX, sY, sW, mx, my, fadeAlpha);
+
+                    if (modeSettings.getOrDefault("Aura Particles Color Mode", "Client").equals("Custom")) {
+                        sY = drawColorPicker(context, tr, "Aura Particles Custom Color", sX, sY, sW, mx, my, fadeAlpha);
+                    }
                 } else if (modName.equals("Auto Leave")) {
                     sY = drawMiniMode(context, tr, "Leave Mode", sX, sY, sW, mx, my, fadeAlpha);
                     sY = drawMiniSlider(context, tr, "Near Cooldown", 1.0f, 180.0f, sX, sY, sW, mx, my, fadeAlpha);
@@ -1036,8 +1128,6 @@ public class LexoraGui extends Screen {
                         y2 = drawMicroSlider(context, tr, "Totem Life", t("Totem Life"), 10.0f, 200.0f, sX + halfW, y2, halfW, mx, my, fadeAlpha);
                     }
                     int finalY = Math.max(y1, y2);
-                    sY = drawMicroSlider(context, tr, "Part. Wind X", t("Part. Wind X"), -10.0f, 10.0f, sX, finalY, halfW, mx, my, fadeAlpha);
-                    drawMicroSlider(context, tr, "Part. Wind Z", t("Part. Wind Z"), -10.0f, 10.0f, sX + halfW, finalY, halfW, mx, my, fadeAlpha);
                     sY = drawMiniToggle(context, tr, "Disable Vanilla Totem", t("Disable Vanilla Totem"), sX, sY, sW, fadeAlpha);
                 } else if (modName.equals("Jump Circles")) {
                     sY = drawMiniSlider(context, tr, "Jump Size", 0.5f, 3.0f, sX, sY, sW, mx, my, fadeAlpha);
@@ -1357,6 +1447,7 @@ public class LexoraGui extends Screen {
         if (name.equals("Overlay Mode")) currentVal = modeSettings.getOrDefault(name, "Web");
         if (name.equals("Hand Mode")) currentVal = modeSettings.getOrDefault(name, "Snow");
         if (name.equals("VM Anim")) currentVal = modeSettings.getOrDefault(name, "Standard");
+        if (name.equals("Zoom Mode")) currentVal = modeSettings.getOrDefault(name, "Hold");
 
         if (name.equals("FT Трапка Скин") || name.equals("FT Пласт Скин")) {
             currentVal = modeSettings.getOrDefault(name, "Обычный");
@@ -1933,12 +2024,25 @@ public class LexoraGui extends Screen {
                         }
 
                         if (name.equals("Hit Sound Mode")) {
-                            String current = modeSettings.getOrDefault(name, "Bubble");
-                            if (current.equals("Bubble")) modeSettings.put(name, "Crime");
-                            else if (current.equals("Crime")) modeSettings.put(name, "Metallic");
-                            else if (current.equals("Metallic")) modeSettings.put(name, "Bell");
-                            else if (current.equals("Bell")) modeSettings.put(name, "Bonk");
-                            else if (current.equals("Bonk")) modeSettings.put(name, "Bubble");
+                            String[] hitSounds = {
+                                    "Crime",
+                                    "Bubble",
+                                    "Metallic",
+                                    "Bell",
+                                    "Bonk"
+                            };
+
+                            String current = modeSettings.getOrDefault(name, hitSounds[0]);
+                            int index = 0;
+
+                            for (int i = 0; i < hitSounds.length; i++) {
+                                if (hitSounds[i].equals(current)) {
+                                    index = i;
+                                    break;
+                                }
+                            }
+
+                            modeSettings.put(name, hitSounds[(index + 1) % hitSounds.length]);
                         }
 
                         if (name.equals("Part. Texture")) {

@@ -1,0 +1,123 @@
+Initialized native services in: C:\Users\1\.gradle\native
+Initialized jansi services in: C:\Users\1\.gradle\native
+The client will now receive all logging from the daemon (pid: 17800). The daemon log file: C:\Users\1\.gradle\daemon\9.2.1\daemon-17800.out.log
+Starting 12th build in daemon [uptime: 37 mins 19.782 secs, performance: 96%, GC rate: 0.00/s, heap usage: 0% of 1 GiB]
+Using 4 worker leases.
+Operational build model parameters: {requiresToolingModels=false, parallelProjectExecution=false, configureOnDemand=false, configurationCache=false, configurationCacheParallelStore=false, configurationCacheParallelLoad=true, isolatedProjects=false, parallelProjectConfiguration=false, intermediateModelCache=false, parallelToolingApiActions=false, invalidateCoupledProjects=false, modelAsProjectDependency=false, resilientModelBuilding=false}
+Now considering [C:\Users\1\IdeaProjects\LexoraVisauls] as hierarchies to watch
+Watching the file system is configured to be enabled if available
+File system watching is active
+Starting Build
+Settings evaluated using settings file 'C:\Users\1\IdeaProjects\LexoraVisauls\settings.gradle'.
+Projects loaded. Root project using build file 'C:\Users\1\IdeaProjects\LexoraVisauls\build.gradle'.
+Included projects: [root project 'LexoraVisauls']
+
+> Configure project :
+Evaluating root project 'LexoraVisauls' using build file 'C:\Users\1\IdeaProjects\LexoraVisauls\build.gradle'.
+Resolved plugin [id: 'fabric-loom', version: '1.15-SNAPSHOT']
+Resolved plugin [id: 'maven-publish']
+Fabric Loom: 1.15.5
+(kotlin.metadata.jvm.KotlinClassMetadata) with version (2.3.0-release-356) was loaded from (/C:/Users/1/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-metadata-jvm/2.3.0/7758780509972cf8338f06649cc5e4b11acc14e/kotlin-metadata-jvm-2.3.0.jar)
+(org.objectweb.asm.ClassVisitor) with version (9.9) was loaded from (/C:/Users/1/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm/9.9/c29635c8a7afa03d74b33c1884df8abb2b3f3dcc/asm-9.9.jar)
+(org.objectweb.asm.tree.analysis.Analyzer) with version (9.9) was loaded from (/C:/Users/1/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-analysis/9.9/bf4fa6e66638851c1cd22c2caea0c3ee5d5f437/asm-analysis-9.9.jar)
+(org.objectweb.asm.commons.ClassRemapper) with version (9.9) was loaded from (/C:/Users/1/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-commons/9.9/db9165a3bf908ded6b08612d583a15d1d0c7bda0/asm-commons-9.9.jar)
+(org.objectweb.asm.tree.ClassNode) with version (9.9) was loaded from (/C:/Users/1/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-tree/9.9/f8de6eead6d24dd0f45bd065bbe112b2cda6ea21/asm-tree-9.9.jar)
+(org.objectweb.asm.util.ASMifier) with version (9.9) was loaded from (/C:/Users/1/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm-util/9.9/42fdfc0508b43807c8078d6e82ecff2ce2112ae8/asm-util-9.9.jar)
+(com.google.gson.Gson) with version (null) was loaded from (/C:/Users/1/.gradle/caches/modules-2/files-2.1/com.google.code.gson/gson/2.11.0/527175ca6d81050b53bdd4c457a6d6e017626b0e/gson-2.11.0.jar)
+Using cached Minecraft jars
+:Extracting server jar from bootstrap
+file or directory 'C:\Users\1\IdeaProjects\LexoraVisauls\src\main\generated', not found
+Mod dependency options: {"__inlineRefmap__":false,"__mappings__":"net.fabricmc.yarn.1_21_4.1.21.4+build.8-v2"}
+Applying installer data from C:\Users\1\.gradle\caches\modules-2\files-2.1\net.fabricmc\fabric-loader\0.18.4\dc4682125d5db647d6ce80a98b98945835adcd4b\fabric-loader-0.18.4.jar
+Found another installer JSON in (C:\Users\1\.gradle\caches\modules-2\files-2.1\net.fabricmc\fabric-loader\0.18.4\dc4682125d5db647d6ce80a98b98945835adcd4b\fabric-loader-0.18.4.jar), ignoring
+All projects evaluated.
+Task name matched 'obfuscateJar'
+Selected primary task 'obfuscateJar' from project :
+Tasks to be executed: [task ':compileJava', task ':processResources', task ':classes', task ':compileClientJava', task ':processClientResources', task ':clientClasses', task ':jar', task ':processIncludeJars', task ':remapJar', task ':obfuscateJar']
+Tasks that were excluded: []
+Resolve mutations for :compileJava (Thread[#2014,included builds,5,main]) started.
+:compileJava (Thread[#2014,included builds,5,main]) started.
+
+> Task :compileJava UP-TO-DATE
+Caching disabled for task ':compileJava' because:
+  Build cache is disabled
+Skipping task ':compileJava' as it is up-to-date.
+Resolve mutations for :processResources (Thread[#2014,included builds,5,main]) started.
+:processResources (Thread[#2014,included builds,5,main]) started.
+
+> Task :processResources UP-TO-DATE
+Caching disabled for task ':processResources' because:
+  Build cache is disabled
+  Not worth caching
+Skipping task ':processResources' as it is up-to-date.
+Resolve mutations for :classes (Thread[#2014,included builds,5,main]) started.
+:classes (Thread[#2014,included builds,5,main]) started.
+
+> Task :classes UP-TO-DATE
+Skipping task ':classes' as it has no actions.
+Resolve mutations for :compileClientJava (Thread[#2014,included builds,5,main]) started.
+:compileClientJava (Thread[#2014,included builds,5,main]) started.
+
+> Task :compileClientJava UP-TO-DATE
+Caching disabled for task ':compileClientJava' because:
+  Build cache is disabled
+Skipping task ':compileClientJava' as it is up-to-date.
+Resolve mutations for :processClientResources (Thread[#2017,Execution worker Thread 3,5,main]) started.
+:processClientResources (Thread[#2017,Execution worker Thread 3,5,main]) started.
+
+> Task :processClientResources UP-TO-DATE
+Caching disabled for task ':processClientResources' because:
+  Build cache is disabled
+  Not worth caching
+Skipping task ':processClientResources' as it is up-to-date.
+Resolve mutations for :clientClasses (Thread[#2017,Execution worker Thread 3,5,main]) started.
+:clientClasses (Thread[#2017,Execution worker Thread 3,5,main]) started.
+
+> Task :clientClasses UP-TO-DATE
+Skipping task ':clientClasses' as it has no actions.
+Resolve mutations for :jar (Thread[#2017,Execution worker Thread 3,5,main]) started.
+:jar (Thread[#2017,Execution worker Thread 3,5,main]) started.
+
+> Task :jar UP-TO-DATE
+Caching disabled for task ':jar' because:
+  Build cache is disabled
+  Not worth caching
+Skipping task ':jar' as it is up-to-date.
+Resolve mutations for :processIncludeJars (Thread[#2017,Execution worker Thread 3,5,main]) started.
+:processIncludeJars (Thread[#2017,Execution worker Thread 3,5,main]) started.
+
+> Task :processIncludeJars UP-TO-DATE
+Caching disabled for task ':processIncludeJars' because:
+  Build cache is disabled
+  Caching has not been enabled for the task
+Skipping task ':processIncludeJars' as it is up-to-date.
+Resolve mutations for :remapJar (Thread[#2017,Execution worker Thread 3,5,main]) started.
+:remapJar (Thread[#2017,Execution worker Thread 3,5,main]) started.
+
+> Task :remapJar UP-TO-DATE
+Caching disabled for task ':remapJar' because:
+  Build cache is disabled
+  Caching has not been enabled for the task
+Skipping task ':remapJar' as it is up-to-date.
+Resolve mutations for :obfuscateJar (Thread[#2017,Execution worker Thread 3,5,main]) started.
+:obfuscateJar (Thread[#2017,Execution worker Thread 3,5,main]) started.
+
+> Task :obfuscateJar
+Caching disabled for task ':obfuscateJar' because:
+  Build cache is disabled
+Task ':obfuscateJar' is not up-to-date because:
+  Output property 'outJarFileCollection$1' file C:\Users\1\IdeaProjects\LexoraVisauls\build\libs\LexoraVisauls-1.0-SNAPSHOT-obfuscated.jar has been removed.
+Loading configuration file C:\Users\1\IdeaProjects\LexoraVisauls\proguard-rules.pro
+ProGuard, version 7.9.1
+
+[Incubating] Problems report is available at: file:///C:/Users/1/IdeaProjects/LexoraVisauls/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 9s
+8 actionable tasks: 1 executed, 7 up-to-date
+Watched directory hierarchies: [C:\Users\1\IdeaProjects\LexoraVisauls]

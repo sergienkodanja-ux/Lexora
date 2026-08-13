@@ -3,9 +3,12 @@ package com.lexoravisauls.client.mixin;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.modules.AutoLeave;
 import com.lexoravisauls.client.modules.StreamerMode;
+import com.lexoravisauls.client.utils.GPS;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.ChatHud;
+import net.minecraft.network.message.MessageSignatureData;
+import net.minecraft.client.gui.hud.MessageIndicator;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -32,8 +35,24 @@ public class MixinChatHud {
     }
 
     @Inject(method = "addMessage(Lnet/minecraft/text/Text;)V", at = @At("HEAD"))
-    private void onMessageAdded(Text message, CallbackInfo ci) {
+    private void onMessageAddedSimple(Text message, CallbackInfo ci) {
+        handleIncomingMessage(message);
+    }
+
+    @Inject(
+            method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V",
+            at = @At("HEAD")
+    )
+    private void onMessageAddedFull(Text message, MessageSignatureData signature, MessageIndicator indicator, CallbackInfo ci) {
+        handleIncomingMessage(message);
+    }
+
+    private void handleIncomingMessage(Text message) {
         chatAnimY += 10f;
+
+        if (message != null) {
+            GPS.processMessage(message.getString());
+        }
 
         if (LexoraGui.moduleStates.getOrDefault("Auto Leave", false) && message != null) {
             String text = message.getString().toLowerCase();

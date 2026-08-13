@@ -1,3 +1,12 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.guardsquare:proguard-gradle:7.9.1'
+    }
+}
+
 plugins {
     id 'fabric-loom' version '1.15-SNAPSHOT'
     id 'maven-publish'
@@ -11,8 +20,12 @@ base {
 }
 
 def targetJavaVersion = 21
+def kotlinVersion = "1.9.20"
+def serializationVersion = "1.6.3"
+def dbusVersion = "5.0.0"
 
 loom {
+    accessWidenerPath = file("src/main/resources/lexoravisauls.accesswidener")
     splitEnvironmentSourceSets()
 
     mods {
@@ -48,6 +61,19 @@ repositories {
     mavenCentral()
     maven { url = 'https://jitpack.io' }
     maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.aliyun.com/repository/jcenter' }
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+
+    maven {
+        name = 'Ladysnake Mods'
+        url = 'https://maven.ladysnake.org/releases'
+        content {
+            includeGroup 'io.github.ladysnake'
+            includeGroup 'org.ladysnake'
+            includeGroupByRegex 'dev\\.onyxstudios.*'
+        }
+    }
+
 }
 
 dependencies {
@@ -57,8 +83,47 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
+    modImplementation "org.ladysnake:satin:${project.satin_version}"
+    include "org.ladysnake:satin:${project.satin_version}"
+
+    // Discord RPC
     implementation 'club.minnced:java-discord-rpc:2.0.2'
     include 'club.minnced:java-discord-rpc:2.0.2'
+
+    // Spotify / system media sessions
+    implementation "dev.redstones.mediaplayerinfo:media-player-info:0.1.0"
+    include "dev.redstones.mediaplayerinfo:media-player-info:0.1.0"
+
+    // Kotlin Runtime
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:${kotlinVersion}"
+    include "org.jetbrains.kotlin:kotlin-stdlib:${kotlinVersion}"
+
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${kotlinVersion}"
+    include "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${kotlinVersion}"
+
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlinVersion}"
+    include "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlinVersion}"
+
+    // Serialization runtime
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVersion}"
+    include "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVersion}"
+
+    // DBus
+    implementation "com.github.hypfvieh:dbus-java-core:${dbusVersion}"
+    include "com.github.hypfvieh:dbus-java-core:${dbusVersion}"
+
+    implementation "com.github.hypfvieh:dbus-java-transport-jnr-unixsocket:${dbusVersion}"
+    include "com.github.hypfvieh:dbus-java-transport-jnr-unixsocket:${dbusVersion}"
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.32'
+    annotationProcessor 'org.projectlombok:lombok:1.18.32'
+    testCompileOnly 'org.projectlombok:lombok:1.18.32'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
+
+    // Lua
+    implementation 'org.luaj:luaj-jse:3.0.1'
+    include 'org.luaj:luaj-jse:3.0.1'
 }
 
 tasks.withType(ProcessResources).configureEach {
@@ -80,6 +145,7 @@ tasks.withType(ProcessResources).configureEach {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
+
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         options.release.set(targetJavaVersion)
     }
@@ -87,9 +153,11 @@ tasks.withType(JavaCompile).configureEach {
 
 java {
     def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+
     if (JavaVersion.current() < javaVersion) {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
+
     withSourcesJar()
 }
 
@@ -97,6 +165,47 @@ jar {
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}" }
     }
+}
+
+// =============================================================================
+//  ОБФУСКАЦИЯ — задача obfuscateJar
+// =============================================================================
+// Запуск:  gradlew.bat obfuscateJar  (Windows)  /  ./gradlew obfuscateJar (Mac/Linux)
+// Результат: build/libs/<archives_base_name>-<version>-obfuscated.jar
+// Mapping:   build/libs/mapping.txt  (сохрани! нужен для диагностики крашей)
+tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
+    dependsOn 'remapJar'
+    group = 'lexora'
+    description = 'Обфусцирует финальный (remapped) jar мода через ProGuard'
+
+    injars(tasks.named('remapJar').flatMap { it.archiveFile })
+    outjars(layout.buildDirectory.file("libs/${project.archives_base_name}-${project.version}-obfuscated.jar"))
+
+    // ─── Собираем libraryjars ────────────────────────────────────────────────
+    // Берём все jar из classpath всех sourceSet, исключая:
+    //   1. Сам jar мода (archives_base_name) — иначе классы мода попадут дважды
+    //   2. Директории (build/classes/) — только .jar файлы
+    def libFiles = (sourceSets.main.compileClasspath + sourceSets.main.runtimeClasspath +
+            sourceSets.client.compileClasspath + sourceSets.client.runtimeClasspath)
+            .filter { it.exists() }
+            .filter { it.isFile() }
+            .filter { !it.name.contains(project.archives_base_name) }
+    libraryjars libFiles
+
+    // ─── JDK 21 модули ───────────────────────────────────────────────────────
+    libraryjars "${System.getProperty('java.home')}/jmods/java.base.jmod",
+            jarfilter: '!**.jar', filter: '!module-info.class'
+
+    libraryjars "${System.getProperty('java.home')}/jmods/java.net.http.jmod",
+            jarfilter: '!**.jar', filter: '!module-info.class'
+
+    libraryjars "${System.getProperty('java.home')}/jmods/java.desktop.jmod",
+            jarfilter: '!**.jar', filter: '!module-info.class'
+
+    libraryjars "${System.getProperty('java.home')}/jmods/java.xml.jmod",
+            jarfilter: '!**.jar', filter: '!module-info.class'
+
+    configuration file('proguard-rules.pro')
 }
 
 publishing {

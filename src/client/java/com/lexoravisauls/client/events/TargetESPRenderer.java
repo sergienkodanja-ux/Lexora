@@ -30,36 +30,22 @@ public class TargetESPRenderer {
     private static final Identifier ROUND_RHOMBUS_TEX = Identifier.of("lexoravisauls", "textures/gui/round_rhombus.png");
     private static final Identifier BLOOM_TEX = Identifier.of("lexoravisauls", "textures/gui/bloom.png");
 
+    private static final Identifier SKULL_0_TEX = Identifier.of("lexoravisauls", "textures/gui/skull_0.png");
+    private static final Identifier SKULL_1_TEX = Identifier.of("lexoravisauls", "textures/gui/skull_1.png");
+    private static final Identifier SKULL_2_TEX = Identifier.of("lexoravisauls", "textures/gui/skull_2.png");
+
     private static final Map<UUID, Float> animProgress = new HashMap<>();
     private static final Map<UUID, Float> hurtAnimProgress = new HashMap<>();
 
+    private static final Map<UUID, List<List<Vec3d>>> spiritTrails = new HashMap<>();
+    private static final Map<UUID, Vec3d> spiritAnchors = new HashMap<>();
+
     private static UUID lastTargetId = null;
-    private static long lastTargetLostTime = 0;
-
-    private static final List<CrystalData> crystalList = new ArrayList<>();
-
-    static class CrystalData {
-        final float relativeY;
-        final float radius;
-        final float sizeMult;
-        final Vec3d positionOffset;
-        final Vec3d rotation;
-        final float rotationSpeed;
-
-        CrystalData(float relativeY, float radius, float sizeMult, Vec3d positionOffset, Vec3d rotation) {
-            this.relativeY = relativeY;
-            this.radius = radius;
-            this.sizeMult = sizeMult;
-            this.positionOffset = positionOffset;
-            this.rotation = rotation;
-            this.rotationSpeed = 0.5f + (float)(Math.random() * 1.5f);
-        }
-    }
+    private static long lastTargetLostTime = 0L;
 
     public static void render(MatrixStack matrices, Camera camera, float tickDelta) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.world == null || mc.player == null) return;
-
         if (!LexoraGui.moduleStates.getOrDefault("Target ESP", false)) return;
 
         String style = LexoraGui.modeSettings.getOrDefault("Target ESP Mode", "Spirits");
@@ -70,9 +56,9 @@ public class TargetESPRenderer {
         LivingEntity currentTarget = null;
         if (mc.crosshairTarget != null && mc.crosshairTarget.getType() == HitResult.Type.ENTITY) {
             Entity e = ((EntityHitResult) mc.crosshairTarget).getEntity();
-            if (e instanceof LivingEntity && e != mc.player) {
-                currentTarget = (LivingEntity) e;
-                lastTargetId = currentTarget.getUuid();
+            if (e instanceof LivingEntity living && e != mc.player) {
+                currentTarget = living;
+                lastTargetId = living.getUuid();
                 lastTargetLostTime = System.currentTimeMillis();
             }
         }
@@ -85,17 +71,23 @@ public class TargetESPRenderer {
             if (living.isInvisible()) continue;
 
             UUID id = living.getUuid();
-            boolean isTarget = (living == currentTarget);
-            boolean isRecent = (currentTarget == null && id.equals(lastTargetId) && (System.currentTimeMillis() - lastTargetLostTime) <= 1000);
+            boolean isTarget = living == currentTarget;
+            boolean isRecent = currentTarget == null
+                    && id.equals(lastTargetId)
+                    && (System.currentTimeMillis() - lastTargetLostTime) <= 1000L;
 
-            float step = 0.04f;
             float current = animProgress.getOrDefault(id, 0.0f);
-            current = (isTarget || isRecent) ? Math.min(1.0f, current + step) : Math.max(0.0f, current - step);
+            float step = 0.04f;
+            current = (isTarget || isRecent)
+                    ? Math.min(1.0f, current + step)
+                    : Math.max(0.0f, current - step);
             animProgress.put(id, current);
 
-            if (current <= 0) {
+            if (current <= 0.0f) {
                 animProgress.remove(id);
                 hurtAnimProgress.remove(id);
+                spiritTrails.remove(id);
+                spiritAnchors.remove(id);
                 continue;
             }
 
@@ -113,276 +105,646 @@ public class TargetESPRenderer {
             }
             hurtAnimProgress.put(id, hurt);
 
-            float alphaMod = (current < 0.5f) ? 2 * current * current : -1 + (4 - 2 * current) * current;
+            float alphaMod = ease(current);
+            int themeColor = LexoraGui.getThemeColor(0);
+            int baseColor = blendColors(themeColor | 0xFF000000, 0xFFFF0000, hurt);
 
             double x = MathHelper.lerp(tickDelta, living.prevX, living.getX()) - camPos.x;
             double y = MathHelper.lerp(tickDelta, living.prevY, living.getY()) - camPos.y;
             double z = MathHelper.lerp(tickDelta, living.prevZ, living.getZ()) - camPos.z;
 
-            int themeColor = LexoraGui.getThemeColor(0);
-            int baseColor = blendColors(themeColor | 0xFF000000, 0xFFFF0000, hurt);
-
             RenderSystem.enableBlend();
-            RenderSystem.blendFuncSeparate(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE, GlStateManager.SrcFactor.ZERO, GlStateManager.DstFactor.ONE);
-            RenderSystem.disableDepthTest();
+            RenderSystem.blendFuncSeparate(
+                    GlStateManager.SrcFactor.SRC_ALPHA,
+                    GlStateManager.DstFactor.ONE,
+                    GlStateManager.SrcFactor.ZERO,
+                    GlStateManager.DstFactor.ONE
+            );
+            if (style.equals("Spirits")) {
+                // Призраки теперь честные - не светят сквозь блоки, только по прямой видимости
+                RenderSystem.enableDepthTest();
+            } else {
+                RenderSystem.disableDepthTest();
+            }
             RenderSystem.depthMask(false);
             RenderSystem.disableCull();
 
             if (style.contains("Rhombus")) {
                 Identifier tex = style.equals("Rhombus") ? RHOMBUS_TEX : ROUND_RHOMBUS_TEX;
-                RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
-                matrices.push();
-                matrices.translate(x, y + living.getHeight() / 2.0f, z);
-                matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
-                matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
-
-                float t = time * 0.025f * speedSet;
-                float swingRot = MathHelper.sin(t) * 1080.0f;
-
-                matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(swingRot));
-
-                float targetSize = LexoraGui.numSettings.getOrDefault("Rhombus Size", 1.0f) * 1.3f;
-                float finalScale = Math.max(0.1f, (targetSize + ((1.0f - alphaMod) * 3.0f)) - (hurt * 0.35f));
-                matrices.scale(finalScale, finalScale, finalScale);
-
-                drawTex(matrices, tex, baseColor, alphaMod);
-                matrices.pop();
-
+                renderRhombus(matrices, camera, x, y, z, living, tex, baseColor, alphaMod, time, speedSet, hurt);
             } else if (style.equals("Spirits")) {
-                renderSpiritsMath(matrices, living, camera, tickDelta, camPos, alphaMod, baseColor, speedSet);
+                renderSpirits(matrices, camera, tickDelta, camPos, living, baseColor, alphaMod, speedSet);
             } else if (style.equals("Crystals")) {
-                renderCrystals(matrices, living, camera, tickDelta, camPos, alphaMod, baseColor, speedSet, hurt);
+                renderCrystals(matrices, camera, tickDelta, camPos, living, baseColor, alphaMod, speedSet, hurt);
+            } else if (style.equals("Circle")) {
+                renderJello(matrices, camera, tickDelta, camPos, living, baseColor, alphaMod, speedSet, hurt);
+            } else if (style.equals("Skull")) {
+                renderSkull(matrices, camera, tickDelta, camPos, living, alphaMod, speedSet, hurt);
             }
 
             RenderSystem.enableDepthTest();
             RenderSystem.depthMask(true);
             RenderSystem.disableBlend();
-            RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE_MINUS_SRC_ALPHA);
+            RenderSystem.blendFunc(
+                    GlStateManager.SrcFactor.SRC_ALPHA,
+                    GlStateManager.DstFactor.ONE_MINUS_SRC_ALPHA
+            );
             RenderSystem.enableCull();
         }
     }
 
-    private static void renderCrystals(MatrixStack ms, LivingEntity target, Camera camera, float tickDelta, Vec3d camPos, float anim, int baseColor, float speedSet, float hurt) {
-        if (crystalList.isEmpty()) createCrystals();
+    private static void renderRhombus(MatrixStack matrices,
+                                      Camera camera,
+                                      double x,
+                                      double y,
+                                      double z,
+                                      LivingEntity living,
+                                      Identifier tex,
+                                      int baseColor,
+                                      float alphaMod,
+                                      float time,
+                                      float speedSet,
+                                      float hurt) {
+        matrices.push();
+        matrices.translate(x, y + living.getHeight() / 2.0f, z);
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
 
-        double tX = MathHelper.lerp(tickDelta, target.prevX, target.getX()) - camPos.x;
-        double tY = MathHelper.lerp(tickDelta, target.prevY, target.getY()) - camPos.y;
-        double tZ = MathHelper.lerp(tickDelta, target.prevZ, target.getZ()) - camPos.z;
+        float t = time * 0.025f * speedSet;
+        float swingRot = MathHelper.sin(t) * 1080.0f;
+        matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(swingRot));
 
-        float timeSec = (System.currentTimeMillis() % 3600000) / 1000.0f;
-        float globalRotation = timeSec * 36.0f * speedSet;
+        float targetSize = LexoraGui.numSettings.getOrDefault("Rhombus Size", 1.0f) * 1.3f;
+        float finalScale = Math.max(0.1f, (targetSize + ((1.0f - alphaMod) * 3.0f)) - (hurt * 0.35f));
 
-        ms.push();
-        ms.translate(tX, tY + target.getHeight() / 2.0f, tZ);
-        ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(globalRotation));
+        matrices.scale(finalScale, finalScale, finalScale);
+        drawTexturedQuad(matrices, tex, baseColor, alphaMod, 1.0f);
+        matrices.pop();
+    }
 
-        float baseSize = 0.08f;
-        float targetHeight = target.getHeight();
+    private static void renderSpirits(MatrixStack matrices,
+                                      Camera camera,
+                                      float tickDelta,
+                                      Vec3d camPos,
+                                      LivingEntity target,
+                                      int baseColor,
+                                      float alphaMod,
+                                      float speedSet) {
+        UUID id = target.getUuid();
 
-        for (CrystalData crystal : crystalList) {
-            ms.push();
-            float realYOffset = (crystal.relativeY * targetHeight) - (targetHeight / 2.0f);
-            ms.translate(crystal.positionOffset.x, realYOffset, crystal.positionOffset.z);
+        int count = MathHelper.clamp(
+                LexoraGui.numSettings.getOrDefault("Spirits Count", 3.0f).intValue(),
+                1,
+                10
+        );
 
-            float pulsation = (1.0f + (float) (Math.sin(System.currentTimeMillis() / 500.0) * 0.05f) - (hurt * 0.15f)) * crystal.sizeMult;
-            ms.scale(pulsation, pulsation, pulsation);
+        int trailLength = MathHelper.clamp(
+                LexoraGui.numSettings.getOrDefault("Trail Length", 80.0f).intValue(),
+                5,
+                100
+        );
 
-            float selfRotation = timeSec * 100.0f * crystal.rotationSpeed;
-            ms.multiply(RotationAxis.POSITIVE_X.rotationDegrees((float) crystal.rotation.x));
-            ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees((float) crystal.rotation.y + selfRotation));
-            ms.multiply(RotationAxis.POSITIVE_Z.rotationDegrees((float) crystal.rotation.z));
+        float spiritSize = MathHelper.clamp(
+                LexoraGui.numSettings.getOrDefault("Spirits Size", 0.67f),
+                0.15f,
+                2.0f
+        );
 
-            RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
-            RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE);
-            drawCrystalShape(ms, baseColor, 0.3f, true, anim, baseSize);
+        List<List<Vec3d>> trails = getSpiritTrails(id, count);
 
-            RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE_MINUS_SRC_ALPHA);
-            drawCrystalShape(ms, baseColor, 0.6f, true, anim, baseSize);
+        double px = MathHelper.lerp(tickDelta, target.prevX, target.getX());
+        double py = MathHelper.lerp(tickDelta, target.prevY, target.getY()) + target.getHeight() * 0.52;
+        double pz = MathHelper.lerp(tickDelta, target.prevZ, target.getZ());
 
-            RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE);
-            RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
-            RenderSystem.setShaderTexture(0, BLOOM_TEX);
+        Vec3d anchor = new Vec3d(px, py, pz);
+        Vec3d prevAnchor = spiritAnchors.put(id, anchor);
 
-            int bloomAlpha = (int) (0.5f * 255 * anim);
-            float bloomSize = baseSize * 10.0f;
-            float pitch = camera.getPitch();
-            float yaw = camera.getYaw();
+        if (prevAnchor != null) {
+            Vec3d delta = anchor.subtract(prevAnchor);
 
-            for (int i = 0; i < 3; i++) {
-                ms.push();
-                ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees((360.0f / 3) * i));
-                ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-yaw));
-                ms.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitch));
-
-                Matrix4f matrix = ms.peek().getPositionMatrix();
-                BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
-                float aF = bloomAlpha / 255f;
-                float rF = ((baseColor >> 16) & 0xFF) / 255f;
-                float gF = ((baseColor >> 8) & 0xFF) / 255f;
-                float bF = (baseColor & 0xFF) / 255f;
-
-                buffer.vertex(matrix, -bloomSize / 2, -bloomSize / 2, 0).texture(0, 1).color(rF, gF, bF, aF);
-                buffer.vertex(matrix, bloomSize / 2, -bloomSize / 2, 0).texture(1, 1).color(rF, gF, bF, aF);
-                buffer.vertex(matrix, bloomSize / 2, bloomSize / 2, 0).texture(1, 0).color(rF, gF, bF, aF);
-                buffer.vertex(matrix, -bloomSize / 2, bloomSize / 2, 0).texture(0, 0).color(rF, gF, bF, aF);
-                BufferRenderer.drawWithGlobalProgram(buffer.end());
-                ms.pop();
+            if (delta.length() > 1.8) {
+                for (List<Vec3d> trail : trails) {
+                    trail.clear();
+                }
+            } else if (delta.lengthSquared() > 0.000001) {
+                for (List<Vec3d> trail : trails) {
+                    for (int j = 0; j < trail.size(); j++) {
+                        trail.set(j, trail.get(j).add(delta));
+                    }
+                }
             }
-            ms.pop();
         }
-        ms.pop();
-    }
 
-    private static void createCrystals() {
-        crystalList.clear();
-        generateRing(0.5f, 0.85f, 1.0f, 8);
-        generateRing(0.85f, 0.5f, 0.6f, 5);
-        generateRing(0.15f, 0.5f, 0.6f, 5);
-    }
+        double radius = 0.62 + Math.min(0.18, count * 0.018);
+        double t = (MinecraftClient.getInstance().player.age + tickDelta) * 0.085 * Math.max(0.1f, speedSet);
 
-    private static void generateRing(float relY, float radius, float sizeMult, int count) {
+        RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
+        RenderSystem.setShaderTexture(0, BLOOM_TEX);
+
         for (int i = 0; i < count; i++) {
-            double angle = (2 * Math.PI * i) / count;
-            double x = Math.cos(angle) * radius;
-            double z = Math.sin(angle) * radius;
-            Vec3d randomRotation = new Vec3d(Math.random() * 360, Math.random() * 360, Math.random() * 360);
-            crystalList.add(new CrystalData(relY, radius, sizeMult, new Vec3d(x, 0, z), randomRotation));
+            double phase = (Math.PI * 2.0 / count) * i;
+            double orbit = t + phase;
+            double softOrbit = t * 0.72 + phase * 1.35;
+
+            double ox = Math.cos(orbit) * radius + Math.sin(softOrbit) * 0.10;
+            double oz = Math.sin(orbit) * radius + Math.cos(softOrbit) * 0.10;
+            double oy = Math.sin(orbit * 1.25 + phase) * target.getHeight() * 0.34;
+
+            Vec3d orbPos = new Vec3d(px + ox, py + oy, pz + oz);
+            List<Vec3d> trail = trails.get(i);
+
+            if (trail.isEmpty() || trail.get(trail.size() - 1).distanceTo(orbPos) > 0.0025) {
+                trail.add(orbPos);
+            } else {
+                trail.set(trail.size() - 1, orbPos);
+            }
+
+            while (trail.size() > trailLength) {
+                trail.remove(0);
+            }
+
+            for (int j = 0; j < trail.size(); j++) {
+                Vec3d pos = trail.get(j);
+                float progress = (float) j / Math.max(1, trail.size() - 1);
+                float alpha = alphaMod * progress * 0.82f;
+                if (alpha <= 0.01f) continue;
+
+                int themeColor = LexoraGui.getThemeColor(progress + (float) i / Math.max(1, count));
+                int color = blendColors(themeColor | 0xFF000000, baseColor | 0xFF000000, 0.35f);
+                color = mixToWhite(color, 0.18f + progress * 0.18f);
+
+                float size = Math.max(0.05f, spiritSize * progress);
+                drawBillboard(matrices, camera, camPos, pos, BLOOM_TEX, color, alpha, size);
+            }
         }
     }
 
-    private static void drawCrystalShape(MatrixStack ms, int baseColor, float alphaMod, boolean filled, float anim, float size) {
+    private static void renderCrystals(MatrixStack matrices,
+                                       Camera camera,
+                                       float tickDelta,
+                                       Vec3d camPos,
+                                       LivingEntity target,
+                                       int baseColor,
+                                       float alphaMod,
+                                       float speedSet,
+                                       float hurt) {
+        double tx = MathHelper.lerp(tickDelta, target.prevX, target.getX());
+        double ty = MathHelper.lerp(tickDelta, target.prevY, target.getY());
+        double tz = MathHelper.lerp(tickDelta, target.prevZ, target.getZ());
+
+        double renderX = tx - camPos.x;
+        double renderY = ty - camPos.y;
+        double renderZ = tz - camPos.z;
+
+        float entityHeight = target.getHeight();
+        float entityWidth = target.getWidth();
+        float halfWidth = entityWidth * 0.5f;
+
+        int crystalCount = MathHelper.clamp(
+                LexoraGui.numSettings.getOrDefault("Crystal Count", 20.0f).intValue(),
+                8,
+                30
+        );
+
+        float crystalScaleSetting = MathHelper.clamp(
+                LexoraGui.numSettings.getOrDefault("Crystal Size", 0.8f),
+                0.1f,
+                2.0f
+        );
+
+        float time = (MinecraftClient.getInstance().player.age + tickDelta) * 3.2f * Math.max(0.1f, speedSet);
+
+        matrices.push();
+        matrices.translate(renderX, renderY, renderZ);
+
+        RenderSystem.enableBlend();
+        RenderSystem.disableCull();
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(false);
+
+        RenderSystem.blendFuncSeparate(
+                GlStateManager.SrcFactor.SRC_ALPHA,
+                GlStateManager.DstFactor.ONE,
+                GlStateManager.SrcFactor.ZERO,
+                GlStateManager.DstFactor.ONE
+        );
+        RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
+        RenderSystem.setShaderTexture(0, BLOOM_TEX);
+
+        for (int i = 0; i < crystalCount; i++) {
+            float seed1 = (float) (Math.sin(i * 1.7f + 0.3f) * 0.5f + 0.5f);
+            float seed2 = (float) (Math.cos(i * 2.3f + 0.7f) * 0.5f + 0.5f);
+            float seed3 = (float) (Math.sin(i * 3.1f + 1.1f) * 0.5f + 0.5f);
+
+            float angleOffset = i * (360.0f / crystalCount) + seed1 * 12.0f;
+            float angle = time + angleOffset;
+            float radius = halfWidth + 0.25f + seed3 * 0.15f;
+
+            float x = radius * MathHelper.cos((float) Math.toRadians(angle));
+            float z = radius * MathHelper.sin((float) Math.toRadians(angle));
+            float y = seed2 * entityHeight * 1.05f;
+
+            float crystalScale = 0.15f * alphaMod * crystalScaleSetting;
+
+            int glowColor = mixToWhite(baseColor, 0.18f);
+            float glowAlpha = alphaMod * 0.25f * (1.0f - hurt * 0.15f);
+
+            drawCrystalGlow(matrices, camera, x, y, z, crystalScale * 3.2f, glowColor, glowAlpha);
+        }
+
+        RenderSystem.blendFuncSeparate(
+                GlStateManager.SrcFactor.SRC_ALPHA,
+                GlStateManager.DstFactor.ONE_MINUS_SRC_ALPHA,
+                GlStateManager.SrcFactor.ONE,
+                GlStateManager.DstFactor.ONE_MINUS_SRC_ALPHA
+        );
+        RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
+
         BufferBuilder buffer = Tessellator.getInstance().begin(
-                filled ? VertexFormat.DrawMode.TRIANGLES : VertexFormat.DrawMode.DEBUG_LINES,
+                VertexFormat.DrawMode.TRIANGLES,
                 VertexFormats.POSITION_COLOR
         );
 
-        float h_prism = size * 1.2f;
-        float h_pyramid = size * 2.0f;
-        int numSides = 6;
+        for (int i = 0; i < crystalCount; i++) {
+            float seed1 = (float) (Math.sin(i * 1.7f + 0.3f) * 0.5f + 0.5f);
+            float seed2 = (float) (Math.cos(i * 2.3f + 0.7f) * 0.5f + 0.5f);
+            float seed3 = (float) (Math.sin(i * 3.1f + 1.1f) * 0.5f + 0.5f);
 
-        List<Vec3d> topV = new ArrayList<>();
-        List<Vec3d> botV = new ArrayList<>();
+            float angleOffset = i * (360.0f / crystalCount) + seed1 * 12.0f;
+            float angle = time + angleOffset;
+            float radius = halfWidth + 0.25f + seed3 * 0.15f;
 
-        for (int i = 0; i < numSides; i++) {
-            float angle = (float) (2 * Math.PI * i / numSides);
-            float x = (float) (size * Math.cos(angle));
-            float z = (float) (size * Math.sin(angle));
-            topV.add(new Vec3d(x, h_prism / 2, z));
-            botV.add(new Vec3d(x, -h_prism / 2, z));
+            float x = radius * MathHelper.cos((float) Math.toRadians(angle));
+            float z = radius * MathHelper.sin((float) Math.toRadians(angle));
+            float y = seed2 * entityHeight * 1.05f;
+
+            float crystalScale = 0.15f * alphaMod * crystalScaleSetting;
+
+            drawCrystalBody(
+                    buffer,
+                    matrices,
+                    x,
+                    y,
+                    z,
+                    crystalScale,
+                    angle,
+                    baseColor,
+                    alphaMod * 0.85f
+            );
         }
 
-        Vec3d vTop = new Vec3d(0, h_prism / 2 + h_pyramid, 0);
-        Vec3d vBottom = new Vec3d(0, -h_prism / 2 - h_pyramid, 0);
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+        matrices.pop();
 
-        float aF = (alphaMod * anim);
-        float rF = ((baseColor >> 16) & 0xFF) / 255f;
-        float gF = ((baseColor >> 8) & 0xFF) / 255f;
-        float bF = (baseColor & 0xFF) / 255f;
+        RenderSystem.enableCull();
+        RenderSystem.depthMask(true);
+        RenderSystem.enableDepthTest();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableBlend();
+    }
 
-        for (int i = 0; i < numSides; i++) {
-            Vec3d v1 = botV.get(i);
-            Vec3d v2 = botV.get((i + 1) % numSides);
-            Vec3d v3 = topV.get((i + 1) % numSides);
-            Vec3d v4 = topV.get(i);
-            if (filled) {
-                drawTriangle(ms, buffer, v1, v2, v3, rF, gF, bF, aF);
-                drawTriangle(ms, buffer, v1, v3, v4, rF, gF, bF, aF);
+    private static void renderJello(MatrixStack matrices,
+                                    Camera camera,
+                                    float tickDelta,
+                                    Vec3d camPos,
+                                    LivingEntity target,
+                                    int baseColor,
+                                    float alphaMod,
+                                    float speedSet,
+                                    float hurt) {
+        double x = MathHelper.lerp(tickDelta, target.prevX, target.getX()) - camPos.x;
+        double y = MathHelper.lerp(tickDelta, target.prevY, target.getY()) - camPos.y;
+        double z = MathHelper.lerp(tickDelta, target.prevZ, target.getZ()) - camPos.z;
+
+        float entityWidth = target.getWidth() * 1.65f;
+        float entityHeight = target.getHeight() - 0.15f;
+
+        // было jelloMoving += 4f за кадр (зависело от fps), теперь от игрового времени + ESP Speed
+        float jelloMoving = (MinecraftClient.getInstance().player.age + tickDelta) * 4.0f * Math.max(0.1f, speedSet);
+        float scale = Math.max(0.5f, 0.7f - 0.2f * alphaMod);
+
+        int r = (baseColor >> 16) & 0xFF;
+        int g = (baseColor >> 8) & 0xFF;
+        int b = baseColor & 0xFF;
+
+        RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
+        RenderSystem.setShaderTexture(0, BLOOM_TEX);
+
+        matrices.push();
+        matrices.translate(x, y, z);
+
+        BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+
+        for (int i = 0; i < 360; i += 2) {
+            double rad = Math.toRadians(i + jelloMoving);
+            float xOffset = (float) (Math.cos(rad) * entityWidth * scale);
+            float zOffset = (float) (Math.sin(rad) * entityWidth * scale);
+
+            float sizeBase = 0.2f;
+
+            for (int j = 0; j < 15; ++j) {
+                float yOffsetLayer = entityHeight / 1.7f + (entityHeight / 2.0f) * (float) Math.cos(Math.toRadians(jelloMoving / 1.5f + j * 2.0f));
+
+                matrices.push();
+                matrices.translate(xOffset, yOffsetLayer, zOffset);
+                matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
+                matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+
+                MatrixStack.Entry entry = matrices.peek();
+                int finalAlpha = (int) (255 * alphaMod * ((float) j / 15.0f) * 0.05f);
+
+                buffer.vertex(entry.getPositionMatrix(), -sizeBase / 2.0f, -sizeBase / 2.0f, 0).texture(0, 0).color(r, g, b, finalAlpha);
+                buffer.vertex(entry.getPositionMatrix(), sizeBase / 2.0f, -sizeBase / 2.0f, 0).texture(1, 0).color(r, g, b, finalAlpha);
+                buffer.vertex(entry.getPositionMatrix(), sizeBase / 2.0f, sizeBase / 2.0f, 0).texture(1, 1).color(r, g, b, finalAlpha);
+                buffer.vertex(entry.getPositionMatrix(), -sizeBase / 2.0f, sizeBase / 2.0f, 0).texture(0, 1).color(r, g, b, finalAlpha);
+                buffer.vertex(entry.getPositionMatrix(), -sizeBase / 2.0f, -sizeBase / 2.0f, 0).texture(0, 0).color(r, g, b, finalAlpha);
+                buffer.vertex(entry.getPositionMatrix(), sizeBase / 2.0f, -sizeBase / 2.0f, 0).texture(1, 0).color(r, g, b, finalAlpha);
+                matrices.pop();
             }
-            if (filled) drawTriangle(ms, buffer, vTop, topV.get(i), topV.get((i + 1) % numSides), rF, gF, bF, aF);
-            if (filled) drawTriangle(ms, buffer, vBottom, botV.get((i + 1) % numSides), botV.get(i), rF, gF, bF, aF);
         }
+
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+        matrices.pop();
+
+        matrices.push();
+        matrices.translate(x, y, z);
+        RenderSystem.setShaderTexture(0, BLOOM_TEX);
+        RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
+
+        buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+
+        for (int i = 0; i < 360; i += 2) {
+            double rad = Math.toRadians(i + jelloMoving);
+            float xOffset = (float) (Math.cos(rad) * entityWidth * scale);
+            float zOffset = (float) (Math.sin(rad) * entityWidth * scale);
+            float yOffset = entityHeight / 1.75f + (entityHeight / 2.0f) * (float) Math.cos(Math.toRadians(jelloMoving / 1.5f + 30.0f));
+
+            float sizeLarge = 0.2f;
+
+            matrices.push();
+            matrices.translate(xOffset, yOffset, zOffset);
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
+            matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+
+            MatrixStack.Entry entry = matrices.peek();
+            int finalAlpha = (int) (255 * alphaMod * 0.2f);
+
+            buffer.vertex(entry.getPositionMatrix(), -sizeLarge / 2.0f, -sizeLarge / 2.0f, 0).texture(0, 0).color(r, g, b, finalAlpha);
+            buffer.vertex(entry.getPositionMatrix(), sizeLarge / 2.0f, -sizeLarge / 2.0f, 0).texture(1, 0).color(r, g, b, finalAlpha);
+            buffer.vertex(entry.getPositionMatrix(), sizeLarge / 2.0f, sizeLarge / 2.0f, 0).texture(1, 1).color(r, g, b, finalAlpha);
+            buffer.vertex(entry.getPositionMatrix(), -sizeLarge / 2.0f, sizeLarge / 2.0f, 0).texture(0, 1).color(r, g, b, finalAlpha);
+
+            matrices.pop();
+        }
+
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+        matrices.pop();
+    }
+
+    private static void renderSkull(MatrixStack matrices,
+                                    Camera camera,
+                                    float tickDelta,
+                                    Vec3d camPos,
+                                    LivingEntity target,
+                                    float alphaMod,
+                                    float speedSet,
+                                    float hurt) {
+        double x = MathHelper.lerp(tickDelta, target.prevX, target.getX()) - camPos.x;
+        double y = MathHelper.lerp(tickDelta, target.prevY, target.getY()) - camPos.y;
+        double z = MathHelper.lerp(tickDelta, target.prevZ, target.getZ()) - camPos.z;
+
+        float pulse = 1.0f + 0.12f * MathHelper.sin(
+                (MinecraftClient.getInstance().player.age + tickDelta) * 0.15f * Math.max(0.1f, speedSet)
+        );
+
+        float skullSize = MathHelper.clamp(
+                LexoraGui.numSettings.getOrDefault("Skull Size", 1.0f),
+                0.5f,
+                3.0f
+        );
+
+        float finalSize = skullSize * pulse;
+        Identifier skullTex = getSkullTexture(target);
+
+        matrices.push();
+        matrices.translate(x, y + target.getHeight() / 2.0f, z);
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+        matrices.scale(finalSize, finalSize, finalSize);
+
+        int color = 0xFFFFFFFF;
+        if (hurt > 0.0f) {
+            color = blendColors(0xFFFFFFFF, 0xFFFF4040, hurt);
+        }
+
+        color = withAlpha(color, MathHelper.clamp((int) (alphaMod * 255.0f), 0, 255));
+        drawTexturedQuad(matrices, skullTex, color, alphaMod, 1.0f);
+
+        matrices.pop();
+    }
+
+    private static Identifier getSkullTexture(LivingEntity target) {
+        float maxHp = Math.max(1.0f, target.getMaxHealth());
+        float hpPercent = target.getHealth() / maxHp;
+
+        if (hpPercent > 0.5f) {
+            return SKULL_0_TEX;
+        } else if (hpPercent > 0.25f) {
+            return SKULL_1_TEX;
+        } else {
+            return SKULL_2_TEX;
+        }
+    }
+
+    private static List<List<Vec3d>> getSpiritTrails(UUID id, int count) {
+        List<List<Vec3d>> trails = spiritTrails.computeIfAbsent(id, k -> new ArrayList<>());
+
+        while (trails.size() < count) {
+            trails.add(new ArrayList<>());
+        }
+        while (trails.size() > count) {
+            trails.remove(trails.size() - 1);
+        }
+
+        return trails;
+    }
+
+    private static void drawQuad(MatrixStack matrices, Identifier texture, int color, float size) {
+        drawTexturedQuad(matrices, texture, color, ((color >> 24) & 0xFF) / 255.0f, size);
+    }
+
+    private static void drawTexturedQuad(MatrixStack matrices, Identifier texture, int color, float alpha, float size) {
+        RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
+        RenderSystem.setShaderTexture(0, texture);
+
+        Matrix4f matrix = matrices.peek().getPositionMatrix();
+        BufferBuilder buffer = Tessellator.getInstance().begin(
+                VertexFormat.DrawMode.QUADS,
+                VertexFormats.POSITION_TEXTURE_COLOR
+        );
+
+        float half = size * 0.5f;
+        float r = ((color >> 16) & 0xFF) / 255.0f;
+        float g = ((color >> 8) & 0xFF) / 255.0f;
+        float b = (color & 0xFF) / 255.0f;
+        float a = MathHelper.clamp(alpha, 0.0f, 1.0f);
+
+        buffer.vertex(matrix, -half, -half, 0.0f).texture(0.0f, 1.0f).color(r, g, b, a);
+        buffer.vertex(matrix,  half, -half, 0.0f).texture(1.0f, 1.0f).color(r, g, b, a);
+        buffer.vertex(matrix,  half,  half, 0.0f).texture(1.0f, 0.0f).color(r, g, b, a);
+        buffer.vertex(matrix, -half,  half, 0.0f).texture(0.0f, 0.0f).color(r, g, b, a);
 
         BufferRenderer.drawWithGlobalProgram(buffer.end());
     }
 
-    private static void drawTriangle(MatrixStack ms, BufferBuilder bb, Vec3d v1, Vec3d v2, Vec3d v3, float r, float g, float b, float a) {
-        Matrix4f matrix = ms.peek().getPositionMatrix();
-        bb.vertex(matrix, (float)v1.x, (float)v1.y, (float)v1.z).color(r, g, b, a);
-        bb.vertex(matrix, (float)v2.x, (float)v2.y, (float)v2.z).color(r, g, b, a);
-        bb.vertex(matrix, (float)v3.x, (float)v3.y, (float)v3.z).color(r, g, b, a);
+    private static void drawBillboard(MatrixStack matrices,
+                                      Camera camera,
+                                      Vec3d camPos,
+                                      Vec3d worldPos,
+                                      Identifier texture,
+                                      int color,
+                                      float alpha,
+                                      float size) {
+        matrices.push();
+        matrices.translate(worldPos.x - camPos.x, worldPos.y - camPos.y, worldPos.z - camPos.z);
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+
+        drawTexturedQuad(
+                matrices,
+                texture,
+                withAlpha(color, MathHelper.clamp((int) (alpha * 255.0f), 0, 255)),
+                alpha,
+                size
+        );
+
+        matrices.pop();
     }
 
-    private static void renderSpiritsMath(MatrixStack matrices, LivingEntity target, Camera camera, float tickDelta, Vec3d camPos, float anim, int baseColor, float speedSet) {
-        double tX = MathHelper.lerp(tickDelta, target.prevX, target.getX()) - camPos.x;
-        double tY = MathHelper.lerp(tickDelta, target.prevY, target.getY()) - camPos.y + target.getHeight() / 2.0D;
-        double tZ = MathHelper.lerp(tickDelta, target.prevZ, target.getZ()) - camPos.z;
+    private static void drawCrystalGlow(MatrixStack matrices,
+                                        Camera camera,
+                                        float x, float y, float z,
+                                        float size,
+                                        int color,
+                                        float alpha) {
+        matrices.push();
+        matrices.translate(x, y, z);
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
 
-        int ghostCount = Math.round(LexoraGui.numSettings.getOrDefault("Spirits Count", 3.0f));
-        int maxTrailSize = Math.round(LexoraGui.numSettings.getOrDefault("Trail Length", 15.0f));
+        drawTexturedQuad(
+                matrices,
+                BLOOM_TEX,
+                withAlpha(color, MathHelper.clamp((int) (alpha * 255.0f), 0, 255)),
+                alpha,
+                size
+        );
 
-        float timeSec = (System.currentTimeMillis() % 3600000) / 1000.0f;
-        float timeParam = timeSec * speedSet * 3.0f;
-
-        float radius = 1.0f;
-        float verticalAmp = 0.5f;
-
-        float baseSize = 0.25f;
-
-        RenderSystem.setShaderTexture(0, BLOOM_TEX);
-        RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);
-        BufferBuilder builder = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
-
-        for (int i = 0; i < ghostCount; i++) {
-            float offsetAngle = i * ((float) Math.PI * 2f / ghostCount);
-
-            for (int t = maxTrailSize; t >= 0; t--) {
-                float trailDelay = t * 0.05f;
-                float pastTime = timeParam - trailDelay;
-
-                double orbitX = Math.sin(pastTime + offsetAngle) * radius * Math.cos(pastTime * 0.2);
-                double orbitZ = Math.cos(pastTime + offsetAngle) * radius;
-                double waveY = Math.sin(pastTime * 1.5 + offsetAngle) * verticalAmp;
-
-                Vec3d pos = new Vec3d(tX + orbitX, tY + waveY, tZ + orbitZ);
-
-                float trailFactor = 1.0f - ((float) t / Math.max(1, maxTrailSize));
-                renderGhostPartMath(builder, matrices, camera, pos, trailFactor, anim, baseSize, baseColor);
-            }
-        }
-        BufferRenderer.drawWithGlobalProgram(builder.end());
+        matrices.pop();
     }
 
-    private static void renderGhostPartMath(BufferBuilder builder, MatrixStack ms, Camera camera, Vec3d pos, float trailFactor, float anim, float baseSize, int color) {
-        float size = baseSize * (trailFactor * trailFactor);
+    private static void drawCrystalBody(BufferBuilder buffer,
+                                        MatrixStack matrices,
+                                        float x, float y, float z,
+                                        float scale,
+                                        float yaw,
+                                        int color,
+                                        float alpha) {
+        matrices.push();
+        matrices.translate(x, y, z);
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-yaw + 90.0f));
+        matrices.scale(scale, scale, scale);
 
-        float aF = (trailFactor * anim * 0.8f);
-        float rF = ((color >> 16) & 0xFF) / 255f;
-        float gF = ((color >> 8) & 0xFF) / 255f;
-        float bF = (color & 0xFF) / 255f;
+        Matrix4f mat = matrices.peek().getPositionMatrix();
 
-        ms.push();
-        ms.translate(pos.x, pos.y, pos.z);
-        ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
-        ms.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+        int a = Math.max(0, Math.min(255, (int) (180.0f * alpha)));
 
-        Matrix4f mat = ms.peek().getPositionMatrix();
-        builder.vertex(mat, -size, -size, 0).texture(0, 1).color(rF, gF, bF, aF);
-        builder.vertex(mat, size, -size, 0).texture(1, 1).color(rF, gF, bF, aF);
-        builder.vertex(mat, size, size, 0).texture(1, 0).color(rF, gF, bF, aF);
-        builder.vertex(mat, -size, size, 0).texture(0, 0).color(rF, gF, bF, aF);
-        ms.pop();
+        int rL = Math.min(255, (int) (r * 1.3f));
+        int gL = Math.min(255, (int) (g * 1.3f));
+        int bL = Math.min(255, (int) (b * 1.3f));
+
+        int rD = Math.max(0, (int) (r * 0.6f));
+        int gD = Math.max(0, (int) (g * 0.6f));
+        int bD = Math.max(0, (int) (b * 0.6f));
+
+        float w = 0.5f;
+        float h = 1.0f;
+
+        drawTriangle(buffer, mat, 0, 0, h, -w, 0, 0, 0,  w, 0, rL, gL, bL, a);
+        drawTriangle(buffer, mat, 0, 0, h,  0,  w, 0, w, 0,  0, rL, gL, bL, a);
+        drawTriangle(buffer, mat, 0, 0, h,  w, 0, 0, 0, -w, 0, r,  g,  b,  a);
+        drawTriangle(buffer, mat, 0, 0, h,  0, -w, 0, -w, 0, 0, r,  g,  b,  a);
+
+        drawTriangle(buffer, mat, 0, 0, -h, 0,  w, 0, -w, 0, 0, rD, gD, bD, a);
+        drawTriangle(buffer, mat, 0, 0, -h, w, 0,  0, 0,  w, 0, rD, gD, bD, a);
+        drawTriangle(buffer, mat, 0, 0, -h, 0, -w, 0, w,  0, 0, rD, gD, bD, a);
+        drawTriangle(buffer, mat, 0, 0, -h, -w, 0, 0, 0, -w, 0, rD, gD, bD, a);
+
+        matrices.pop();
     }
 
-    private static int blendColors(int c1, int c2, float r) {
-        int a1 = (c1 >> 24) & 0xFF; int r1 = (c1 >> 16) & 0xFF; int g1 = (c1 >> 8) & 0xFF; int b1 = c1 & 0xFF;
-        int a2 = (c2 >> 24) & 0xFF; int r2 = (c2 >> 16) & 0xFF; int g2 = (c2 >> 8) & 0xFF; int b2 = c2 & 0xFF;
-        return ((int)(a1 + (a2 - a1) * r) << 24) | ((int)(r1 + (r2 - r1) * r) << 16) | ((int)(g1 + (g2 - g1) * r) << 8) | (int)(b1 + (b2 - b1) * r);
+    private static void drawTriangle(BufferBuilder buffer,
+                                     Matrix4f mat,
+                                     float x1, float y1, float z1,
+                                     float x2, float y2, float z2,
+                                     float x3, float y3, float z3,
+                                     int r, int g, int b, int a) {
+        float rf = r / 255.0f;
+        float gf = g / 255.0f;
+        float bf = b / 255.0f;
+        float af = a / 255.0f;
+
+        buffer.vertex(mat, x1, y1, z1).color(rf, gf, bf, af);
+        buffer.vertex(mat, x2, y2, z2).color(rf, gf, bf, af);
+        buffer.vertex(mat, x3, y3, z3).color(rf, gf, bf, af);
     }
 
-    private static void drawTex(MatrixStack ms, Identifier tex, int color, float a) {
-        RenderSystem.setShaderTexture(0, tex);
-        Matrix4f mat = ms.peek().getPositionMatrix();
-        BufferBuilder bb = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+    private static int withAlpha(int color, int alpha) {
+        alpha = MathHelper.clamp(alpha, 0, 255);
+        return (alpha << 24) | (color & 0x00FFFFFF);
+    }
 
-        float aF = a;
-        float rF = ((color >> 16) & 0xFF) / 255.0F;
-        float gF = ((color >> 8) & 0xFF) / 255.0F;
-        float bF = (color & 0xFF) / 255.0F;
+    private static float ease(float x) {
+        return x < 0.5f
+                ? 2.0f * x * x
+                : -1.0f + (4.0f - 2.0f * x) * x;
+    }
 
-        bb.vertex(mat, -0.5f, -0.5f, 0).texture(0, 1).color(rF, gF, bF, aF);
-        bb.vertex(mat, 0.5f, -0.5f, 0).texture(1, 1).color(rF, gF, bF, aF);
-        bb.vertex(mat, 0.5f, 0.5f, 0).texture(1, 0).color(rF, gF, bF, aF);
-        bb.vertex(mat, -0.5f, 0.5f, 0).texture(0, 0).color(rF, gF, bF, aF);
-        BufferRenderer.drawWithGlobalProgram(bb.end());
+    private static int mixToWhite(int color, float factor) {
+        factor = MathHelper.clamp(factor, 0.0f, 1.0f);
+
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+
+        r = (int) (r + (255 - r) * factor);
+        g = (int) (g + (255 - g) * factor);
+        b = (int) (b + (255 - b) * factor);
+
+        return (r << 16) | (g << 8) | b;
+    }
+
+    private static int blendColors(int from, int to, float progress) {
+        progress = MathHelper.clamp(progress, 0.0f, 1.0f);
+
+        int a1 = (from >> 24) & 0xFF;
+        int r1 = (from >> 16) & 0xFF;
+        int g1 = (from >> 8) & 0xFF;
+        int b1 = from & 0xFF;
+
+        int a2 = (to >> 24) & 0xFF;
+        int r2 = (to >> 16) & 0xFF;
+        int g2 = (to >> 8) & 0xFF;
+        int b2 = to & 0xFF;
+
+        int a = (int) (a1 + (a2 - a1) * progress);
+        int r = (int) (r1 + (r2 - r1) * progress);
+        int g = (int) (g1 + (g2 - g1) * progress);
+        int b = (int) (b1 + (b2 - b1) * progress);
+
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 }

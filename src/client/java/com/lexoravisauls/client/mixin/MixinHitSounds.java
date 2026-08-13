@@ -18,26 +18,75 @@ public class MixinHitSounds {
 
     @Inject(method = "attackEntity", at = @At("HEAD"))
     private void onAttackEntity(PlayerEntity player, Entity target, CallbackInfo ci) {
-        if (target instanceof LivingEntity) {
+        if (!(target instanceof LivingEntity)) return;
 
-            // Улучшенная проверка на крит (как в нашем AttackManager)
-            boolean isFalling = player.getVelocity().y < 0.0 || player.fallDistance > 0.0f;
-            boolean isCrit = isFalling && !player.isOnGround() && !player.isClimbing() && !player.isTouchingWater() && !player.hasStatusEffect(StatusEffects.BLINDNESS) && !player.hasVehicle();
+        boolean isFalling = player.getVelocity().y < 0.0 || player.fallDistance > 0.0f;
+        boolean isCrit = isFalling
+                && !player.isOnGround()
+                && !player.isClimbing()
+                && !player.isTouchingWater()
+                && !player.hasStatusEffect(StatusEffects.BLINDNESS)
+                && !player.hasVehicle();
 
-            // Вызов наших кастомных партиклов!
-            ParticleSystem.spawnHitParticles(target.getPos(), isCrit);
+        ParticleSystem.spawnHitParticles(target.getPos(), isCrit);
 
-            if (LexoraGui.moduleStates.getOrDefault("Hit Sounds", false)) {
+        if (!LexoraGui.moduleStates.getOrDefault("Hit Sounds", false)) return;
 
-                // --- ФИКС ТУТ! Читаем галочку именно от Hit Sounds, а не от Target ESP ---
-                boolean onlyCrit = LexoraGui.moduleStates.getOrDefault("Hit Sound Only Crit", false);
+        boolean onlyCrit = LexoraGui.moduleStates.getOrDefault("Hit Sound Only Crit", false);
+        if (onlyCrit && !isCrit) return;
 
-                if (!onlyCrit || isCrit) {
-                    String mode = LexoraGui.modeSettings.getOrDefault("Hit Sound Mode", "Bubble").toLowerCase();
-                    float volume = LexoraGui.numSettings.getOrDefault("Hit Sound Volume", 50.0f) / 100.0f;
-                    SoundUtil.playCustomSound("hit_" + mode, volume);
-                }
-            }
+        String mode = LexoraGui.modeSettings.getOrDefault("Hit Sound Mode", "Crime");
+        float volume = LexoraGui.numSettings.getOrDefault("Hit Sound Volume", 50.0f) / 100.0f;
+
+        String soundEventName;
+        switch (mode) {
+            case "Bubble":
+                soundEventName = "hit_bubble";
+                break;
+            case "Metallic":
+                soundEventName = "hit_metallic";
+                break;
+            case "Bell":
+                soundEventName = "hit_bell";
+                break;
+            case "Bonk":
+                soundEventName = "hit_bonk";
+                break;
+            // --- НОВЫЕ ЗВУКИ ---
+            case "Hit 1":
+                soundEventName = "hit1";
+                break;
+            case "Hit 2":
+                soundEventName = "hit2";
+                break;
+            case "Hit 3":
+                soundEventName = "hit3";
+                break;
+            case "UwU":
+                soundEventName = "uwu";
+                break;
+            case "Moan 1":
+                soundEventName = "moan1";
+                break;
+            case "Moan 2":
+                soundEventName = "moan2";
+                break;
+            case "Moan 3":
+                soundEventName = "moan3";
+                break;
+            case "Moan 4":
+                soundEventName = "moan4";
+                break;
+            case "Pop":
+                soundEventName = "pop";
+                break;
+            // -------------------
+            case "Crime":
+            default:
+                soundEventName = "hit_crime";
+                break;
         }
+
+        SoundUtil.playCustomSound(soundEventName, volume);
     }
 }

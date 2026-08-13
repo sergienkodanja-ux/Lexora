@@ -1,0 +1,19 @@
+{
+  "blend": {
+    "func": "add",
+    "srcrgb": "srcalpha",
+    "dstrgb": "1-srcalpha"
+  },
+  "vertex": "lexoravisauls:core/sky_base",
+  "fragment": "lexoravisauls:core/midnight_sky",
+  "attributes": ["Position"],
+  "uniforms": [
+    {"name": "GameTime",       "type": "float",      "count": 1,  "values": [0.0]},
+    {"name": "u_InvProjView",  "type": "matrix4x4",  "count": 16, "values": [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name": "iResolution",    "type": "float",      "count": 2,  "values": [1920.0, 1080.0]},
+    {"name": "StarDensity",    "type": "float",      "count": 1,  "values": [0.985]},
+    {"name": "CloudSpeed",     "type": "float",      "count": 1,  "values": [0.5]},
+    {"name": "CloudDensity",   "type": "float",      "count": 1,  "values": [0.5]},
+    {"name": "ShowMoon",       "type": "float",      "count": 1,  "values": [1.0]}
+  ]
+}

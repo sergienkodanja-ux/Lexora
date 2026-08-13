@@ -1,35 +1,67 @@
 #version 150
 
-uniform vec2 u_Resolution;
-uniform float u_Time;
-uniform vec3 u_Color;
-uniform float u_Alpha;
+uniform float uTime;
+uniform vec2 uResolution;
+uniform vec3 uColor;
+uniform float uAlpha;
+uniform float uSpeed;
+uniform float uScale;
+uniform float uIntensity;
+uniform vec2 uCameraDir;
+uniform float uFov;
 
 out vec4 fragColor;
 
-#define TAU 6.28318530718
-#define MAX_ITER 5
+#define MAX_ITER 4
+
+mat3 rotX(float a) {
+    float c = cos(a), s = sin(a);
+    return mat3(1.0, 0.0, 0.0,
+                0.0,   c,   s,
+                0.0,  -s,   c);
+}
+mat3 rotY(float a) {
+    float c = cos(a), s = sin(a);
+    return mat3(  c, 0.0,   s,
+                0.0, 1.0, 0.0,
+                 -s, 0.0,   c);
+}
 
 void main() {
-    float time = u_Time * .5 + 23.0;
-    vec2 uv = gl_FragCoord.xy / u_Resolution.xy;
+    vec2 uv = gl_FragCoord.xy / uResolution.xy;
+    vec2 sp = uv * 2.0 - 1.0;
+    float aspect = uResolution.x / uResolution.y;
 
-    vec2 p = mod(uv * TAU, TAU) - 250.0;
-    vec2 i = vec2(p);
+    float tanV = tan(radians(uFov) * 0.5);
+    vec3 rayV = normalize(vec3(sp.x * tanV * aspect, sp.y * tanV, 1.0));
+    vec3 rayW = rotY(uCameraDir.x) * rotX(uCameraDir.y) * rayV;
+
+    // 3D noise from the world ray direction – seamless on the full sphere.
+    vec3 p = rayW * uScale;
+    vec3 i = p;
     float c = 1.0;
-    float inten = .005;
+
+    // Precompute constant multiplication outside the loop to save divisions
+    vec3 p_inten = p * uIntensity;
 
     for (int n = 0; n < MAX_ITER; n++) {
-        float t = time * (1.0 - (3.5 / float(n+1)));
-        i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
-        c += 1.0 / length(vec2(p.x / (sin(i.x+t)/inten), p.y / (cos(i.y+t)/inten)));
+        float t = uTime * uSpeed * (11.0 - (3.0 / float(n + 1)));
+        i = p + vec3(
+            cos(t - i.x) + sin(t + i.y),
+            sin(t - i.y) + cos(t + i.z),
+            cos(t - i.z) + sin(t + i.x)
+        );
+        
+        // Fast vector math using GPU vector units
+        vec3 sinCosVal = vec3(sin(i.x + t), cos(i.y + t), sin(i.z + t));
+        c += 1.0 / length(p_inten / sinCosVal);
     }
+
     c /= float(MAX_ITER);
-    c = 1.17 - pow(c, 1.4);
+    c = 1.5 - sqrt(c);
+    float brightness = c * c * c * c;
 
-    // Красим в цвет из GUI
-    vec3 colour = vec3(pow(abs(c), 8.0));
-    colour = clamp(colour + (u_Color * 0.8), 0.0, 1.0);
+    vec3 color = uColor * brightness + uColor * 0.15;
 
-    fragColor = vec4(colour, u_Alpha * clamp(colour.r + colour.g + colour.b, 0.1, 1.0)); // Прозрачность зависит от яркости
+    fragColor = vec4(color, uAlpha);
 }

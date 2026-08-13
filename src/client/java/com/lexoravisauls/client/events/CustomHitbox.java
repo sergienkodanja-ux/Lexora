@@ -11,6 +11,8 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
@@ -96,6 +98,24 @@ public class CustomHitbox {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.world == null || mc.player == null) return;
 
+        // ОГРАНИЧЕНИЕ ПО ЦЕЛИ: рисуем хитбокс только той сущности, на которую
+        // игрок реально смотрит через стандартный raycast прицела (crosshairTarget).
+        // Raycast у самого Minecraft прерывается на непрозрачных блоках/стенах,
+        // поэтому если между игроком и противником есть преграда — этот блок
+        // просто не сработает, и хитбокс не нарисуется. Это та же логика,
+        // что используется в TargetESPRenderer для подсветки цели.
+        if (mc.crosshairTarget == null || mc.crosshairTarget.getType() != HitResult.Type.ENTITY) return;
+
+        Entity entity = ((EntityHitResult) mc.crosshairTarget).getEntity();
+        if (entity == mc.player || entity.isInvisible()) return;
+
+        boolean shouldRender = false;
+        if (entity instanceof PlayerEntity && LexoraGui.moduleStates.getOrDefault("HB Players", true)) shouldRender = true;
+        else if (entity instanceof ItemEntity && LexoraGui.moduleStates.getOrDefault("HB Items", false)) shouldRender = true;
+        else if (entity instanceof HostileEntity && LexoraGui.moduleStates.getOrDefault("HB Mobs", false)) shouldRender = true;
+
+        if (!shouldRender) return;
+
         if (nebulaShader == null) nebulaShader = new ShaderUtil("nebula.vsh", "nebula.fsh");
         if (waterShader == null) waterShader = new ShaderUtil("water.vsh", "water.fsh");
         if (flameShader == null) flameShader = new ShaderUtil("flame.vsh", "flame.fsh");
@@ -111,87 +131,81 @@ public class CustomHitbox {
 
         Vec3d cameraPos = camera.getPos();
 
-        for (Entity entity : mc.world.getEntities()) {
-            if (entity == mc.player || entity.isInvisible()) continue;
+        matrices.push();
+        try {
+            double x = entity.prevX + (entity.getX() - entity.prevX) * tickDelta - cameraPos.x;
+            double y = entity.prevY + (entity.getY() - entity.prevY) * tickDelta - cameraPos.y;
+            double z = entity.prevZ + (entity.getZ() - entity.prevZ) * tickDelta - cameraPos.z;
 
-            boolean shouldRender = false;
-            if (entity instanceof PlayerEntity && LexoraGui.moduleStates.getOrDefault("HB Players", true)) shouldRender = true;
-            else if (entity instanceof ItemEntity && LexoraGui.moduleStates.getOrDefault("HB Items", false)) shouldRender = true;
-            else if (entity instanceof HostileEntity && LexoraGui.moduleStates.getOrDefault("HB Mobs", false)) shouldRender = true;
+            matrices.translate(x, y, z);
 
-            if (!shouldRender) continue;
+            Box box = entity.getBoundingBox().offset(-entity.getX(), -entity.getY(), -entity.getZ());
 
-            matrices.push();
-            try {
-                double x = entity.prevX + (entity.getX() - entity.prevX) * tickDelta - cameraPos.x;
-                double y = entity.prevY + (entity.getY() - entity.prevY) * tickDelta - cameraPos.y;
-                double z = entity.prevZ + (entity.getZ() - entity.prevZ) * tickDelta - cameraPos.z;
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.enableDepthTest();
+            RenderSystem.disableCull();
+            // ВАЖНО: depthMask(true), а не false. С true бокс честно пишет
+            // свою глубину в depth buffer, поэтому геометрия мира (стены,
+            // блоки), отрисованная до этого момента кадра, нормально
+            // перекрывает полупрозрачный бокс — никакого просвечивания
+            // сквозь препятствия.
+            RenderSystem.depthMask(true);
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
 
-                matrices.translate(x, y, z);
-
-                Box box = entity.getBoundingBox().offset(-entity.getX(), -entity.getY(), -entity.getZ());
-
-                RenderSystem.enableBlend();
-                RenderSystem.defaultBlendFunc();
-                RenderSystem.enableDepthTest();
-                RenderSystem.disableCull();
-                RenderSystem.depthMask(false);
-                RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-
-                if (style.equals("Solid")) {
-                    RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
-                    drawSolidBox(matrices, box, r, g, b, alpha);
-                } else {
-                    ShaderUtil currentShader = nebulaShader;
-                    if (style.equals("Water")) currentShader = waterShader;
-                    else if (style.equals("Flame")) currentShader = flameShader;
-
-                    if (currentShader != null && currentShader.isValid()) {
-                        int prevProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
-                        int prevActiveTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-                        int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
-                        int prevVBO = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
-
-                        currentShader.bind();
-
-                        if (GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0) {
-                            currentShader.setUniform3f("u_Color", r, g, b);
-                            currentShader.setUniform1f("u_Alpha", alpha);
-                            currentShader.setUniform1f("u_Time", (System.currentTimeMillis() % 100000L) / 1000f);
-                            currentShader.setUniform2f(
-                                    "u_Resolution",
-                                    mc.getWindow().getFramebufferWidth(),
-                                    mc.getWindow().getFramebufferHeight()
-                            );
-
-                            currentShader.setUniformMatrix4f("u_ProjMat", RenderSystem.getProjectionMatrix());
-                            currentShader.setUniformMatrix4f("u_ModelViewMat", RenderSystem.getModelViewMatrix());
-
-                            drawPerfectShaderBox(matrices, box);
-                        }
-
-                        currentShader.unbind();
-
-                        GL20.glUseProgram(prevProgram);
-                        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, prevVBO);
-                        GL30.glBindVertexArray(prevVAO);
-                        GL13.glActiveTexture(prevActiveTexture);
-
-                        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-                    }
-                }
-
+            if (style.equals("Solid")) {
                 RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
-                drawBoxOutline(matrices, box, r, g, b, 1.0f);
+                drawSolidBox(matrices, box, r, g, b, alpha);
+            } else {
+                ShaderUtil currentShader = nebulaShader;
+                if (style.equals("Water")) currentShader = waterShader;
+                else if (style.equals("Flame")) currentShader = flameShader;
 
-            } finally {
-                RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-                RenderSystem.depthMask(true);
-                RenderSystem.enableCull();
-                RenderSystem.enableDepthTest();
-                RenderSystem.disableBlend();
-                matrices.pop();
+                if (currentShader != null && currentShader.isValid()) {
+                    int prevProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+                    int prevActiveTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+                    int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
+                    int prevVBO = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
+
+                    currentShader.bind();
+
+                    if (GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0) {
+                        currentShader.setUniform3f("u_Color", r, g, b);
+                        currentShader.setUniform1f("u_Alpha", alpha);
+                        currentShader.setUniform1f("u_Time", (System.currentTimeMillis() % 100000L) / 1000f);
+                        currentShader.setUniform2f(
+                                "u_Resolution",
+                                mc.getWindow().getFramebufferWidth(),
+                                mc.getWindow().getFramebufferHeight()
+                        );
+
+                        currentShader.setUniformMatrix4f("u_ProjMat", RenderSystem.getProjectionMatrix());
+                        currentShader.setUniformMatrix4f("u_ModelViewMat", RenderSystem.getModelViewMatrix());
+
+                        drawPerfectShaderBox(matrices, box);
+                    }
+
+                    currentShader.unbind();
+
+                    GL20.glUseProgram(prevProgram);
+                    GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, prevVBO);
+                    GL30.glBindVertexArray(prevVAO);
+                    GL13.glActiveTexture(prevActiveTexture);
+
+                    RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+                }
             }
+
+            RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
+            drawBoxOutline(matrices, box, r, g, b, 1.0f);
+
+        } finally {
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+            RenderSystem.depthMask(true);
+            RenderSystem.enableCull();
+            RenderSystem.enableDepthTest();
+            RenderSystem.disableBlend();
+            matrices.pop();
         }
 
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);

@@ -15,6 +15,11 @@ public class HudManager {
     public static int coolY = 300;
     public static int hearthX = -1;
     public static int hearthY = 50;
+    public static int scoreboardX = -1;
+    public static int scoreboardY = -1;
+    public static int tntX = -1;
+    public static int tntY = -1;
+
 
     public static final Map<Item, Float> lastProgressMap = new HashMap<>();
     public static final Map<Item, Integer> totalTicksMap = new HashMap<>();

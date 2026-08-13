@@ -1,0 +1,38 @@
+{
+    "targets": {
+        "result": {}
+    },
+    "passes": [
+        {
+            "program": "motionreblur:post/motion_blur",
+            "inputs": [
+                {
+                    "sampler_name": "Main",
+                    "target": "minecraft:main"
+                },
+                {
+                    "sampler_name": "MainDepth",
+                    "target": "minecraft:main",
+                    "use_depth_buffer": true
+                }
+            ],
+            "output": "result",
+            "uniforms": [
+                {
+                    "name": "BlendFactor",
+                    "values": [ 0.8 ]
+                }
+            ]
+        },
+        {
+            "program": "minecraft:post/blit",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "result"
+                }
+            ],
+            "output": "minecraft:main"
+        }
+    ]
+}

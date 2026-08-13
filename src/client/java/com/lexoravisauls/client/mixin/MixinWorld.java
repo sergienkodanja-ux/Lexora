@@ -15,20 +15,27 @@ public class MixinWorld {
     // 🔥 ФИКС: В 1.21.4 метод getSkyColor возвращает int (Integer), а не Vec3d!
     @Inject(method = "getSkyColor", at = @At("HEAD"), cancellable = true)
     private void onGetSkyColor(Vec3d cameraPos, float tickDelta, CallbackInfoReturnable<Integer> cir) {
-        if (LexoraGui.moduleStates.getOrDefault("World Customizer", false) && LexoraGui.moduleStates.getOrDefault("Sky Customizer", true)) {
-            float[] hsv;
-            if (LexoraGui.modeSettings.getOrDefault("Sky Color Mode", "Theme").equals("Theme")) {
-                int rgb = LexoraGui.getGuiThemeColor();
-                hsv = Color.RGBtoHSB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, null);
-            } else {
-                hsv = LexoraGui.colorSettings.getOrDefault("Custom Sky Color", new float[]{0.6f, 1f, 1f});
-            }
+        if (!LexoraGui.moduleStates.getOrDefault("World Customizer", false)) return;
+        if (!LexoraGui.moduleStates.getOrDefault("Sky Customizer", true)) return;
 
-            // Получаем финальный цвет
-            int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
+        String skyType = LexoraGui.modeSettings.getOrDefault("Sky Type", "Standard");
 
-            // Возвращаем чистое число (int) без альфа-канала, как требует новая версия
-            cir.setReturnValue(rgb & 0xFFFFFF);
+        // Шейдерные режимы — чёрный фон, шейдер рисует всё сам
+        if (!skyType.equals("Standard")) {
+            cir.setReturnValue(0x000000);
+            return;
         }
+
+        // Standard — обычная логика цвета
+        float[] hsv;
+        if (LexoraGui.modeSettings.getOrDefault("Sky Color Mode", "Theme").equals("Theme")) {
+            int rgb = LexoraGui.getGuiThemeColor();
+            hsv = Color.RGBtoHSB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, null);
+        } else {
+            hsv = LexoraGui.colorSettings.getOrDefault("Custom Sky Color", new float[]{0.6f, 1f, 1f});
+        }
+
+        int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
+        cir.setReturnValue(rgb & 0xFFFFFF);
     }
 }

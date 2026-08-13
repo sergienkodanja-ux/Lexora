@@ -1,40 +1,72 @@
 {
-  "gui_open": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:gui_open" ]
-  },
-  "enable": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:enable" ]
-  },
-  "disable": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:disable" ]
-  },
-  "hit_bubble": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:bubble" ]
-  },
-  "hit_crime": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:crime" ]
-  },
-  "hit_metallic": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:metallic" ]
-  },
-  "hit_bell": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:bell" ]
-  },
-  "hit_bonk": {
-    "category": "master",
-    "sounds": [ "lexoravisauls:bonk" ]
-  },
-  "notification": {
-    "category": "player",
-    "sounds": [
-      "lexoravisauls:notification"
-    ]
-  }
+  "gui_open": { "category": "master", "sounds": [ "lexoravisauls:gui_open" ] },
+  "enable": { "category": "master", "sounds": [ "lexoravisauls:enable" ] },
+  "enable1": { "category": "master", "sounds": [ "lexoravisauls:enable1" ] },
+  "enable2": { "category": "master", "sounds": [ "lexoravisauls:enable2" ] },
+  "enable3": { "category": "master", "sounds": [ "lexoravisauls:enable3" ] },
+  "enable4": { "category": "master", "sounds": [ "lexoravisauls:enable4" ] },
+  "disable": { "category": "master", "sounds": [ "lexoravisauls:disable" ] },
+  "disable1": { "category": "master", "sounds": [ "lexoravisauls:disable1" ] },
+  "disable2": { "category": "master", "sounds": [ "lexoravisauls:disable2" ] },
+  "disable3": { "category": "master", "sounds": [ "lexoravisauls:disable3" ] },
+  "disable4": { "category": "master", "sounds": [ "lexoravisauls:disable4" ] },
+  "scroll": { "category": "master", "sounds": [ "lexoravisauls:scroll" ] },
+  "hit_bubble": { "category": "master", "sounds": [ "lexoravisauls:bubble" ] },
+  "hit_crime": { "category": "master", "sounds": [ "lexoravisauls:crime" ] },
+  "hit_metallic": { "category": "master", "sounds": [ "lexoravisauls:metallic" ] },
+  "hit_bell": { "category": "master", "sounds": [ "lexoravisauls:bell" ] },
+  "hit_bonk": { "category": "master", "sounds": [ "lexoravisauls:bonk" ] },
+  "notification": { "category": "player", "sounds": [ "lexoravisauls:notification" ] },
+
+  "hit1": { "category": "player", "sounds": [ "lexoravisauls:hit1" ] },
+  "hit2": { "category": "player", "sounds": [ "lexoravisauls:hit2" ] },
+  "hit3": { "category": "player", "sounds": [ "lexoravisauls:hit3" ] },
+  "pop": { "category": "player", "sounds": [ "lexoravisauls:pop" ] },
+  "uwu": { "category": "player", "sounds": [ "lexoravisauls:uwu" ] },
+  "moan1": { "category": "player", "sounds": [ "lexoravisauls:moan1" ] },
+  "moan2": { "category": "player", "sounds": [ "lexoravisauls:moan2" ] },
+  "moan3": { "category": "player", "sounds": [ "lexoravisauls:moan3" ] },
+  "moan4": { "category": "player", "sounds": [ "lexoravisauls:moan4" ] },
+
+  "1": { "category": "master", "sounds": [ "lexoravisauls:1" ] },
+  "11": { "category": "master", "sounds": [ "lexoravisauls:11" ] },
+  "222": { "category": "master", "sounds": [ "lexoravisauls:222" ] },
+  "333": { "category": "master", "sounds": [ "lexoravisauls:333" ] },
+  "444": { "category": "master", "sounds": [ "lexoravisauls:444" ] },
+  "52_s2bby3v": { "category": "master", "sounds": [ "lexoravisauls:52_s2bby3v" ] },
+  "555": { "category": "master", "sounds": [ "lexoravisauls:555" ] },
+  "ahah": { "category": "master", "sounds": [ "lexoravisauls:ahah" ] },
+  "ahoh": { "category": "master", "sounds": [ "lexoravisauls:ahoh" ] },
+  "aibla": { "category": "master", "sounds": [ "lexoravisauls:aibla" ] },
+  "am-am-am": { "category": "master", "sounds": [ "lexoravisauls:am-am-am" ] },
+  "anime-ahh_1": { "category": "master", "sounds": [ "lexoravisauls:anime-ahh_1" ] },
+  "apple-pay": { "category": "master", "sounds": [ "lexoravisauls:apple-pay" ] },
+  "araara": { "category": "master", "sounds": [ "lexoravisauls:araara" ] },
+  "bax": { "category": "master", "sounds": [ "lexoravisauls:bax" ] },
+  "bliaiaiat": { "category": "master", "sounds": [ "lexoravisauls:bliaiaiat" ] },
+  "bone-crack": { "category": "master", "sounds": [ "lexoravisauls:bone-crack" ] },
+  "burp": { "category": "master", "sounds": [ "lexoravisauls:burp" ] },
+  "cat": { "category": "master", "sounds": [ "lexoravisauls:cat" ] },
+  "chicken-on-tree-scr": { "category": "master", "sounds": [ "lexoravisauls:chicken-on-tree-scr" ] },
+  "eqed132": { "category": "master", "sounds": [ "lexoravisauls:eqed132" ] },
+  "grob": { "category": "master", "sounds": [ "lexoravisauls:grob" ] },
+  "hog-rider": { "category": "master", "sounds": [ "lexoravisauls:hog-rider" ] },
+  "kat": { "category": "master", "sounds": [ "lexoravisauls:kat" ] },
+  "mugi": { "category": "master", "sounds": [ "lexoravisauls:mugi" ] },
+  "nanax": { "category": "master", "sounds": [ "lexoravisauls:nanax" ] },
+  "ne-nado-diada": { "category": "master", "sounds": [ "lexoravisauls:ne-nado-diada" ] },
+  "oi-oi-oe-oi-a-eye-e": { "category": "master", "sounds": [ "lexoravisauls:oi-oi-oe-oi-a-eye-e" ] },
+  "pikmi": { "category": "master", "sounds": [ "lexoravisauls:pikmi" ] },
+  "posiobam": { "category": "master", "sounds": [ "lexoravisauls:posiobam" ] },
+  "pozovi": { "category": "master", "sounds": [ "lexoravisauls:pozovi" ] },
+  "sebalos-chudishche_buztiif": { "category": "master", "sounds": [ "lexoravisauls:sebalos-chudishche_buztiif" ] },
+  "ser-da-ser_o6s3ouc": { "category": "master", "sounds": [ "lexoravisauls:ser-da-ser_o6s3ouc" ] },
+  "spongebob-fail": { "category": "master", "sounds": [ "lexoravisauls:spongebob-fail" ] },
+  "stoniland": { "category": "master", "sounds": [ "lexoravisauls:stoniland" ] },
+  "suda": { "category": "master", "sounds": [ "lexoravisauls:suda" ] },
+  "tuco-get-out": { "category": "master", "sounds": [ "lexoravisauls:tuco-get-out" ] },
+  "use_totem": { "category": "master", "sounds": [ "lexoravisauls:use_totem" ] },
+  "zxc": { "category": "master", "sounds": [ "lexoravisauls:zxc" ] },
+  "zxcghoul": { "category": "master", "sounds": [ "lexoravisauls:zxcghoul" ] },
+  "fluger": { "category": "master", "sounds": [ "lexoravisauls:fluger" ] }
 }

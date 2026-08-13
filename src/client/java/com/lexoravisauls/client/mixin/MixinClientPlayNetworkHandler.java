@@ -26,28 +26,39 @@ public class MixinClientPlayNetworkHandler {
 
     // 🔥 ИНЖЕКТ 2: ИНДИКАТОР ТОТЕМОВ
     @Inject(method = "onEntityStatus", at = @At("HEAD"))
-    private void onEntityStatus(EntityStatusS2CPacket packet, CallbackInfo ci) {
+    private void onEntityStatus(net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket packet, CallbackInfo ci) {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || !LexoraGui.moduleStates.getOrDefault("Totem Indicator", true)) return;
 
-        if (packet.getStatus() == 35 && System.currentTimeMillis() - lastPopTime > 500) {
-            Entity entity = packet.getEntity(mc.world);
+        // Проверяем включен ли модуль
+        if (mc.player == null || mc.world == null || !LexoraGui.moduleStates.getOrDefault("Totem Indicator", true)) return;
 
-            if (entity != null && entity.equals(mc.player)) {
-                lastPopTime = System.currentTimeMillis();
+        // 35 - статус срабатывания тотема
+        if (packet.getStatus() == 35) {
+            net.minecraft.entity.Entity entity = packet.getEntity(mc.world);
 
-                ItemStack stack = mc.player.getMainHandStack();
-                if (stack.isEmpty() || !stack.getName().getString().toLowerCase().contains("талисман")) {
-                    stack = mc.player.getOffHandStack();
+            // Проверяем, что это Живая Сущность (игрок/моб) и она в радиусе 16 блоков
+            if (entity instanceof net.minecraft.entity.LivingEntity livingEntity && entity.distanceTo(mc.player) <= 16.0f) {
+
+                // Получаем предметы именно ТОЙ сущности, у которой сработал тотем
+                net.minecraft.item.ItemStack stack = livingEntity.getMainHandStack();
+                if (stack.isEmpty() || (!stack.getName().getString().toLowerCase().contains("талисман") && !stack.getName().getString().toLowerCase().contains("тотем"))) {
+                    stack = livingEntity.getOffHandStack();
                 }
 
+                // Парсим данные
                 String itemName = stack.getName().getString().toLowerCase().contains("талисман") ? "Талисман" : "Тотем";
                 boolean isEnchanted = stack.hasGlint();
-                String circle = isEnchanted ? "§2●" : "§4●";
-                String prefix = "§5[§dLexora§5]§f ";
+                String enchantText = isEnchanted ? "Да" : "Нет";
+                String playerName = entity.getDisplayName().getString(); // Имя того, кто потерял тотем
 
-                Text finalMsg = Text.literal(prefix + mc.player.getDisplayName().getString() + " §fпотерял §7" + itemName + " §fЗачарован: " + circle);
-                mc.inGameHud.getChatHud().addMessage(finalMsg);
+                // Отправляем в Dynamic Island (Тип WARNING даст желтую точку)
+                // И мы передаем stack, чтобы рисовалась миниатюра предмета!
+                com.lexoravisauls.client.utils.NotifManager.showWithItem(
+                        "Сбит " + itemName,
+                        playerName + " (Зачарован: " + enchantText + ")",
+                        com.lexoravisauls.client.utils.NotifManager.NotifType.WARNING,
+                        stack
+                );
             }
         }
     }

@@ -1,0 +1,15 @@
+{
+  "blend": {"func":"add","srcrgb":"srcalpha","dstrgb":"1-srcalpha"},
+  "vertex": "lexoravisauls:core/sky_base",
+  "fragment": "lexoravisauls:core/aurora_sky",
+  "attributes": ["Position"],
+  "uniforms": [
+    {"name": "GameTime",        "type": "float",     "count": 1,  "values": [0.0]},
+    {"name": "u_InvProjView",   "type": "matrix4x4", "count": 16, "values": [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name": "iResolution",     "type": "float",     "count": 2,  "values": [1920.0,1080.0]},
+    {"name": "AuroraSpeed",     "type": "float",     "count": 1,  "values": [0.06]},
+    {"name": "AuroraIntensity", "type": "float",     "count": 1,  "values": [1.8]},
+    {"name": "AuroraStars",     "type": "float",     "count": 1,  "values": [1.0]},
+    {"name": "AuroraReflect",   "type": "float",     "count": 1,  "values": [1.0]}
+  ]
+}
