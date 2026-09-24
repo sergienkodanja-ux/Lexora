@@ -35,17 +35,14 @@ import java.util.UUID;
 public final class KillEffectManager {
 
     /** Flip to true if you need to re-diagnose the trigger chain again. */
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
-    /** How close you need to be to the victim for the "attacker unknown" proximity fallback to count as your kill. */
-    private static final double PROXIMITY_FALLBACK_RANGE = 8.0;
+    private static final java.util.Map<UUID, Long> LAST_TRIGGERED = new java.util.HashMap<>();
+    private static final double PROXIMITY_FALLBACK_RANGE = 16.0;
 
     static final List<ActiveEffect<?>> ACTIVE = new ArrayList<>();
     private static final Random RANDOM = new Random();
     private static boolean initialized = false;
-
-    private KillEffectManager() {
-    }
 
     public static void init() {
         if (initialized) {
@@ -55,17 +52,21 @@ public final class KillEffectManager {
         KillEffectRenderer.register();
         KillEffectHealthWatcher.register();
         KillEffectDisappearWatcher.register();
-        KillEffectChatDebug.register(); // TEMP — see its javadoc, remove once we've got the duel-result text
-        KillEffectTestCommand.register(); // TEMP — /ket, remove once you're done tuning
+        KillEffectTestCommand.register();
     }
 
     public static void trigger(LivingEntity victim, DamageSource source) {
+        if (victim == null) return;
+        triggerAt(victim, victim.getX(), victim.getY(), victim.getZ(), source);
+    }
+
+    public static void triggerAt(LivingEntity victim, double x, double y, double z, DamageSource source) {
         if (victim == null) {
             return;
         }
 
         if (!(victim instanceof PlayerEntity)) {
-            return; // players only — all three effects assume a player model/skin
+            return; // players only
         }
 
         MinecraftClient client = MinecraftClient.getInstance();
@@ -74,63 +75,68 @@ public final class KillEffectManager {
         }
 
         if (victim == client.player) {
-            return; // never use the local player's own skin/armor/cape as the effect source
+            return;
         }
 
         UUID victimId = victim.getUuid();
+        long now = System.currentTimeMillis();
+        Long lastTime = LAST_TRIGGERED.get(victimId);
+        if (lastTime != null && now - lastTime < 2500L) {
+            return;
+        }
+
         for (ActiveEffect<?> active : ACTIVE) {
             if (active.victimId.equals(victimId)) {
-                debug(victim.getName().getString() + ": ignored, this player already has an effect playing");
                 return;
             }
         }
 
         boolean moduleOn = KillEffectSettings.moduleEnabled();
-        debug(victim.getName().getString() + " died | Kill Effect module enabled = " + moduleOn);
         if (!moduleOn) {
-            return;
-        }
-
-        if (victim.getWorld() != client.world) {
-            debug("not the client world (this fired on the logical server)");
             return;
         }
 
         boolean anyDeath = KillEffectSettings.bool("Trigger On Any Death", false);
         Entity attacker = source != null ? source.getAttacker() : null;
         boolean attackerMatched = attacker == client.player;
+        boolean recentlyHit = com.lexoravisauls.client.utils.AttackManager.wasRecentlyHitByMe(victimId, 7000L);
         boolean attackerUnknown = attacker == null;
-        boolean nearby = client.player.squaredDistanceTo(victim) <= PROXIMITY_FALLBACK_RANGE * PROXIMITY_FALLBACK_RANGE;
-        // Fallback: DamageSource#getAttacker() isn't reliably attributed on
-        // every server (seen attacker=null on plainly-your kills before, e.g.
-        // creeper explosions). Only apply the fallback when the attacker is
-        // genuinely unresolved — if it clearly names someone else, that's
-        // trusted over proximity.
-        boolean isOwnKill = attackerMatched || (attackerUnknown && nearby);
-        debug("anyDeath=" + anyDeath + " isOwnKill=" + isOwnKill
-                + " (attackerMatched=" + attackerMatched + ", attackerUnknown=" + attackerUnknown + ", nearby=" + nearby + ")");
+        double distSq = client.player.squaredDistanceTo(x, y, z);
+        boolean nearby = distSq <= PROXIMITY_FALLBACK_RANGE * PROXIMITY_FALLBACK_RANGE;
 
+        boolean isOwnKill = attackerMatched || recentlyHit || (attackerUnknown && nearby);
         if (!anyDeath && !isOwnKill) {
             return;
         }
 
+        LAST_TRIGGERED.put(victimId, now);
+
+        // Ground snapping check: ensures ghost stands cleanly on ground level
+        double groundY = y;
+        net.minecraft.util.math.BlockPos basePos = net.minecraft.util.math.BlockPos.ofFloored(x, y, z);
+        for (int dy = 0; dy <= 2; dy++) {
+            net.minecraft.util.math.BlockPos check = basePos.down(dy);
+            if (!client.world.getBlockState(check).isAir()) {
+                groundY = check.getY() + 1.0;
+                break;
+            }
+        }
+
         String modeName = KillEffectSettings.mode("Kill Effect Mode", KillEffectType.SOUL_ASCENSION.getDisplayName());
-        debug("playing: " + modeName);
         KillEffectType type = KillEffectType.fromDisplayName(modeName);
 
-        start(type, victim, client.player.age);
+        startAt(type, victim, x, groundY, z, client.player.age);
     }
 
     private static <T> void start(KillEffectType type, LivingEntity victim, int startAge) {
+        triggerAt(victim, victim.getX(), victim.getY(), victim.getZ(), null);
+    }
+
+    public static <T> void startAt(KillEffectType type, LivingEntity victim, double x, double y, double z, int startAge) {
         @SuppressWarnings("unchecked")
         KillEffect<T> effect = (KillEffect<T>) type.getEffect();
 
-        // Feet-level position, not the bounding-box center — using the center
-        // (roughly +0.9 blocks above the feet for a standing player) was why
-        // every effect spawned noticeably too high; the effects' own internal
-        // offsets (e.g. "+0.9" for a chest-height flash point) already assume
-        // a feet-level baseline to add on top of.
-        T state = effect.onStart(victim, victim.getX(), victim.getY(), victim.getZ(), RANDOM);
+        T state = effect.onStart(victim, x, y, z, RANDOM);
         int duration = Math.max(1, effect.getDurationTicks(state));
         ACTIVE.add(new ActiveEffect<>(effect, state, duration, startAge, victim.getUuid()));
     }
@@ -149,13 +155,6 @@ public final class KillEffectManager {
     }
 
     static void debug(String message) {
-        if (!DEBUG) {
-            return;
-        }
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null) {
-            client.player.sendMessage(Text.literal("§7[KillEffect] " + message), false);
-        }
     }
 
     static final class ActiveEffect<T> {

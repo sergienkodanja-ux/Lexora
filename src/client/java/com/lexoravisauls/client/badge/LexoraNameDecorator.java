@@ -5,7 +5,7 @@ import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
-public final class  LexoraNameDecorator {
+public final class LexoraNameDecorator {
     private static final Identifier BADGE_FONT =
             Identifier.of("lexoravisauls", "lexora_badge");
 

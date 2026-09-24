@@ -1,2466 +1,2838 @@
 package com.lexoravisauls.client.gui.modern;
 
+import com.lexoravisauls.client.core.BindManager;
+import com.lexoravisauls.client.core.ClientData;
+import com.lexoravisauls.client.cosmetic.CosmeticManager;
+import com.lexoravisauls.client.cosmetic.geckolib.GeckolibCosmeticRenderer;
+import com.lexoravisauls.client.cosmetic.model.CosmeticModel;
+import com.lexoravisauls.client.events.CustomCrosshairData;
 import com.lexoravisauls.client.events.DynamicIslandRenderer;
 import com.lexoravisauls.client.events.RoundedRectShader;
+import com.lexoravisauls.client.events.ShockwaveShader;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.gui.MsdfFont;
-import com.lexoravisauls.client.modules.ItemHighlighter;
+import com.lexoravisauls.client.gui.main_menu.LexoraMainMenu;
+import com.lexoravisauls.client.party.LexoraPartyClient;
+import com.lexoravisauls.client.party.LexoraPartyManager;
 import com.lexoravisauls.client.utils.ConfigManager;
+import com.lexoravisauls.client.utils.EventFetcher;
+import com.lexoravisauls.client.utils.GPS;
+import com.mojang.blaze3d.systems.RenderSystem;
+import java.awt.Color;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.item.Item;
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.sound.SoundEvent;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
-import com.lexoravisauls.client.core.BindManager;
-import com.lexoravisauls.client.core.ClientData;
 
-import java.awt.Color;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import com.lexoravisauls.client.party.LexoraPartyManager;
-import com.lexoravisauls.client.party.LexoraPartyClient;
-
-/**
- * ModernClickGui — новая раскладка "3 башни" (Utils / Visual / Themes),
- * всегда видимые одновременно, в стиле референса (скруглённые колонки).
- *
- * Party / Events / GUI Settings / Configs больше не вкладки внутри этого
- * окна — они переехали в мини-панели Dynamic Island'а (см. bridge-блок
- * ниже и DynamicIslandRenderer#renderGuiQuickAccess). Экран остаётся
- * открытым тем же ModernClickGui — просто поверх башен рисуется всплывающая
- * панель, когда activeIslandPanel != null.
- *
- * ПКМ по модулю больше не раскрывает карточку на месте (аккордеон) —
- * список модулей всей башни уезжает влево, а справа во всю колонку
- * въезжают настройки (см. drawTower / drawSettingsSlide).
- */
+@Environment(EnvType.CLIENT)
 public class ModernClickGui extends Screen {
+   public static final MsdfFont SFUI = new MsdfFont(Identifier.of("lexoravisauls", "msdf_data/font.png"), Identifier.of("lexoravisauls", "msdf_data/font.json"));
+   private static final Identifier CHECKMARK_TEX = Identifier.of("lexoravisauls", "textures/gui/checkmark.png");
+   private static final Identifier CLOSE_BOLD_TEX = Identifier.of("lexoravisauls", "textures/gui/close_bold.png");
+   public static String activeIslandPanel = null;
+   public static int lastMouseX = 0;
+   public static int lastMouseY = 0;
+   private static final int GUI_W = 660;
+   private static final int GUI_H = 360;
+   private static final int SIDEBAR_W = 135;
+   private static final int HEADER_H = 30;
+   private static final int COL_GAP = 8;
+   private static final int NUM_COLS = 3;
+   public static final List<String> HUD_MODULES = List.of("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Saturation HUD", "GPS", "Scoreboard HUD", "Lexora IRC", "Emotes", "Hit Indicator", "TNT Detect");
+   public static final List<String> VISUAL_MODULES = List.of("Crosshair", "Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones", "Kill Effect", "Motion Blur", "Taksa", "Custom Swords", "Atmosphere", "Virtual Desktop", "Nametags", "Arrows");
+   public static final List<String> UTILS_MODULES = List.of("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter", "Healing Helper", "Streamer Mode", "No Render", "Optimization", "Zoom", "Tape Mouse", "Self Nametags", "Armor Durability", "Totem Sound", "TriggerBot", "AimAssist");
+   public static final String TAB_ALL = "All";
+   public static final String TAB_HUD = "HUD";
+   public static final String TAB_VISUAL = "Visual";
+   public static final String TAB_UTILS = "Utils";
+   public static final String TAB_COSMETICS = "Cosmetics";
+   public static final String TAB_EVENTS = "Events";
+   public static final String TAB_CONFIGS = "Configs";
+   public static final String TAB_FRIENDS = "Friends";
+   public static final String TAB_WAYPOINTS = "Waypoints";
+   public static final String TAB_THEMES = "Themes";
+   public static final String TAB_SETTINGS = "Settings";
+   public static final String TAB_SEARCH = "Search";
+   private static String savedActiveTab = "HUD";
+   private static final Map<String, float[]> savedTabColScrolls = new HashMap();
+   private static final Map<String, float[]> savedTabTargetColScrolls = new HashMap();
+   private static final Map<String, Float> savedTabSecondaryScrolls = new HashMap();
+   private static final Map<String, Float> savedTabTargetSecondaryScrolls = new HashMap();
+   private String activeTab;
+   private String prevTab;
+   private float tabSwitchAnim;
+   private float sidebarPillY;
+   private float targetSidebarPillY;
+   private final float[] colScrolls;
+   private final float[] targetColScrolls;
+   private float secondaryScroll;
+   private float targetSecondaryScroll;
+   private String searchInput;
+   private boolean searchFocused;
+   private String configInput;
+   private boolean configInputFocused;
+   private String selectedConfig;
+   private String partyCodeInput;
+   private boolean partyCodeInputFocused;
+   private static GPS.GpsWaypoint wpSelected = null;
+   private static String wpEditName = "";
+   private static String wpEditX = "";
+   private static String wpEditY = "";
+   private static String wpEditZ = "";
+   private static int wpFocusedField = 0;
+   private String eventsFilter;
+   private String activeDropdownKey;
+   private List<String> activeDropdownOptions;
+   private float dropdownX;
+   private float dropdownY;
+   private float dropdownW;
+   private float dropdownAnim;
+   private float dropdownScroll;
+   private float targetDropdownScroll;
+   private String activeColorPickerKey;
+   private float colorPickerX;
+   private float colorPickerY;
+   private float colorPickerAnim;
+   private boolean draggingSv;
+   private boolean draggingHue;
+   private boolean isErasingCrosshair;
+   private boolean draggingCrosshair;
+   private final Map<String, Float> starAnimations;
+   private float langSwitchAnim;
+   private GuiLocalization.Language oldLang;
+   private GuiLocalization.Language targetLang;
+   private float openAnim;
+   private boolean closing;
+   private float currentMouseX;
+   private float currentMouseY;
+   private final Map<String, Float> hoverAnimations;
+   private final Map<String, Float> toggleAnimations;
+   private final Map<String, int[]> clickBounds;
+   private final Map<String, float[]> sliderBounds;
+   private final Map<String, float[]> padBounds;
+   private final Map<String, String> padKeyYMap;
+   private final Map<String, float[]> crosshairBounds;
+   private String bindingTarget;
+   private String draggingSlider;
+   private String draggingPad;
+   private final Screen parent;
+   private static int cosmeticSubTab = 0;
+   private static final String[] COSMETIC_TABS = new String[]{"Все", "Плащи", "Крылья", "Тело", "Питомцы", "Шапки"};
+   private static final String[] COSMETIC_TYPES = new String[]{"all", "cape", "wings", "bodywear", "pet", "hat"};
 
-    public static final MsdfFont SFUI = new MsdfFont(
-            Identifier.of("lexoravisauls", "msdf_data/font.png"),
-            Identifier.of("lexoravisauls", "msdf_data/font.json")
-    );
+   public void setActiveTab(String tab) {
+      if (tab != null) {
+         this.activeTab = tab;
+         savedActiveTab = tab;
+         this.tabSwitchAnim = 0.0F;
+      }
 
-    // ── Геометрия ───────────────────────────────────────────────────────────
-    private static final int TOWER_W   = 140;
-    private static final int TOWER_GAP = 10;
-    private static final int GUI_W     = TOWER_W * 4 + TOWER_GAP * 3;
-    private static final int GUI_H     = 318;
-    private static final int HEADER_H  = 28;
+   }
 
-    private static final int BG_COLOR       = 0x95050505;
-    private static final int PANEL_COLOR    = 0x60141414;
-    private static final int ELEM_COLOR     = 0x80222222;
-    private static final int TEXT_COLOR     = 0xFFEDEDED;
-    private static final int SUBTEXT_COLOR  = 0xFF7A7A7A;
-    private static final int DARK_THEME_BG  = 0xEE050505;
+   private void selectWaypointForEdit(GPS.GpsWaypoint wp) {
+      wpSelected = wp;
+      if (wp != null) {
+         wpEditName = wp.name != null ? wp.name : "";
+         wpEditX = String.format(Locale.ROOT, "%.0f", wp.x);
+         wpEditY = String.format(Locale.ROOT, "%.0f", wp.y);
+         wpEditZ = String.format(Locale.ROOT, "%.0f", wp.z);
+      } else {
+         wpEditName = "";
+         wpEditX = "";
+         wpEditY = "";
+         wpEditZ = "";
+      }
 
-    // ── Именованные "слоты" скролла (раньше индексировались по activeTab) ──
-    private static final int SCROLL_UTILS   = 0;
-    private static final int SCROLL_VISUAL  = 1;
-    private static final int SCROLL_HUD     = 2;
-    private static final int SCROLL_THEMES  = 3;
-    private static final int SCROLL_PARTY   = 4;
-    private static final int SCROLL_EVENTS  = 5;
-    private static final int SCROLL_GUI     = 6;
-    private static final int SCROLL_CONFIGS = 7;
-    private final float[] scrolls       = new float[8];
-    private final float[] targetScrolls = new float[8];
+      wpFocusedField = 0;
+   }
 
-    private float openAnim = 0.0f;
-    private boolean closing = false;
+   private void commitWaypointEdits() {
+      if (wpSelected != null) {
+         if (!wpEditName.isEmpty()) {
+            wpSelected.name = wpEditName;
+         }
 
-    private int currentMouseX = 0;
-    private int currentMouseY = 0;
-    // Публично для DynamicIslandRenderer: чтобы наведение на "Пати/Ивенты/..." в островке
-    // проверялось по ТЕМ ЖЕ координатам, что реально ловит mouseClicked этого экрана, а не по
-    // отдельно вычисленным в другом классе — иначе наведение и клик расходятся по пикселям.
-    public static int lastMouseX = 0;
-    public static int lastMouseY = 0;
+         try {
+            wpSelected.x = Double.parseDouble(wpEditX.replace(",", "."));
+         } catch (Exception var4) {
+         }
 
-    private final Map<String, Float> hoverAnimations = new HashMap<>();
-    private final Map<String, Float> particlesSectionAnimations = new HashMap<>();
+         try {
+            wpSelected.y = Double.parseDouble(wpEditY.replace(",", "."));
+         } catch (Exception var3) {
+         }
 
-    // ── ПКМ-переход "список → настройки" (по каждой башне независимо) ──────
-    private final Map<String, String> towerOpenModule   = new HashMap<>(); // "Utils"/"Visual" -> модуль
-    private final Map<String, Float>  towerSettingsAnim = new HashMap<>(); // 0 = список, 1 = настройки
-    private final Map<String, Float>  towerSettingsScroll = new HashMap<>();
+         try {
+            wpSelected.z = Double.parseDouble(wpEditZ.replace(",", "."));
+         } catch (Exception var2) {
+         }
 
-    private String selectedConfig = null;
-    private String configInput = "";
-    private boolean configInputFocused = false;
+         ConfigManager.saveConfig();
+      }
+   }
 
-    private static final String CALLOUT_BIND_KEY = "CalloutBind";
-    private static float animCalloutBtn = 0f;
+   public ModernClickGui() {
+      this((Screen)null);
+   }
 
-    private String partyCodeInput = "";
-    private boolean partyCodeInputFocused = false;
-    private int[] partyCodeInputBounds = null;
+   public ModernClickGui(Screen parent) {
+      super(Text.literal("Modern Lexora GUI"));
+      this.activeTab = savedActiveTab;
+      this.prevTab = savedActiveTab;
+      this.tabSwitchAnim = 1.0F;
+      this.sidebarPillY = 0.0F;
+      this.targetSidebarPillY = 0.0F;
+      this.colScrolls = new float[3];
+      this.targetColScrolls = new float[3];
+      this.secondaryScroll = 0.0F;
+      this.targetSecondaryScroll = 0.0F;
+      float[] s = (float[])savedTabColScrolls.get(savedActiveTab);
+      if (s != null) {
+         System.arraycopy(s, 0, this.colScrolls, 0, 3);
+      }
 
-    private String gpsInputName = "";
-    private String gpsInputX = "";
-    private String gpsInputZ = "";
-    private int focusedGpsInput = 0;
+      float[] ts = (float[])savedTabTargetColScrolls.get(savedActiveTab);
+      if (ts != null) {
+         System.arraycopy(ts, 0, this.targetColScrolls, 0, 3);
+      }
 
-    private final Map<String, int[]> settingClickBounds = new HashMap<>();
-    private final Map<String, float[]> sliderBounds = new HashMap<>();
+      this.secondaryScroll = (Float)savedTabSecondaryScrolls.getOrDefault(savedActiveTab, 0.0F);
+      this.targetSecondaryScroll = (Float)savedTabTargetSecondaryScrolls.getOrDefault(savedActiveTab, 0.0F);
+      this.searchInput = "";
+      this.searchFocused = false;
+      this.configInput = "";
+      this.configInputFocused = false;
+      this.selectedConfig = null;
+      this.partyCodeInput = "";
+      this.partyCodeInputFocused = false;
+      this.eventsFilter = "HolyWorld";
+      this.activeDropdownKey = null;
+      this.activeDropdownOptions = null;
+      this.dropdownX = 0.0F;
+      this.dropdownY = 0.0F;
+      this.dropdownW = 0.0F;
+      this.dropdownAnim = 0.0F;
+      this.dropdownScroll = 0.0F;
+      this.targetDropdownScroll = 0.0F;
+      this.activeColorPickerKey = null;
+      this.colorPickerX = 0.0F;
+      this.colorPickerY = 0.0F;
+      this.colorPickerAnim = 0.0F;
+      this.draggingSv = false;
+      this.draggingHue = false;
+      this.isErasingCrosshair = false;
+      this.draggingCrosshair = false;
+      this.starAnimations = new HashMap();
+      this.langSwitchAnim = 1.0F;
+      this.oldLang = GuiLocalization.Language.RU;
+      this.targetLang = GuiLocalization.Language.RU;
+      this.openAnim = 0.0F;
+      this.closing = false;
+      this.currentMouseX = 0.0F;
+      this.currentMouseY = 0.0F;
+      this.hoverAnimations = new HashMap();
+      this.toggleAnimations = new HashMap();
+      this.clickBounds = new HashMap();
+      this.sliderBounds = new HashMap();
+      this.padBounds = new HashMap();
+      this.padKeyYMap = new HashMap();
+      this.crosshairBounds = new HashMap();
+      this.bindingTarget = null;
+      this.draggingSlider = null;
+      this.draggingPad = null;
+      this.parent = parent;
+   }
 
-    private final Map<String, float[]> padBounds = new HashMap<>();
-    private final Map<String, String> padKeyYMap = new HashMap<>();
+   private boolean isDarkTheme() {
+      return (Boolean)ClientData.moduleStates.getOrDefault("DarkTheme", true);
+   }
 
-    private String draggingSettingSlider = null;
-    private String draggingPadSetting = null;
+   private void toggleTheme(float clickX, float clickY) {
+      boolean dark = this.isDarkTheme();
+      ClientData.moduleStates.put("DarkTheme", !dark);
+      LexoraGui.moduleStates.put("DarkTheme", !dark);
+      ConfigManager.saveConfig();
+      playSound("click");
+      ShockwaveShader.trigger(clickX, clickY, !dark);
+   }
 
-    private String bindingTarget = null;
-    private boolean isModuleBind = false;
-    private float bindAnim = 0.0f;
-    private float bindPopupX = 0f, bindPopupY = 0f;
-
-    private String openModeDropdown = null;
-
-    // ── Новая раскладная палитра (жмёшь свотч — плавно раскрывается на
-    //    месте в аккуратную скруглённую палитру, отпустил мышь — сворачивается
-    //    обратно и рисует выбранный цвет). Полностью заменяет старый
-    //    popup-пикер (pickerOpen/pickerX/pickerY и т.д.) ──────────────────────
-    private static class PickerState {
-        float h = 0.0f, s = 1.0f, v = 1.0f;
-    }
-
-    // id свотча: "Theme Color 1" / любой ModernSetting.COLOR key как есть,
-    // "ih:<название предмета>" для Item Highlighter, "gps:<имя метки>" для GPS.
-    private String paletteAnimKey = null;                // какой свотч сейчас реально зажат (null = ни один)
-    private int paletteDragMode = 0;                      // 0 = нет, 1 = SV-квадрат, 2 = полоса Hue
-    private final PickerState paletteLive = new PickerState();
-    private final Map<String, Float> paletteAnim = new HashMap<>();      // id -> 0..1 разворот
-    private final Map<String, float[]> paletteAnchor = new HashMap<>();  // id -> [cx, cy] откуда растёт
-
-    // ── Мост с Dynamic Island (Party/Events/GUI/Configs как мини-окна) ─────
-    public static String activeIslandPanel = null; // "Party" | "Events" | "GUI" | "Configs" | null
-
-    private static String lastRawFt = "";
-    private static String lastRawHw = "";
-    private static long lastUpdateTimeFt = 0;
-    private static long lastUpdateTimeHw = 0;
-    private static final Pattern TIME_PATTERN = Pattern.compile("(через|до конца) (?:(\\d+)\\s*мин)?\\s*(?:и\\s*)?(?:(\\d+)\\s*сек)?", Pattern.CASE_INSENSITIVE);
-    private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d+)");
-
-    public ModernClickGui() {
-        super(Text.literal("Modern Lexora GUI"));
-    }
-
-    private int getThemeColor() {
-        float[] hsv = ClientData.colorSettings.getOrDefault("Theme Color 1", new float[]{0.58f, 0.8f, 1f});
-        return 0xFF000000 | (Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]) & 0xFFFFFF);
-    }
-
-    public static void playSound(String name) {
-        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
-        if (client != null && client.world != null) {
+   public static void playSound(String name) {
+      if (!"Off".equalsIgnoreCase((String)ClientData.modeSettings.getOrDefault("GuiSounds", "On"))) {
+         MinecraftClient client = MinecraftClient.getInstance();
+         if (client != null && client.world != null) {
             try {
-                Identifier id = Identifier.of("lexoravisauls", name);
-                client.getSoundManager().play(net.minecraft.client.sound.PositionedSoundInstance.master(net.minecraft.sound.SoundEvent.of(id), 1.0F, 1.0F));
-            } catch (Exception ignored) {
+               Identifier id = Identifier.of("lexoravisauls", name);
+               client.getSoundManager().play(PositionedSoundInstance.master(SoundEvent.of(id), 1.0F, 1.0F));
+            } catch (Exception var3) {
             }
-        }
-    }
+         }
+      }
 
-    public static void playModuleToggleSound(boolean enabled) {
-        String mode = ClientData.modeSettings.getOrDefault("ModuleSoundMode", "Default");
-        String prefix = enabled ? "enable" : "disable";
-        String suffix = "";
-        switch (mode) {
-            case "Sound 1": suffix = "1"; break;
-            case "Sound 2": suffix = "2"; break;
-            case "Sound 3": suffix = "3"; break;
-            case "Sound 4": suffix = "4"; break;
-        }
-        playSound(prefix + suffix);
-    }
+   }
 
-    @Override
-    protected void init() {
-        super.init();
-        ConfigManager.updateConfigList();
-        ensureThemeDefaults();
-        this.closing = false;
-        this.openAnim = 0.0f;
-    }
+   public static void playModuleToggleSound(boolean enabled) {
+      String mode = (String)ClientData.modeSettings.getOrDefault("ModuleSoundMode", "Default");
+      String prefix = enabled ? "enable" : "disable";
+      String var10000;
+      switch (mode) {
+         case "Sound 1" -> var10000 = "1";
+         case "Sound 2" -> var10000 = "2";
+         case "Sound 3" -> var10000 = "3";
+         case "Sound 4" -> var10000 = "4";
+         default -> var10000 = "";
+      }
 
-    @Override
-    public boolean shouldPause() {
-        return false;
-    }
+      String suffix = var10000;
+      playSound(prefix + suffix);
+   }
 
-    @Override
-    public void close() {
-        if (!this.closing) {
-            this.closing = true;
-            bindingTarget = null;
-            paletteAnimKey = null;
-            paletteDragMode = 0;
-            focusedGpsInput = 0;
-            draggingSettingSlider = null;
-            draggingPadSetting = null;
-            // Закрытие ClickGui должно гасить открытую в острове вкладку (Party/Events/GUI/
-            // Configs) — так и задумано, возвращено по уточнению.
-            activeIslandPanel = null;
-        }
-    }
+   protected void init() {
+      super.init();
+      ConfigManager.updateConfigList();
+      this.closing = false;
+      this.openAnim = 0.0F;
+      this.activeDropdownKey = null;
+      this.activeColorPickerKey = null;
+      this.searchFocused = false;
+      this.configInputFocused = false;
+      this.partyCodeInputFocused = false;
+      this.bindingTarget = null;
+      this.draggingSlider = null;
+      this.draggingPad = null;
+      this.draggingCrosshair = false;
+      this.draggingSv = false;
+      this.draggingHue = false;
+   }
 
-    private float sanitize(float v) {
-        return (Float.isNaN(v) || Float.isInfinite(v)) ? 0.0f : Math.max(0.0f, Math.min(1.0f, v));
-    }
+   public boolean shouldPause() {
+      return false;
+   }
 
-    private float updateHover(String key, boolean isHovered) {
-        float t = hoverAnimations.getOrDefault(key, 0.0f);
-        t += ((isHovered ? 1.0f : 0.0f) - t) * 0.3f;
-        t = sanitize(t);
-        hoverAnimations.put(key, t);
-        return t;
-    }
+   public void close() {
+      if (!this.closing) {
+         this.closing = true;
+         this.bindingTarget = null;
+         this.draggingSlider = null;
+         this.draggingPad = null;
+         this.draggingCrosshair = false;
+         this.draggingSv = false;
+         this.draggingHue = false;
+         this.activeDropdownKey = null;
+         this.activeColorPickerKey = null;
+         activeIslandPanel = null;
+      }
 
-    // ── "Потрясти" текст модуля, если у него нет настроек (ПКМ по пустому) ──
-    private final Map<String, Long> shakeStartTime = new HashMap<>();
+   }
 
-    private float getShakeOffset(String key) {
-        Long start = shakeStartTime.get(key);
-        if (start == null) return 0f;
-        long elapsed = System.currentTimeMillis() - start;
-        if (elapsed > 500L) {
-            shakeStartTime.remove(key);
-            return 0f;
-        }
-        float t = elapsed / 500f;
-        float decay = 1f - t;
-        float wave = (float) Math.sin(t * Math.PI * 7.0);
-        return wave * decay * 3.0f;
-    }
+   private float sanitize(float v) {
+      return !Float.isNaN(v) && !Float.isInfinite(v) ? Math.max(0.0F, Math.min(1.0F, v)) : 0.0F;
+   }
 
-    private boolean moduleHasSettings(String module) {
-        if (module.equals("Lock Slot") || module.equals("Aspect Ratio") || module.equals("Fast Swap")
-                || module.equals("Item Highlighter") || module.equals("Particles") || module.equals("Item Swap")
-                || module.equals("GPS")) {
-            return true;
-        }
-        return ModernSettingsRegistry.hasSettings(module);
-    }
+   private float updateHover(String key, boolean isHovered) {
+      float t = (Float)this.hoverAnimations.getOrDefault(key, 0.0F);
+      t += ((isHovered ? 1.0F : 0.0F) - t) * 0.25F;
+      t = this.sanitize(t);
+      this.hoverAnimations.put(key, t);
+      return t;
+   }
 
-    // =========================================================================
-    //  ФОН
-    // =========================================================================
-    @Override
-    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.draw();
-        ScreenCaptureManager.captureScreen();
-        boolean useBlur = ClientData.moduleStates.getOrDefault("UseBlurTheme", true);
-        // Блюр включён -> НЕ затемняем экран вообще, стекло само отделяет гуи от игры.
-        // Блюр выключен -> обычное затемнение, чтобы плашки на чёрном фоне читались.
-        if (!useBlur) {
-            context.fill(0, 0, width, height, withAlpha(0xFF000000, sanitize(openAnim) * 0.35f));
-        }
-    }
+   private float updateToggleAnim(String key, boolean state) {
+      float t = (Float)this.toggleAnimations.getOrDefault(key, state ? 1.0F : 0.0F);
+      t += ((state ? 1.0F : 0.0F) - t) * 0.22F;
+      t = this.sanitize(t);
+      this.toggleAnimations.put(key, t);
+      return t;
+   }
 
-    private void drawTowerBackground(DrawContext context, float x, float y, float w, float h, float alpha, boolean useBlur) {
-        if (useBlur) {
-            // ВАЖНО: у ModernGuiRender.drawLiquidGlass сила блюра берётся из альфа-канала tint-цвета
-            // (globalAlpha = tintAlpha/0.6, и именно им умножается радиус блюра в шейдере). Если тут
-            // поставить низкую альфу — блюр почти пропадает, а не просто "меньше темнит". Экран мы уже
-            // не затемняем отдельным чёрным фулскрином (см. renderBackground) — поэтому здесь держим
-            // альфу высокой, чтобы стекло реально размывало картинку, а не просто было прозрачным.
-            ModernGuiRender.drawLiquidGlass(context, x, y, w, h, 14.0f, 15.0f, withAlpha(0x9A050505, alpha));
+   private float updateStarAnim(String mod) {
+      float t = (Float)this.starAnimations.getOrDefault(mod, 1.0F);
+      if (t < 1.0F) {
+         t += (1.0F - t) * 0.2F;
+         if (t > 0.99F) {
+            t = 1.0F;
+         }
+
+         this.starAnimations.put(mod, t);
+      }
+
+      return t;
+   }
+
+   public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+      this.currentMouseX = (float)mouseX;
+      this.currentMouseY = (float)mouseY;
+      lastMouseX = mouseX;
+      lastMouseY = mouseY;
+      if (!this.closing) {
+         this.openAnim += (1.0F - this.openAnim) * 0.18F;
+         if (this.openAnim > 0.999F) {
+            this.openAnim = 1.0F;
+         }
+      } else {
+         this.openAnim += (0.0F - this.openAnim) * 0.22F;
+         if (this.openAnim < 0.01F) {
+            if (this.parent != null) {
+               this.client.setScreen(this.parent);
+            } else if (this.client != null && this.client.world == null) {
+               this.client.setScreen(new LexoraMainMenu());
+            } else {
+               this.client.setScreen((Screen)null);
+            }
+
             return;
-        }
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, (int) h, 14.0f, withAlpha(0xF2050505, alpha));
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, (int) h, 14.0f, withAlpha(0x1A1A20, alpha * 0.8f));
-    }
+         }
+      }
 
-    // =========================================================================
-    //  ГЛАВНЫЙ RENDER
-    // =========================================================================
-    @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
-        com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
+      if (this.tabSwitchAnim < 1.0F) {
+         this.tabSwitchAnim += (1.0F - this.tabSwitchAnim) * 0.18F;
+         if (this.tabSwitchAnim > 0.99F) {
+            this.tabSwitchAnim = 1.0F;
+         }
+      }
 
-        this.currentMouseX = mouseX;
-        this.currentMouseY = mouseY;
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
+      if (this.langSwitchAnim < 1.0F) {
+         this.langSwitchAnim += (1.0F - this.langSwitchAnim) * 0.14F;
+         if (this.langSwitchAnim > 0.99F) {
+            this.langSwitchAnim = 1.0F;
+         }
+      }
 
-        // Медленнее и плавнее, чем раньше — окно/башни ощутимо "долетают" до места, а не прыгают.
-        if (!closing) {
-            openAnim += (1.0f - openAnim) * 0.13f;
-        } else {
-            openAnim += (0.0f - openAnim) * 0.09f;
-            if (openAnim <= 0.015f) {
-                openAnim = 0.0f;
-                if (client != null) client.setScreen(null);
-                return;
+      if (this.activeDropdownKey != null) {
+         this.dropdownAnim += (1.0F - this.dropdownAnim) * 0.25F;
+         this.dropdownScroll += (this.targetDropdownScroll - this.dropdownScroll) * 0.25F;
+      } else {
+         this.dropdownAnim += (0.0F - this.dropdownAnim) * 0.25F;
+      }
+
+      if (this.activeColorPickerKey != null) {
+         this.colorPickerAnim += (1.0F - this.colorPickerAnim) * 0.25F;
+      } else {
+         this.colorPickerAnim += (0.0F - this.colorPickerAnim) * 0.25F;
+      }
+
+      for(int i = 0; i < 3; ++i) {
+         float[] var10000 = this.colScrolls;
+         var10000[i] += (this.targetColScrolls[i] - this.colScrolls[i]) * 0.25F;
+      }
+
+      this.secondaryScroll += (this.targetSecondaryScroll - this.secondaryScroll) * 0.25F;
+      this.sidebarPillY += (this.targetSidebarPillY - this.sidebarPillY) * 0.25F;
+      this.clickBounds.clear();
+      this.sliderBounds.clear();
+      this.padBounds.clear();
+      this.crosshairBounds.clear();
+      int screenW = this.width;
+      int screenH = this.height;
+      int overlayAlpha = (int)(140.0F * this.openAnim);
+      context.fill(0, 0, screenW, screenH, overlayAlpha << 24);
+      float guiX = (float)(screenW - 660) / 2.0F;
+      float guiY = (float)(screenH - 360) / 2.0F;
+      float scale = 0.94F + 0.06F * this.openAnim;
+      float scaledX = guiX + 660.0F * (1.0F - scale) / 2.0F;
+      float scaledY = guiY + 360.0F * (1.0F - scale) / 2.0F;
+      boolean dark = this.isDarkTheme();
+      int winBg = dark ? -267580143 : -185207046;
+      RoundedRectShader.draw(context, scaledX, scaledY, 660.0F * scale, 360.0F * scale, 12.0F, this.withAlpha(winBg, this.openAnim));
+      this.drawSidebar(context, scaledX, scaledY, 135.0F * scale, 360.0F * scale, dark, this.openAnim);
+      float contentX = scaledX + 135.0F * scale;
+      float contentW = 525.0F * scale;
+      this.drawTopHeader(context, contentX, scaledY, contentW, 30.0F * scale, dark, this.openAnim);
+      float mainY = scaledY + 30.0F * scale;
+      float mainH = 330.0F * scale;
+      context.enableScissor((int)contentX, (int)mainY, (int)(contentX + contentW), (int)(mainY + mainH));
+      if (!this.activeTab.equals("All") && !this.activeTab.equals("HUD") && !this.activeTab.equals("Visual") && !this.activeTab.equals("Utils") && !this.activeTab.equals("Search")) {
+         if (this.activeTab.equals("Cosmetics")) {
+            this.drawCosmeticsScreen(context, contentX + 12.0F, mainY + 8.0F, contentW - 24.0F, mainH - 16.0F, dark, this.openAnim);
+         } else if (this.activeTab.equals("Events")) {
+            this.drawEventsScreen(context, contentX + 12.0F, mainY + 8.0F, contentW - 24.0F, mainH - 16.0F, dark, this.openAnim);
+         } else if (this.activeTab.equals("Themes")) {
+            this.drawThemesScreen(context, contentX + 12.0F, mainY + 8.0F, contentW - 24.0F, mainH - 16.0F, dark, this.openAnim);
+         } else if (this.activeTab.equals("Settings")) {
+            this.drawGuiSettingsScreen(context, contentX + 12.0F, mainY + 8.0F, contentW - 24.0F, mainH - 16.0F, dark, this.openAnim);
+         } else if (this.activeTab.equals("Configs")) {
+            this.drawConfigsScreen(context, contentX + 12.0F, mainY + 8.0F, contentW - 24.0F, mainH - 16.0F, dark, this.openAnim);
+         } else if (this.activeTab.equals("Friends")) {
+            this.drawFriendsScreen(context, contentX + 12.0F, mainY + 8.0F, contentW - 24.0F, mainH - 16.0F, dark, this.openAnim);
+         } else if (this.activeTab.equals("Waypoints")) {
+            this.drawWaypointsScreen(context, contentX + 12.0F, mainY + 8.0F, contentW - 24.0F, mainH - 16.0F, dark, this.openAnim);
+         }
+      } else {
+         this.drawThreeColumnModules(context, contentX + 8.0F, mainY + 6.0F, contentW - 16.0F, mainH - 12.0F, dark, this.openAnim);
+      }
+
+      context.disableScissor();
+      if (this.activeDropdownKey != null && this.activeDropdownOptions != null && this.dropdownAnim > 0.01F) {
+         this.drawDropdownModal(context, dark, this.openAnim * this.dropdownAnim);
+      }
+
+      if (this.activeColorPickerKey != null && this.colorPickerAnim > 0.01F) {
+         this.drawColorPickerHud(context, dark, this.openAnim * this.colorPickerAnim);
+      }
+
+      if (ShockwaveShader.isRunning()) {
+         ShockwaveShader.render(context, (float)screenW, (float)screenH);
+      }
+
+      if (LexoraPartyManager.activeInviteNotif != null && !this.activeTab.equals("Friends")) {
+         DynamicIslandRenderer.render(context, 1.0F);
+      }
+
+   }
+
+   private void drawSidebar(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      int barBg = dark ? -804648435 : -705958414;
+      RoundedRectShader.draw(context, x, y, w, h, 12.0F, this.withAlpha(barBg, anim));
+      ModernGuiIcons.draw(context, ModernGuiIcons.Icon.SPARKLE, x + 12.0F, y + 12.0F, 12.0F, this.withAlpha(dark ? -1 : -15461352, anim));
+      SFUI.draw(context, "Lexora", x + 28.0F, y + 13.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim));
+      float curY = y + 35.0F;
+      int secTitleCol = dark ? -10987418 : -7697767;
+      SFUI.draw(context, "Категории", x + 12.0F, curY, 8.0F, this.withAlpha(secTitleCol, anim));
+      curY += 10.0F;
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "All", ModernGuiIcons.Icon.GRID, dark, anim);
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "HUD", ModernGuiIcons.Icon.MONITOR, dark, anim);
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Visual", ModernGuiIcons.Icon.WAND, dark, anim);
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Utils", ModernGuiIcons.Icon.WRENCH, dark, anim);
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Cosmetics", ModernGuiIcons.Icon.SPARKLE, dark, anim);
+      curY += 4.0F;
+      SFUI.draw(context, "Функции", x + 12.0F, curY, 8.0F, this.withAlpha(secTitleCol, anim));
+      curY += 10.0F;
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Events", ModernGuiIcons.Icon.SPARKLE, dark, anim);
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Configs", ModernGuiIcons.Icon.FILE, dark, anim);
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Friends", ModernGuiIcons.Icon.USERS, dark, anim);
+      curY = this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Waypoints", ModernGuiIcons.Icon.PIN, dark, anim);
+      this.drawSidebarItem(context, x + 6.0F, curY, w - 12.0F, 19.5F, "Themes", ModernGuiIcons.Icon.PIPETTE, dark, anim);
+      float bottomY = y + h - 68.0F;
+      this.drawSidebarItem(context, x + 6.0F, bottomY, w - 12.0F, 19.0F, "Settings", ModernGuiIcons.Icon.SETTINGS, dark, anim);
+      this.drawSidebarItem(context, x + 6.0F, bottomY + 20.5F, w - 12.0F, 19.0F, "Search", ModernGuiIcons.Icon.SEARCH, dark, anim);
+      float profY = y + h - 25.0F;
+      String name = this.client.player != null ? this.client.player.getName().getString() : "Player";
+      SFUI.draw(context, name, x + 12.0F, profY + 2.0F, 8.0F, this.withAlpha(dark ? -1118478 : -15461352, anim));
+      String server = this.client.getCurrentServerEntry() != null ? this.client.getCurrentServerEntry().address : "Singleplayer";
+      SFUI.draw(context, server, x + 12.0F, profY + 11.0F, 6.5F, this.withAlpha(dark ? -9408384 : -8355696, anim));
+   }
+
+   private float drawSidebarItem(DrawContext context, float x, float y, float w, float h, String tab, ModernGuiIcons.Icon icon, boolean dark, float anim) {
+      boolean active = this.activeTab.equals(tab);
+      boolean hovered = this.inside(this.currentMouseX, this.currentMouseY, x, y, w, h);
+      float hAnim = this.updateHover("sb:" + tab, hovered);
+      if (active) {
+         this.targetSidebarPillY = y;
+         int activePill = dark ? -1876811220 : -788529153;
+         RoundedRectShader.draw(context, x, y, w, h, 5.0F, this.withAlpha(activePill, anim));
+      } else if (hAnim > 0.01F) {
+         int hoverPill = dark ? 1075584036 : 1356915949;
+         RoundedRectShader.draw(context, x, y, w, h, 5.0F, this.withAlpha(hoverPill, anim * hAnim));
+      }
+
+      int itemTextCol = active ? (dark ? -1 : -15856110) : (dark ? -6381906 : -10592658);
+      int itemIconCol = active ? (dark ? -1 : -15856110) : (dark ? -7434594 : -9539970);
+      ModernGuiIcons.draw(context, icon, x + 7.0F, y + (h - 10.0F) / 2.0F, 10.0F, this.withAlpha(itemIconCol, anim));
+      String label = this.getAnimatedText(tab, GuiLocalization.getCategoryText(tab));
+      SFUI.draw(context, label, x + 21.0F, y + (h - 8.0F) / 2.0F + 0.5F, 8.5F, this.withAlpha(itemTextCol, anim));
+      this.clickBounds.put("tab:" + tab, new int[]{(int)x, (int)y, (int)w, (int)h});
+      return y + h + 1.5F;
+   }
+
+   private void drawTopHeader(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      int sepCol = dark ? 637534207 : 536870912;
+      RoundedRectShader.draw(context, x, y + h - 1.0F, w, 1.0F, 0.0F, this.withAlpha(sepCol, anim));
+      ModernGuiIcons.Icon catIcon = this.getTabIcon(this.activeTab);
+      ModernGuiIcons.draw(context, catIcon, x + 12.0F, y + (h - 11.0F) / 2.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim));
+      SFUI.draw(context, "|", x + 26.0F, y + (h - 10.0F) / 2.0F, 9.5F, this.withAlpha(dark ? -12237483 : -4868667, anim));
+      SFUI.draw(context, this.getAnimatedText(this.activeTab, GuiLocalization.getCategoryText(this.activeTab)), x + 34.0F, y + (h - 10.0F) / 2.0F, 9.5F, this.withAlpha(dark ? -1118475 : -15461352, anim));
+      float sX = x + 120.0F;
+      float sY = y + 6.0F;
+      float sW = 150.0F;
+      float sH = 17.0F;
+      int sBg = this.searchFocused ? (dark ? -14408654 : -2235925) : (dark ? 1612191778 : 1625680112);
+      RoundedRectShader.draw(context, sX, sY, sW, sH, 4.0F, this.withAlpha(sBg, anim));
+      ModernGuiIcons.draw(context, ModernGuiIcons.Icon.SEARCH, sX + 5.0F, sY + 4.0F, 8.5F, this.withAlpha(dark ? -8750454 : -7697766, anim));
+      String sDisplay = this.searchInput.isEmpty() && !this.searchFocused ? "Поиск модулей..." : this.searchInput;
+      if (this.searchFocused && System.currentTimeMillis() % 900L < 450L) {
+         sDisplay = sDisplay + "|";
+      }
+
+      int sCol = this.searchInput.isEmpty() && !this.searchFocused ? (dark ? -10987416 : -7303008) : (dark ? -1 : -15461352);
+      SFUI.draw(context, sDisplay, sX + 17.0F, sY + 4.5F, 7.5F, this.withAlpha(sCol, anim));
+      if (!this.searchInput.isEmpty()) {
+         SFUI.draw(context, "✕", sX + sW - 12.0F, sY + 4.5F, 7.0F, this.withAlpha(dark ? -7829352 : -10066314, anim));
+         this.clickBounds.put("action:clear_search", new int[]{(int)(sX + sW - 14.0F), (int)sY, 14, (int)sH});
+      }
+
+      this.clickBounds.put("input:search", new int[]{(int)sX, (int)sY, (int)sW, (int)sH});
+      float btnX = x + w - 22.0F;
+      boolean hClose = this.inside(this.currentMouseX, this.currentMouseY, btnX, y + 6.0F, 16.0F, 16.0F);
+      float hCloseAnim = this.updateHover("btn:close", hClose);
+      int closeCol = this.interpolateColor(dark ? -7697766 : -10132107, -48060, hCloseAnim);
+      SFUI.draw(context, "✕", btnX + 4.0F, y + 10.0F, 8.5F, this.withAlpha(closeCol, anim));
+      this.clickBounds.put("action:close", new int[]{(int)btnX, (int)y + 6, 16, 16});
+      btnX -= 28.0F;
+      boolean hLang = this.inside(this.currentMouseX, this.currentMouseY, btnX, y + 6.0F, 24.0F, 15.0F);
+      float hLangAnim = this.updateHover("btn:lang", hLang);
+      int langBg = this.interpolateColor(dark ? 806885408 : 820045036, dark ? 1881482549 : 1893062882, hLangAnim);
+      RoundedRectShader.draw(context, btnX, y + 6.0F, 24.0F, 15.0F, 3.5F, this.withAlpha(langBg, anim));
+      String langText = GuiLocalization.getLanguage().code;
+      SFUI.draw(context, langText, btnX + 5.5F, y + 9.5F, 8.0F, this.withAlpha(dark ? -1 : -15461352, anim));
+      this.clickBounds.put("action:lang", new int[]{(int)btnX, (int)y + 6, 24, 15});
+      btnX -= 24.0F;
+      boolean hTheme = this.inside(this.currentMouseX, this.currentMouseY, btnX, y + 6.0F, 19.0F, 15.0F);
+      float hThemeAnim = this.updateHover("btn:theme", hTheme);
+      int themeBg = this.interpolateColor(dark ? 806885408 : 820045036, dark ? 1881482549 : 1893062882, hThemeAnim);
+      RoundedRectShader.draw(context, btnX, y + 6.0F, 19.0F, 15.0F, 3.5F, this.withAlpha(themeBg, anim));
+      ModernGuiIcons.Icon themeIcon = dark ? ModernGuiIcons.Icon.SUN : ModernGuiIcons.Icon.MOON;
+      ModernGuiIcons.draw(context, themeIcon, btnX + 4.5F, y + 8.0F, 10.0F, this.withAlpha(dark ? -1 : -15461352, anim));
+      this.clickBounds.put("action:theme", new int[]{(int)btnX, (int)y + 6, 19, 15});
+      btnX -= 24.0F;
+      boolean hFav = this.inside(this.currentMouseX, this.currentMouseY, btnX, y + 6.0F, 19.0F, 15.0F);
+      float hFavAnim = this.updateHover("btn:fav", hFav);
+      int favBg = ClientData.onlyFavoritesFilter ? (dark ? -13290171 : -4143659) : this.interpolateColor(dark ? 806885408 : 820045036, dark ? 1881482549 : 1893062882, hFavAnim);
+      RoundedRectShader.draw(context, btnX, y + 6.0F, 19.0F, 15.0F, 3.5F, this.withAlpha(favBg, anim));
+      ModernGuiIcons.Icon favIcon = ClientData.onlyFavoritesFilter ? ModernGuiIcons.Icon.STAR_FILLED : ModernGuiIcons.Icon.STAR_OUTLINE;
+      int favCol = ClientData.onlyFavoritesFilter ? -10496 : (dark ? -1 : -15461352);
+      ModernGuiIcons.draw(context, favIcon, btnX + 4.5F, y + 8.0F, 10.0F, this.withAlpha(favCol, anim));
+      this.clickBounds.put("action:favorites", new int[]{(int)btnX, (int)y + 6, 19, 15});
+   }
+
+   private ModernGuiIcons.Icon getTabIcon(String tab) {
+      ModernGuiIcons.Icon var10000;
+      switch (tab) {
+         case "All" -> var10000 = ModernGuiIcons.Icon.GRID;
+         case "HUD" -> var10000 = ModernGuiIcons.Icon.MONITOR;
+         case "Visual" -> var10000 = ModernGuiIcons.Icon.WAND;
+         case "Utils" -> var10000 = ModernGuiIcons.Icon.WRENCH;
+         case "Cosmetics" -> var10000 = ModernGuiIcons.Icon.SPARKLE;
+         case "Events" -> var10000 = ModernGuiIcons.Icon.SPARKLE;
+         case "Configs" -> var10000 = ModernGuiIcons.Icon.FILE;
+         case "Friends" -> var10000 = ModernGuiIcons.Icon.USERS;
+         case "Waypoints" -> var10000 = ModernGuiIcons.Icon.PIN;
+         case "Themes" -> var10000 = ModernGuiIcons.Icon.PIPETTE;
+         case "Settings" -> var10000 = ModernGuiIcons.Icon.SETTINGS;
+         case "Search" -> var10000 = ModernGuiIcons.Icon.SEARCH;
+         default -> var10000 = ModernGuiIcons.Icon.MONITOR;
+      }
+
+      return var10000;
+   }
+
+   private void drawThreeColumnModules(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      List<String> modules = this.getFilteredModules();
+      if (modules.isEmpty()) {
+         SFUI.draw(context, "Ничего не найдено", x + w / 2.0F - 38.0F, y + h / 2.0F, 9.0F, this.withAlpha(dark ? -9408384 : -7303008, anim));
+      } else {
+         float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+         float switchAlpha = this.tabSwitchAnim;
+         float colW = (w - 16.0F) / 3.0F;
+         List<List<String>> columns = new ArrayList();
+
+         for(int i = 0; i < 3; ++i) {
+            columns.add(new ArrayList());
+         }
+
+         for(int i = 0; i < modules.size(); ++i) {
+            columns.get(i % 3).add(modules.get(i));
+         }
+
+         for(int col = 0; col < 3; ++col) {
+            float colX = x + (float)col * (colW + 8.0F);
+            float scroll = this.colScrolls[col];
+            float curY = y + scroll + switchOffset;
+            context.enableScissor((int)colX, (int)y, (int)(colX + colW), (int)(y + h));
+
+            for(String mod : columns.get(col)) {
+               curY = this.drawModuleCard(context, colX, curY, colW, mod, dark, anim * switchAlpha);
+               curY += 8.0F;
             }
-        }
-        openAnim = sanitize(openAnim);
-        float easedOpen = smoothT(openAnim);
 
-        for (int i = 0; i < scrolls.length; i++) scrolls[i] += (targetScrolls[i] - scrolls[i]) * 0.20f;
-
-        // Плавная анимация настроек-слайда по каждой открытой башне (медленнее прежнего) —
-        // "Themes" сюда же: через неё теперь открываются Party/Events/GUI/Configs из островка.
-        for (String tower : new String[]{"Utils", "Visual", "HUD"}) {
-            float target = towerOpenModule.containsKey(tower) ? 1.0f : 0.0f;
-            float cur = towerSettingsAnim.getOrDefault(tower, 0.0f);
-            cur = sanitize(cur + (target - cur) * 0.15f);
-            towerSettingsAnim.put(tower, cur);
-        }
-        {
-            float target = activeIslandPanel != null ? 1.0f : 0.0f;
-            float cur = towerSettingsAnim.getOrDefault("Themes", 0.0f);
-            cur = sanitize(cur + (target - cur) * 0.15f);
-            towerSettingsAnim.put("Themes", cur);
-        }
-
-        // Раскладная палитра: активный ключ тянем к 1, все остальные — плавно к 0 и убираем
-        if (paletteAnimKey != null) {
-            paletteAnim.merge(paletteAnimKey, 0f, (a, b) -> a);
-            paletteAnim.put(paletteAnimKey, sanitize(paletteAnim.getOrDefault(paletteAnimKey, 0f) + (1f - paletteAnim.getOrDefault(paletteAnimKey, 0f)) * 0.4f));
-        }
-        Iterator<Map.Entry<String, Float>> pIt = paletteAnim.entrySet().iterator();
-        while (pIt.hasNext()) {
-            Map.Entry<String, Float> e = pIt.next();
-            if (e.getKey().equals(paletteAnimKey)) continue;
-            float v = e.getValue() * 0.72f;
-            if (v < 0.01f) pIt.remove(); else e.setValue(v);
-        }
-
-        settingClickBounds.clear();
-        sliderBounds.clear();
-        padBounds.clear();
-
-        renderBackground(context, mouseX, mouseY, delta);
-
-        boolean useBlur = ClientData.moduleStates.getOrDefault("UseBlurTheme", true);
-        float guiW = GUI_W;
-        float guiH = GUI_H;
-        float x = (width - guiW) / 2f;
-        float y = (height - guiH) / 2f;
-
-        float scale = (0.90f + easedOpen * 0.10f);
-        float alpha = openAnim;
-        float flyBase = (1f - easedOpen) * 24f;
-
-        context.getMatrices().push();
-        try {
-            context.getMatrices().translate(width / 2f, height / 2f, 0f);
-            context.getMatrices().scale(scale, scale, 1f);
-            context.getMatrices().translate(-width / 2f, -height / 2f, 0f);
-
-            // Башни "залетают" снизу вверх с лёгким разбегом по времени — не идеально синхронно,
-            // от этого ощущается как несколько отдельных элементов, а не одна плашка.
-            float tx = x;
-            drawTower(context, "Utils", "Утилиты", 0, ModernGuiRegistry.getUtilsModules(), tx, y + flyBase * 1.00f, TOWER_W, guiH, alpha, useBlur);
-            tx += TOWER_W + TOWER_GAP;
-            drawTower(context, "Visual", "Визуалы", 1, ModernGuiRegistry.getVisualModules(), tx, y + flyBase * 1.10f, TOWER_W, guiH, alpha, useBlur);
-            tx += TOWER_W + TOWER_GAP;
-            drawTower(context, "HUD", "ХУД", 3, ModernGuiRegistry.getHudModules(), tx, y + flyBase * 1.20f, TOWER_W, guiH, alpha, useBlur);
-            tx += TOWER_W + TOWER_GAP;
-            drawThemesTower(context, tx, y + flyBase * 1.30f, TOWER_W, guiH, alpha, useBlur);
-
-            for (Map.Entry<String, Float> e : paletteAnim.entrySet()) {
-                if (e.getValue() > 0.01f) drawExpandedPalette(context, e.getKey(), e.getValue(), alpha);
+            float totalHeight = curY - (y + scroll + switchOffset);
+            float maxScroll = Math.max(0.0F, totalHeight - h + 16.0F);
+            if (this.targetColScrolls[col] < -maxScroll) {
+               this.targetColScrolls[col] = -maxScroll;
             }
-        } finally {
-            context.getMatrices().pop();
-        }
 
-        if (bindingTarget != null) {
-            bindAnim += (1.0f - bindAnim) * 0.35f;
-        } else {
-            bindAnim += (0.0f - bindAnim) * 0.40f;
-        }
-        bindAnim = sanitize(bindAnim);
-        if (bindAnim > 0.01f) drawBindWindow(context, bindAnim);
-    }
-
-    // =========================================================================
-    //  ИКОНКИ ЗАГОЛОВКОВ БАШЕН (простые векторные, без зависимости от шрифта)
-    // =========================================================================
-    private void drawTower(DrawContext context, String towerId, String title, int iconKind,
-                           List<String> modules, float x, float y, float w, float h, float alpha, boolean useBlur) {
-        drawTowerBackground(context, x, y, w, h, alpha, useBlur);
-
-        drawSfuiCustom(context, title, x + 12f, y + HEADER_H / 2f - 4.2f, 9.5f, withAlpha(TEXT_COLOR, alpha));
-
-        RoundedRectShader.draw(context, (int) (x + 10), (int) (y + HEADER_H), (int) (w - 20), 1, 0f, withAlpha(0xFFFFFFFF, alpha * 0.08f));
-
-        float contentX = x + 8f;
-        float contentY = y + HEADER_H + 8f;
-        float contentW = w - 16f;
-        float contentH = h - HEADER_H - 16f;
-
-        float settingsAnim = towerSettingsAnim.getOrDefault(towerId, 0f);
-
-        context.enableScissor((int) x, (int) (y + HEADER_H), (int) (x + w), (int) (y + h));
-        try {
-            if (settingsAnim < 0.995f) {
-                float listAlpha = alpha * (1f - settingsAnim);
-                float listOffsetX = -smoothT(settingsAnim) * w * 0.9f;
-                if (listAlpha > 0.01f) {
-                    if (modules.isEmpty()) {
-                        drawSfuiTiny(context, "Нет модулей", contentX, contentY, withAlpha(SUBTEXT_COLOR, listAlpha));
-                    } else {
-                        drawTowerModuleList(context, towerId, modules, contentX + listOffsetX, contentY, contentW, contentH, listAlpha);
-                    }
-                }
+            if (this.targetColScrolls[col] > 0.0F) {
+               this.targetColScrolls[col] = 0.0F;
             }
-            if (settingsAnim > 0.005f) {
-                float setAlpha = alpha * settingsAnim;
-                float setOffsetX = (1f - smoothT(settingsAnim)) * w * 0.9f;
-                String openModule = towerOpenModule.get(towerId);
-                if (openModule != null) {
-                    drawTowerSettingsSlide(context, towerId, openModule, contentX + setOffsetX, contentY, contentW, contentH, setAlpha);
-                }
-            }
-        } finally {
+
             context.disableScissor();
-        }
-    }
-
-    private float smoothT(float t) {
-        t = clamp(t, 0f, 1f);
-        return t * t * (3f - 2f * t);
-    }
-
-    private void drawTowerModuleList(DrawContext context, String towerId, List<String> modules,
-                                     float x, float y, float w, float h, float alpha) {
-        int scrollIdx = switch (towerId) {
-            case "Utils" -> SCROLL_UTILS;
-            case "Visual" -> SCROLL_VISUAL;
-            default -> SCROLL_HUD;
-        };
-        float rowH = 22f;
-        float totalH = modules.size() * rowH;
-        float maxScroll = Math.max(0f, totalH - h);
-        targetScrolls[scrollIdx] = clamp(targetScrolls[scrollIdx], 0f, maxScroll);
-        scrolls[scrollIdx] = clamp(scrolls[scrollIdx], 0f, maxScroll);
-
-        float cy = y - scrolls[scrollIdx];
-
-        // Список рисуем единым куском — без карточек и зазоров между модулями,
-        // разделяет их только подсветка при наведении (ничего не "рвёт" список на части).
-        for (String module : modules) {
-            if (cy + rowH >= y - 4 && cy <= y + h + 4) {
-                boolean enabled = ClientData.moduleStates.getOrDefault(module, false);
-                boolean isHovered = !closing && inside(currentMouseX, currentMouseY, x, cy, w, rowH);
-                float hoverT = updateHover("row:" + towerId + ":" + module, isHovered);
-
-                if (hoverT > 0.01f) {
-                    RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, (int) rowH, 5f, withAlpha(0x10FFFFFF, alpha * hoverT));
-                }
-
-                int textColor = enabled ? TEXT_COLOR : blendColors(SUBTEXT_COLOR, TEXT_COLOR, hoverT * 0.6f);
-                String shown = clipToWidth(module, w - 28f, 7.5f);
-                float shakeOff = getShakeOffset(towerId + ":" + module);
-                drawSfuiCustom(context, shown, x + 9f + shakeOff, cy + (rowH - 6.5f) / 2f, 7.5f, withAlpha(textColor, alpha));
-
-                float cmSize = 9f;
-                drawCheckmarkAnimated(context, "modchk:" + towerId + ":" + module, enabled, x + w - cmSize - 8f, cy + (rowH - cmSize) / 2f, cmSize, alpha);
-
-                settingClickBounds.put("modulerow:" + towerId + ":" + module, new int[]{(int) x, (int) cy, (int) w, (int) rowH});
+            if (totalHeight > h && maxScroll > 0.0F) {
+               float sbTrackX = colX + colW - 2.5F;
+               float sbTrackY = y + 2.0F;
+               float sbTrackH = h - 4.0F;
+               RoundedRectShader.draw(context, sbTrackX, sbTrackY, 2.0F, sbTrackH, 1.0F, this.withAlpha(dark ? 553648127 : 352321536, anim * switchAlpha));
+               float thumbRatio = Math.max(0.15F, Math.min(1.0F, h / totalHeight));
+               float thumbH = sbTrackH * thumbRatio;
+               float scrollRatio = Math.max(0.0F, Math.min(1.0F, -scroll / maxScroll));
+               float thumbY = sbTrackY + (sbTrackH - thumbH) * scrollRatio;
+               int thumbCol = dark ? 1627389951 : 1342177280;
+               RoundedRectShader.draw(context, sbTrackX, thumbY, 2.0F, thumbH, 1.0F, this.withAlpha(thumbCol, anim * switchAlpha));
             }
-            cy += rowH;
-        }
-    }
+         }
 
-    private void drawTowerSettingsSlide(DrawContext context, String towerId, String module,
-                                        float x, float y, float w, float h, float alpha) {
-        float backW = 20f;
-        boolean backHovered = !closing && inside(currentMouseX, currentMouseY, x, y, backW, 18f);
-        float backHoverT = updateHover("back:" + towerId, backHovered);
-        drawBackArrow(context, x + 1f, y + 3f, 12f, alpha * (0.7f + backHoverT * 0.3f));
-        settingClickBounds.put("tower_back:" + towerId, new int[]{(int) x, (int) y, (int) backW, 18});
+      }
+   }
 
-        float nameMaxW = w - backW - 8f;
-        String shownName = clipToWidth(module, nameMaxW, 9f);
-        float nameW = getSfuiWidth(shownName, 9f);
-        drawSfuiCustom(context, shownName, x + w - nameW, y + 4.5f, 9f, withAlpha(TEXT_COLOR, alpha));
-
-        float sy = y + 26f;
-        float sh = h - 26f;
-        if (sh <= 4f) return;
-
-        float maxScroll = Math.max(0f, getExpandedTargetHeight(module) - sh);
-        float scroll = clamp(towerSettingsScroll.getOrDefault(towerId, 0f), 0f, maxScroll);
-        towerSettingsScroll.put(towerId, scroll);
-
-        // Настройки при открытии панели плавно "опускаются" на место сверху — чисто визуальный
-        // сдвиг матрицей, высоты/layout не трогает вообще, поэтому не может ничего сдвинуть/наложить
-        // друг на друга (в отличие от прошлого бага в Партиклах).
-        float revealT = smoothT(towerSettingsAnim.getOrDefault(towerId, 1f));
-        float settleOffset = (revealT - 1f) * 14f;
-
-        context.enableScissor((int) x, (int) sy, (int) (x + w), (int) (sy + sh));
-        try {
-            // ФИКС "съехавшего хитбокса": раньше сдвиг применялся только матрицей ниже, а
-            // settingClickBounds (см. drawKronexSetting/drawExpandedModuleContent) сохраняет
-            // тот Y, что ему передали, — матрицу он не читает. Пока towerSettingsScroll был
-            // всегда 0 (до фикса скролла настроек), несовпадение было незаметно; как только
-            // скролл заработал по-настоящему, клик-зоны и картинка разъехались на его величину.
-            // Теперь сдвиг закладываем прямо в Y — картинка и клики снова смотрят в одну точку.
-            drawExpandedModuleContent(context, module, x + 2f, sy + 6f - scroll + settleOffset, (int) w - 4, alpha);
-        } finally {
-            context.disableScissor();
-        }
-    }
-
-    // =========================================================================
-    //  ГАЛОЧКА И СТРЕЛКА НАЗАД — твои PNG (уже белые), без всякого тинта
-    // =========================================================================
-    private static final Identifier ACCEPT_TEX  = Identifier.of("lexoravisauls", "textures/gui/accept.png");
-    private static final Identifier GUISWAP_TEX = Identifier.of("lexoravisauls", "textures/gui/guiswap.png");
-
-    private void drawCheckmark(DrawContext context, float x, float y, float size, float alpha) {
-        RoundedRectShader.drawTextured(context, ACCEPT_TEX, x, y, size, size, 0f, 0f, 0f, 1f, 1f, withAlpha(0xFFFFFFFF, alpha));
-    }
-
-    private final Map<String, Float> checkmarkAnim = new HashMap<>();
-
-    /** Галочка, которая плавно появляется/исчезает (fade + лёгкий "поп" по размеру), а не мигает. */
-    private void drawCheckmarkAnimated(DrawContext context, String key, boolean visible, float x, float y, float size, float alpha) {
-        float target = visible ? 1f : 0f;
-        float cur = checkmarkAnim.getOrDefault(key, target);
-        cur = sanitize(cur + (target - cur) * 0.25f);
-        checkmarkAnim.put(key, cur);
-        if (cur < 0.02f) return;
-        float scale = 0.7f + 0.3f * smoothT(cur);
-        float sizeAnim = size * scale;
-        float offset = (size - sizeAnim) / 2f;
-        drawCheckmark(context, x + offset, y + offset, sizeAnim, alpha * cur);
-    }
-
-    private void drawBackArrow(DrawContext context, float x, float y, float size, float alpha) {
-        RoundedRectShader.drawTextured(context, GUISWAP_TEX, x, y, size, size, 0f, 0f, 0f, 1f, 1f, withAlpha(0xFFFFFFFF, alpha));
-    }
-
-    /** Для toggle-настроек внутри панелей: маленький скруглённый квадрат, галочка появляется внутри при включении. */
-    private void drawCheckbox(DrawContext context, float x, float y, boolean enabled, String key, float alpha) {
-        float size = 9f;
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) size, (int) size, 3.0f,
-                withAlpha(enabled ? blendColors(ELEM_COLOR, getThemeColor(), 0.35f) : ELEM_COLOR, alpha));
-        float cmSize = 7f;
-        drawCheckmarkAnimated(context, "cbchk:" + key, enabled, x + (size - cmSize) / 2f, y + (size - cmSize) / 2f, cmSize, alpha);
-        settingClickBounds.put("toggle:" + key, new int[]{(int) x - 5, (int) y - 5, (int) size + 10, (int) size + 10});
-    }
-
-    // =========================================================================
-    //  БАШНЯ ТЕМ: пресеты + раскладная палитра для 2 своих цветов
-    // =========================================================================
-    private void drawThemesTower(DrawContext context, float x, float y, float w, float h, float alpha, boolean useBlur) {
-        drawTowerBackground(context, x, y, w, h, alpha, useBlur);
-
-        drawSfuiCustom(context, "Темы", x + 12f, y + HEADER_H / 2f - 4.2f, 9.5f, withAlpha(TEXT_COLOR, alpha));
-        RoundedRectShader.draw(context, (int) (x + 10), (int) (y + HEADER_H), (int) (w - 20), 1, 0f, withAlpha(0xFFFFFFFF, alpha * 0.08f));
-
-        float contentX = x + 10f;
-        float contentY = y + HEADER_H + 8f;
-        float contentW = w - 20f;
-        float contentH = h - HEADER_H - 16f;
-
-        float panelAnim = towerSettingsAnim.getOrDefault("Themes", 0f);
-
-        context.enableScissor((int) x, (int) (y + HEADER_H), (int) (x + w), (int) (y + h));
-        try {
-            if (panelAnim < 0.995f) {
-                float listAlpha = alpha * (1f - panelAnim);
-                float listOffsetX = -smoothT(panelAnim) * w * 0.9f;
-                if (listAlpha > 0.01f) {
-                    drawThemesNormalContent(context, contentX + listOffsetX, contentY, contentW, contentH, listAlpha);
-                }
+   private float drawModuleCard(DrawContext context, float x, float y, float w, String mod, boolean dark, float anim) {
+      boolean enabled = (Boolean)ClientData.moduleStates.getOrDefault(mod, false);
+      float tAnim = this.updateToggleAnim("mod:" + mod, enabled);
+      List<ModernSetting> settings = ModernSettingsRegistry.get(mod);
+      float cardH = 26.0F;
+      if (settings != null) {
+         for(ModernSetting s : settings) {
+            if (s != null && s.isVisible()) {
+               cardH += this.getSettingHeight(s);
             }
-            if (panelAnim > 0.005f && activeIslandPanel != null) {
-                float setAlpha = alpha * panelAnim;
-                float setOffsetX = (1f - smoothT(panelAnim)) * w * 0.9f;
-                drawThemesRedirectedPanel(context, activeIslandPanel, contentX + setOffsetX, contentY, contentW, contentH, setAlpha);
+         }
+      }
+
+      int cardBg = dark ? -1072623339 : -704643073;
+      RoundedRectShader.draw(context, x, y, w, cardH, 7.0F, this.withAlpha(cardBg, anim));
+      float iconSize = 10.0F;
+      ModernGuiIcons.Icon modIcon = this.getModuleIcon(mod);
+      int iconCol = enabled ? (dark ? -1 : -15461352) : (dark ? -8750454 : -7697766);
+      ModernGuiIcons.draw(context, modIcon, x + 7.0F, y + 8.0F, iconSize, this.withAlpha(iconCol, anim));
+      float rightX = x + w - 6.0F;
+      float switchW = 18.0F;
+      float switchH = 9.5F;
+      rightX -= switchW;
+      float switchY = y + 8.25F;
+      int switchTrack = this.interpolateColor(dark ? -14540244 : -2959649, dark ? -1 : -15461352, tAnim);
+      RoundedRectShader.draw(context, rightX, switchY, switchW, switchH, 4.75F, this.withAlpha(switchTrack, anim));
+      float thumbSize = 6.5F;
+      float thumbX = rightX + 1.5F + (switchW - thumbSize - 3.0F) * tAnim;
+      int thumbCol = this.interpolateColor(dark ? -7697766 : -1, dark ? -15856110 : -1, tAnim);
+      RoundedRectShader.draw(context, thumbX, switchY + 1.5F, thumbSize, thumbSize, thumbSize / 2.0F, this.withAlpha(thumbCol, anim));
+      this.clickBounds.put("toggle:" + mod, new int[]{(int)rightX - 2, (int)switchY - 2, (int)switchW + 4, (int)switchH + 4});
+      rightX -= 13.0F;
+      boolean isFav = this.isModuleFavorite(mod);
+      float sAnim = this.updateStarAnim(mod);
+      int starCol = isFav ? -10496 : (dark ? -11184794 : -5197632);
+      ModernGuiIcons.Icon starIcon = isFav ? ModernGuiIcons.Icon.STAR_FILLED : ModernGuiIcons.Icon.STAR_OUTLINE;
+      float starScale = 1.0F + 0.35F * (float)Math.sin((double)sAnim * 3.141592653589793);
+      ModernGuiIcons.draw(context, starIcon, rightX, y + 8.5F, 9.0F * starScale, this.withAlpha(starCol, anim));
+      this.clickBounds.put("fav:" + mod, new int[]{(int)rightX - 2, (int)y + 6, 13, 13});
+      rightX -= 16.0F;
+      Integer bindKey = (Integer)ClientData.moduleBinds.get(mod);
+      if (bindKey == null || bindKey == -1) {
+         bindKey = BindManager.getStoredBindValue(mod);
+      }
+
+      String bindText = this.bindingTarget != null && this.bindingTarget.equals(mod) ? "..." : (bindKey != null && bindKey != -1 && bindKey != -1 ? BindManager.formatBindName(bindKey) : null);
+      if (bindText != null) {
+         bindText = bindText.toUpperCase();
+         float bW = Math.max(13.0F, SFUI.getWidth(bindText, 7.0F) + 5.0F);
+         rightX -= bW - 13.0F;
+         int bindBg = dark ? 1881482544 : 1893589224;
+         RoundedRectShader.draw(context, rightX, y + 7.5F, bW, 11.0F, 2.5F, this.withAlpha(bindBg, anim));
+         int bindTextCol = dark ? -4473915 : -14013899;
+         SFUI.draw(context, bindText, rightX + (bW - SFUI.getWidth(bindText, 7.0F)) / 2.0F, y + 9.5F, 7.0F, this.withAlpha(bindTextCol, anim));
+         this.clickBounds.put("bind:" + mod, new int[]{(int)rightX, (int)y + 7, (int)bW, 11});
+      } else {
+         boolean hBind = this.inside(this.currentMouseX, this.currentMouseY, rightX, y + 7.0F, 13.0F, 11.0F);
+         int bindIconBg = hBind ? (dark ? 1613047088 : 1625153768) : (dark ? 806885408 : 820045036);
+         RoundedRectShader.draw(context, rightX, y + 7.5F, 13.0F, 11.0F, 2.5F, this.withAlpha(bindIconBg, anim));
+         int bindIconCol = dark ? (hBind ? -1 : -7829352) : (hBind ? -15461352 : -10132107);
+         ModernGuiIcons.draw(context, ModernGuiIcons.Icon.KEYBOARD, rightX + 2.0F, y + 8.0F, 8.5F, this.withAlpha(bindIconCol, anim));
+         this.clickBounds.put("bind:" + mod, new int[]{(int)rightX, (int)y + 7, 13, 11});
+      }
+
+      String title = this.getAnimatedText(mod, GuiLocalization.getModuleTitle(mod));
+      int titleCol = enabled ? (dark ? -1118478 : -15461352) : (dark ? -6250320 : -9803142);
+      float titleX = x + 20.0F;
+      float maxTitleW = Math.max(10.0F, rightX - titleX - 4.0F);
+      float textW = SFUI.getWidth(title, 8.5F);
+      context.enableScissor((int)titleX, (int)y, (int)(titleX + maxTitleW), (int)(y + 26.0F));
+      if (textW > maxTitleW && this.inside(this.currentMouseX, this.currentMouseY, x, y, w, cardH)) {
+         float overflow = textW - maxTitleW;
+         float crawl = (float)(Math.sin((double)System.currentTimeMillis() / 450.0) * 0.5 + 0.5) * overflow;
+         SFUI.draw(context, title, titleX - crawl, y + 9.0F, 8.5F, this.withAlpha(titleCol, anim));
+      } else {
+         SFUI.draw(context, title, titleX, y + 9.0F, 8.5F, this.withAlpha(titleCol, anim));
+      }
+
+      context.disableScissor();
+      float setY = y + 24.0F;
+      if (settings != null) {
+         for(ModernSetting s : settings) {
+            if (s != null && s.isVisible()) {
+               setY = this.drawSettingRow(context, x + 6.0F, setY, w - 12.0F, mod, s, dark, anim);
             }
-        } finally {
-            context.disableScissor();
-        }
-    }
+         }
+      }
 
-    private void drawThemesNormalContent(DrawContext context, float cx, float cy0, float cw, float ch, float alpha) {
-        float cy = cy0;
-        drawSfuiTiny(context, "ПРЕСЕТЫ", cx, cy, withAlpha(SUBTEXT_COLOR, alpha));
-        cy += 13f;
+      return y + cardH;
+   }
 
-        for (String preset : ModernGuiRegistry.getDefaultThemes()) {
-            boolean isHovered = !closing && inside(currentMouseX, currentMouseY, cx, cy, cw, 24f);
-            float hoverT = updateHover("theme:" + preset, isHovered);
-            boolean isActive = isPresetActive(preset);
-            int rowBg = isActive ? blendColors(PANEL_COLOR, getThemeColor(), 0.16f) : blendColors(PANEL_COLOR, 0xFFFFFFFF, hoverT * 0.05f);
-            RoundedRectShader.draw(context, (int) cx, (int) cy, (int) cw, 24, 7f, withAlpha(rowBg, alpha));
-            // Круглый "мазок краски" — две половинки цвета, смешивающиеся по центру, как на палитре.
-            drawPresetPaintBlob(context, preset, cx + 5f, cy + 3f, 18f, alpha);
-            drawMarqueeText(context, "presetname:" + preset, preset, cx + 30f, cy + 8.5f, cw - 30f - 20f, 7.5f, withAlpha(TEXT_COLOR, alpha), isHovered);
-            drawCheckmarkAnimated(context, "themechk:" + preset, isActive, cx + cw - 18f, cy + 7f, 10f, alpha);
-            settingClickBounds.put("theme:" + preset, new int[]{(int) cx, (int) cy, (int) cw, 24});
-            cy += 27f;
-        }
+   private float getSettingHeight(ModernSetting s) {
+      if (s == null) {
+         return 0.0F;
+      } else {
+         float var10000;
+         switch (s.type) {
+            case CROSSHAIR_CANVAS -> var10000 = 128.0F;
+            case PAD2D -> var10000 = 46.0F;
+            case HEADER -> var10000 = 16.0F;
+            case SLIDER -> var10000 = 28.0F;
+            case MODE -> var10000 = 32.0F;
+            case COLOR -> var10000 = 24.0F;
+            case TOGGLE -> var10000 = 20.0F;
+            case BIND -> var10000 = 20.0F;
+            default -> throw new MatchException((String)null, (Throwable)null);
+         }
 
-        cy += 1f;
-        RoundedRectShader.draw(context, (int) cx, (int) cy, (int) cw, 1, 0f, withAlpha(0xFFFFFFFF, alpha * 0.08f));
-        cy += 13f;
+         return var10000;
+      }
+   }
 
-        drawSfuiTiny(context, "СВОИ ЦВЕТА", cx, cy, withAlpha(SUBTEXT_COLOR, alpha));
-        cy += 15f;
+   private float drawSettingRow(DrawContext context, float x, float y, float w, String mod, ModernSetting s, boolean dark, float anim) {
+      if (s == null) {
+         return y;
+      } else if (s.type == ModernSetting.Type.HEADER) {
+         SFUI.draw(context, s.label != null ? s.label : "", x, y + 3.0F, 7.5F, this.withAlpha(dark ? -9671555 : -7697764, anim));
+         return y + 16.0F;
+      } else {
+         String title = this.getAnimatedText(s.key, GuiLocalization.getSettingTitle(s.key, s.label));
+         String var10001 = s.key;
+         String desc = this.getAnimatedText(var10001 + "_desc", GuiLocalization.getSettingDescription(s.key));
+         int titleCol = dark ? -2565920 : -14671832;
+         int descCol = dark ? -10132107 : -7697766;
+         switch (s.type) {
+            case CROSSHAIR_CANVAS:
+               CustomCrosshairData.load();
+               SFUI.draw(context, "Холст прицела (21x21)", x, y + 1.0F, 7.5F, this.withAlpha(titleCol, anim));
+               float btnY = y + 11.0F;
+               float btnGap = 3.0F;
+               float btnW = (w - btnGap * 3.0F) / 4.0F;
+               float btnH = 12.0F;
+               this.drawMiniButton(context, x, btnY, btnW, btnH, "Дефолт", "ch_act:default", dark, anim);
+               this.drawMiniButton(context, x + btnW + btnGap, btnY, btnW, btnH, "Точка", "ch_act:dot", dark, anim);
+               this.drawMiniButton(context, x + (btnW + btnGap) * 2.0F, btnY, btnW, btnH, "Уголки", "ch_act:corners", dark, anim);
+               this.drawMiniButton(context, x + (btnW + btnGap) * 3.0F, btnY, btnW, btnH, "Сброс", "ch_act:clear", dark, anim);
+               int size = 21;
+               float cellSize = 4.0F;
+               float gridW = (float)size * cellSize;
+               float gridH = (float)size * cellSize;
+               float gx = x + (w - gridW) / 2.0F;
+               float gy = btnY + btnH + 5.0F;
+               RoundedRectShader.draw(context, gx - 2.0F, gy - 2.0F, gridW + 4.0F, gridH + 4.0F, 3.0F, this.withAlpha(dark ? -15461350 : -2038548, anim));
+               String colorMode = (String)ClientData.modeSettings.getOrDefault("Crosshair Color Mode", "Theme");
+               int chCol;
+               if (colorMode.equals("Custom")) {
+                  float[] hsv = (float[])ClientData.colorSettings.getOrDefault("Crosshair Custom Color", new float[]{0.0F, 1.0F, 1.0F});
+                  chCol = -16777216 | Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
+               } else {
+                  chCol = -16777216 | LexoraGui.getThemeColor(0.0F);
+               }
 
-        float rectH = 38f;
-        float rectW = (cw - 8f) / 2f;
-        drawThemePaletteRect(context, "Theme Color 1", "Цвет 1", cx, cy, rectW, rectH, alpha);
-        drawThemePaletteRect(context, "Theme Color 2", "Цвет 2", cx + rectW + 8f, cy, rectW, rectH, alpha);
-        cy += rectH + 14f;
+               int center = size / 2;
 
-        drawSfuiTiny(context, "Превью", cx, cy, withAlpha(SUBTEXT_COLOR, alpha));
-        cy += 10f;
-        drawThemeGradientPreview(context, cx, cy, cw, 10f, alpha);
-    }
+               for(int cy = 0; cy < size; ++cy) {
+                  for(int cx = 0; cx < size; ++cx) {
+                     float px = gx + (float)cx * cellSize;
+                     float py = gy + (float)cy * cellSize;
+                     boolean filled = CustomCrosshairData.MATRIX[cy][cx];
+                     if (filled) {
+                        context.fill((int)px, (int)py, (int)(px + cellSize), (int)(py + cellSize), this.withAlpha(chCol, anim));
+                     } else {
+                        int bgCell = cx != center && cy != center ? (dark ? -15263968 : -1512462) : (dark ? -14803418 : -2564891);
+                        context.fill((int)px, (int)py, (int)(px + cellSize - 0.5F), (int)(py + cellSize - 0.5F), this.withAlpha(bgCell, anim));
+                     }
+                  }
+               }
 
-    /** Пункт 6: клик на Party/Events/GUI/Configs в островке разворачивает их прямо в башне Тем —
-     *  тем же приёмом, что и ПКМ по модулю: назад — слева сверху, имя панели — справа сверху. */
-    private void drawThemesRedirectedPanel(DrawContext context, String panel, float x, float y, float w, float h, float alpha) {
-        float backW = 18f;
-        boolean backHovered = !closing && inside(currentMouseX, currentMouseY, x, y, backW, 16f);
-        float backHoverT = updateHover("back:Themes", backHovered);
-        drawBackArrow(context, x + 1f, y + 2f, 11f, alpha * (0.7f + backHoverT * 0.3f));
-        settingClickBounds.put("tower_back:Themes", new int[]{(int) x, (int) y, (int) backW, 16});
+               this.crosshairBounds.put("canvas", new float[]{gx, gy, gridW, gridH, cellSize});
+               return y + 128.0F;
+            case PAD2D:
+               SFUI.draw(context, title, x, y + 1.0F, 7.5F, this.withAlpha(titleCol, anim));
+               float padH = 34.0F;
+               float py = y + 10.0F;
+               RoundedRectShader.draw(context, x, py, w, padH, 4.0F, this.withAlpha(dark ? -15066590 : -2038548, anim));
+               String var10000;
+               if (s.keyY != null) {
+                  var10000 = s.keyY;
+               } else if (s.key.endsWith("X")) {
+                  var10000 = s.key;
+                  var10000 = var10000.substring(0, s.key.length() - 1) + "Y";
+               } else {
+                  var10000 = s.key + "Y";
+               }
 
-        String displayName = switch (panel) {
-            case "Party" -> "Пати";
-            case "Events" -> "Ивенты";
-            case "GUI" -> "Настройки";
-            case "Configs" -> "Конфиги";
-            default -> panel;
-        };
-        float nameW = getSfuiWidth(displayName, 9f);
-        drawSfuiCustom(context, displayName, x + w - nameW, y + 3.5f, 9f, withAlpha(TEXT_COLOR, alpha));
+               String yKey = var10000;
+               this.padKeyYMap.put(s.key, yKey);
+               float vx = (Float)ClientData.numSettings.getOrDefault(s.key, (s.min + s.max) / 2.0F);
+               float vy = (Float)ClientData.numSettings.getOrDefault(yKey, (s.minY + s.maxY) / 2.0F);
+               float tx = Math.max(0.0F, Math.min(1.0F, (vx - s.min) / Math.max(0.001F, s.max - s.min)));
+               float ty = Math.max(0.0F, Math.min(1.0F, (s.maxY - vy) / Math.max(0.001F, s.maxY - s.minY)));
+               RoundedRectShader.draw(context, x + w / 2.0F, py, 1.0F, padH, 0.0F, this.withAlpha(dark ? 822083583 : 536870912, anim));
+               RoundedRectShader.draw(context, x, py + padH / 2.0F, w, 1.0F, 0.0F, this.withAlpha(dark ? 822083583 : 536870912, anim));
+               RoundedRectShader.draw(context, x + tx * w - 3.0F, py + ty * padH - 3.0F, 6.0F, 6.0F, 3.0F, this.withAlpha(dark ? -1 : -15461352, anim));
+               this.padBounds.put(s.key, new float[]{x, py, w, padH, s.min, s.max, s.minY, s.maxY});
+               return y + 46.0F;
+            case HEADER:
+            default:
+               return y + 18.0F;
+            case SLIDER:
+               SFUI.draw(context, title, x, y + 1.0F, 7.5F, this.withAlpha(titleCol, anim));
+               SFUI.draw(context, desc, x, y + 9.0F, 6.2F, this.withAlpha(descCol, anim));
+               float val = (Float)ClientData.numSettings.getOrDefault(s.key != null ? s.key : "", s.min);
+               String valStr = String.format(Locale.US, "%.1f", val);
+               SFUI.draw(context, valStr, x + w - SFUI.getWidth(valStr, 7.0F), y + 2.0F, 7.0F, this.withAlpha(titleCol, anim));
+               float barY = y + 18.0F;
+               float barH = 3.0F;
+               int trackBg = dark ? -14408660 : -2564891;
+               RoundedRectShader.draw(context, x, barY, w, barH, 1.5F, this.withAlpha(trackBg, anim));
+               float norm = (val - s.min) / (s.max - s.min);
+               norm = Math.max(0.0F, Math.min(1.0F, norm));
+               float fillW = w * norm;
+               int fillCol = dark ? -1 : -15461352;
+               RoundedRectShader.draw(context, x, barY, fillW, barH, 1.5F, this.withAlpha(fillCol, anim));
+               RoundedRectShader.draw(context, x + fillW - 3.0F, barY - 1.5F, 6.0F, 6.0F, 3.0F, this.withAlpha(fillCol, anim));
+               if (s.key != null) {
+                  this.sliderBounds.put(s.key, new float[]{x, barY - 4.0F, w, 11.0F, s.min, s.max});
+               }
 
-        float sy = y + 22f;
-        float sh = h - 22f;
-        if (sh <= 4f) return;
+               return y + 28.0F;
+            case MODE:
+               SFUI.draw(context, title, x, y + 1.0F, 7.5F, this.withAlpha(titleCol, anim));
+               SFUI.draw(context, desc, x, y + 9.0F, 6.2F, this.withAlpha(descCol, anim));
+               String curMode = (String)ClientData.modeSettings.getOrDefault(s.key != null ? s.key : "", s.modes != null && !s.modes.isEmpty() ? (String)s.modes.get(0) : "Default");
+               float dropY = y + 17.0F;
+               float dropH = 13.0F;
+               boolean isDropOpen = this.activeDropdownKey != null && this.activeDropdownKey.equals(s.key);
+               int dropBg = isDropOpen ? (dark ? -13290171 : -3090976) : (dark ? -1876811222 : -1595611154);
+               RoundedRectShader.draw(context, x, dropY, w, dropH, 3.5F, this.withAlpha(dropBg, anim));
+               SFUI.draw(context, curMode, x + 5.0F, dropY + 3.0F, 7.0F, this.withAlpha(titleCol, anim));
+               SFUI.draw(context, isDropOpen ? "▴" : "▾", x + w - 10.0F, dropY + 3.0F, 7.0F, this.withAlpha(descCol, anim));
+               if (s.key != null) {
+                  this.clickBounds.put("dropdown:" + s.key + ":" + (s.modes != null ? String.join(",", s.modes) : ""), new int[]{(int)x, (int)dropY, (int)w, (int)dropH});
+               }
 
-        context.enableScissor((int) x, (int) sy, (int) (x + w), (int) (sy + sh));
-        try {
-            switch (panel) {
-                case "Party" -> drawPartyTab(context, x + 1f, sy + 4f, w - 2f, sh - 4f, alpha);
-                case "Events" -> drawEventsTab(context, x + 1f, sy + 4f, w - 2f, alpha);
-                case "GUI" -> drawGuiTab(context, x + 1f, sy + 4f, w - 2f, alpha);
-                case "Configs" -> drawConfigsTab(context, x + 1f, sy + 4f, w - 2f, alpha);
-                default -> {
-                }
+               return y + 32.0F;
+            case COLOR:
+               SFUI.draw(context, title, x, y + 1.0F, 7.5F, this.withAlpha(titleCol, anim));
+               SFUI.draw(context, desc, x, y + 9.0F, 6.2F, this.withAlpha(descCol, anim));
+               float[] hsv = (float[])ClientData.colorSettings.getOrDefault(s.key != null ? s.key : "", new float[]{0.58F, 0.8F, 1.0F});
+               int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
+               float swatchW = 20.0F;
+               float swatchH = 10.0F;
+               float swatchX = x + w - swatchW;
+               float swatchY = y + 2.0F;
+               RoundedRectShader.draw(context, swatchX, swatchY, swatchW, swatchH, 2.5F, this.withAlpha(-16777216 | rgb & 16777215, anim));
+               RoundedRectShader.draw(context, swatchX - 1.0F, swatchY - 1.0F, swatchW + 2.0F, swatchH + 2.0F, 3.5F, this.withAlpha(dark ? 1090519039 : 536870912, anim));
+               if (s.key != null) {
+                  this.clickBounds.put("color:" + s.key, new int[]{(int)swatchX - 2, (int)swatchY - 2, (int)swatchW + 4, (int)swatchH + 4});
+               }
+
+               return y + 22.0F;
+            case TOGGLE:
+               boolean state = (Boolean)ClientData.moduleStates.getOrDefault(s.key != null ? s.key : "", false);
+               var10001 = s.key;
+               float bAnim = this.updateToggleAnim("set:" + var10001, state);
+               SFUI.draw(context, title, x, y + 1.0F, 7.5F, this.withAlpha(titleCol, anim));
+               SFUI.draw(context, desc, x, y + 9.0F, 6.2F, this.withAlpha(descCol, anim));
+               float chkW = 13.0F;
+               float chkH = 13.0F;
+               float chkX = x + w - chkW;
+               float chkY = y + 1.0F;
+               int chkBg = this.interpolateColor(dark ? -14408660 : -2564891, dark ? -1 : -15461352, bAnim);
+               RoundedRectShader.draw(context, chkX, chkY, chkW, chkH, 3.5F, this.withAlpha(chkBg, anim));
+               if (bAnim > 0.05F) {
+                  int markCol = dark ? -15856110 : -1;
+                  RenderSystem.enableBlend();
+                  RenderSystem.defaultBlendFunc();
+                  context.drawTexture(RenderLayer::getGuiTextured, CHECKMARK_TEX, (int)(chkX + 1.5F), (int)(chkY + 1.5F), 0.0F, 0.0F, 10, 10, 10, 10, this.withAlpha(markCol, anim * bAnim));
+               }
+
+               if (s.key != null) {
+                  this.clickBounds.put("bool:" + s.key, new int[]{(int)chkX - 2, (int)chkY - 2, (int)chkW + 4, (int)chkH + 4});
+               }
+
+               return y + 20.0F;
+            case BIND:
+               SFUI.draw(context, title, x, y + 1.0F, 7.5F, this.withAlpha(titleCol, anim));
+               SFUI.draw(context, desc, x, y + 9.0F, 6.2F, this.withAlpha(descCol, anim));
+               int bKey = BindManager.getStoredBindValue(s.key);
+               if (bKey == -1 || bKey == -1) {
+                  bKey = (Integer)ClientData.moduleBinds.getOrDefault(s.key, -1);
+               }
+
+               String bStr = this.bindingTarget != null && this.bindingTarget.equals(s.key) ? "..." : (bKey != -1 && bKey != -1 ? BindManager.formatBindName(bKey) : "NONE");
+               float bW = Math.max(30.0F, SFUI.getWidth(bStr.toUpperCase(), 6.5F) + 10.0F);
+               float bX = x + w - bW;
+               RoundedRectShader.draw(context, bX, y + 1.0F, bW, 12.0F, 2.5F, this.withAlpha(dark ? -1876613840 : -1864507160, anim));
+               SFUI.draw(context, bStr.toUpperCase(), bX + (bW - SFUI.getWidth(bStr.toUpperCase(), 6.5F)) / 2.0F, y + 4.0F, 6.5F, this.withAlpha(dark ? -1 : -15461352, anim));
+               if (s.key != null) {
+                  this.clickBounds.put("bind:" + s.key, new int[]{(int)bX, (int)y + 1, (int)bW, 12});
+               }
+
+               return y + 20.0F;
+         }
+      }
+   }
+
+   private void drawMiniButton(DrawContext context, float x, float y, float w, float h, String text, String boundKey, boolean dark, float anim) {
+      boolean hov = this.inside(this.currentMouseX, this.currentMouseY, x, y, w, h);
+      int bg = hov ? (dark ? -13290171 : -2564888) : (dark ? -14540244 : -1709840);
+      RoundedRectShader.draw(context, x, y, w, h, 2.5F, this.withAlpha(bg, anim));
+      SFUI.draw(context, text, x + (w - SFUI.getWidth(text, 6.0F)) / 2.0F, y + 3.0F, 6.0F, this.withAlpha(dark ? -1118478 : -15461352, anim));
+      this.clickBounds.put(boundKey, new int[]{(int)x, (int)y, (int)w, (int)h});
+   }
+
+   private void drawDropdownModal(DrawContext context, boolean dark, float anim) {
+      if (this.activeDropdownKey != null && this.activeDropdownOptions != null && !this.activeDropdownOptions.isEmpty()) {
+         float modalW = Math.max(120.0F, this.dropdownW);
+         float itemH = 17.0F;
+         float totalItemsH = (float)this.activeDropdownOptions.size() * itemH;
+         float maxModalH = 110.0F;
+         float modalH = Math.min(maxModalH, totalItemsH + 8.0F);
+         float mX = Math.min(this.dropdownX, (float)this.width - modalW - 20.0F);
+         float mY = Math.min(this.dropdownY, (float)this.height - modalH - 20.0F);
+         int modalBg = dark ? -99544810 : -83886081;
+         RoundedRectShader.draw(context, mX, mY, modalW, modalH, 6.0F, this.withAlpha(modalBg, anim));
+         RoundedRectShader.draw(context, mX - 1.0F, mY - 1.0F, modalW + 2.0F, modalH + 2.0F, 7.0F, this.withAlpha(dark ? 1090519039 : 620756992, anim));
+         String currentVal = (String)ClientData.modeSettings.getOrDefault(this.activeDropdownKey, (String)this.activeDropdownOptions.get(0));
+         float maxScroll = Math.max(0.0F, totalItemsH - (modalH - 8.0F));
+         if (this.targetDropdownScroll < -maxScroll) {
+            this.targetDropdownScroll = -maxScroll;
+         }
+
+         if (this.targetDropdownScroll > 0.0F) {
+            this.targetDropdownScroll = 0.0F;
+         }
+
+         context.enableScissor((int)mX, (int)(mY + 4.0F), (int)(mX + modalW), (int)(mY + modalH - 4.0F));
+         float curY = mY + 4.0F + this.dropdownScroll;
+
+         for(String opt : this.activeDropdownOptions) {
+            boolean isSel = opt.equals(currentVal);
+            boolean hItem = this.inside(this.currentMouseX, this.currentMouseY, mX + 4.0F, curY, modalW - 8.0F, itemH) && curY >= mY && curY + itemH <= mY + modalH;
+            float hAnim = this.updateHover("drop_opt:" + opt, hItem);
+            int optBg = isSel ? (dark ? -14342862 : -2038546) : this.interpolateColor(0, dark ? 891955768 : 1089006837, hAnim);
+            if (optBg != 0) {
+               RoundedRectShader.draw(context, mX + 4.0F, curY, modalW - 8.0F, itemH, 4.0F, this.withAlpha(optBg, anim));
             }
-        } finally {
-            context.disableScissor();
-        }
-    }
 
-    /** Пункт 5: вместо кружков — 2 скруглённых прямоугольника-карточки с настройкой темы внутри. */
-    private void drawThemePaletteRect(DrawContext context, String colorKey, String label, float x, float y, float w, float h, float alpha) {
-        float[] hsv = getPaletteHsv(colorKey);
-        int rgb = 0xFF000000 | (Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]) & 0xFFFFFF);
-
-        boolean pressed = colorKey.equals(paletteAnimKey);
-        boolean isHovered = !closing && inside(currentMouseX, currentMouseY, x, y, w, h);
-        float hoverT = updateHover("swatchhover:" + colorKey, isHovered);
-
-        if (hoverT > 0.01f || pressed) {
-            float ringA = pressed ? 0.5f : hoverT * 0.2f;
-            RoundedRectShader.draw(context, (int) (x - 2), (int) (y - 2), (int) (w + 4), (int) (h + 4), 11f, withAlpha(getThemeColor(), alpha * ringA));
-        }
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, (int) h, 9f, withAlpha(rgb, alpha));
-        RoundedRectShader.draw(context, (int) x, (int) (y + h - 15f), (int) w, 15, 6f, withAlpha(0x60000000, alpha));
-        drawSfuiTiny(context, label, x + 7f, y + h - 11f, withAlpha(0xFFFFFFFF, alpha));
-
-        paletteAnchor.put(colorKey, new float[]{x + w / 2f, y + h / 2f});
-        settingClickBounds.put("palette:" + colorKey, new int[]{(int) x, (int) y, (int) w, (int) h});
-    }
-
-    private void drawThemeGradientPreview(DrawContext context, float x, float y, float w, float h, float alpha) {
-        float[] hsv1 = getPaletteHsv("Theme Color 1");
-        float[] hsv2 = getPaletteHsv("Theme Color 2");
-        int rgb1 = Color.HSBtoRGB(hsv1[0], hsv1[1], hsv1[2]) & 0xFFFFFF;
-        int rgb2 = Color.HSBtoRGB(hsv2[0], hsv2[1], hsv2[2]) & 0xFFFFFF;
-        int r1 = (rgb1 >> 16) & 0xFF, g1 = (rgb1 >> 8) & 0xFF, b1 = rgb1 & 0xFF;
-        int r2 = (rgb2 >> 16) & 0xFF, g2 = (rgb2 >> 8) & 0xFF, b2 = rgb2 & 0xFF;
-        int step = 2;
-        for (int ix = 0; ix < w; ix += step) {
-            float t = ix / w;
-            int r = (int) (r1 + (r2 - r1) * t), g = (int) (g1 + (g2 - g1) * t), b = (int) (b1 + (b2 - b1) * t);
-            context.fill((int) (x + ix), (int) y, (int) (x + ix + step), (int) (y + h), withAlpha(0xFF000000 | (r << 16) | (g << 8) | b, alpha));
-        }
-    }
-
-    // =========================================================================
-    //  РАСКЛАДНАЯ ПАЛИТРА — общий виджет для тем и любых COLOR-настроек
-    // =========================================================================
-    private float[] getPaletteHsv(String id) {
-        if (id.startsWith("ih:")) {
-            String name = id.substring(3);
-            for (Map.Entry<Item, ItemHighlighter.ItemConfig> e : ItemHighlighter.ITEM_CONFIGS.entrySet()) {
-                String itemName = ItemHighlighter.ITEM_NAMES.getOrDefault(e.getKey(), e.getKey().getName().getString());
-                if (itemName.equals(name)) {
-                    int rgb = e.getValue().color;
-                    return Color.RGBtoHSB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, null);
-                }
+            int textCol = isSel ? (dark ? -1 : -15856110) : (dark ? -5197632 : -11908518);
+            SFUI.draw(context, opt, mX + 8.0F, curY + 4.5F, 7.2F, this.withAlpha(textCol, anim));
+            if (isSel) {
+               SFUI.draw(context, "✓", mX + modalW - 14.0F, curY + 4.5F, 7.2F, this.withAlpha(textCol, anim));
             }
-            return new float[]{0f, 1f, 1f};
-        }
-        if (id.startsWith("gps:")) {
-            String name = id.substring(4);
+
+            this.clickBounds.put("set_mode:" + this.activeDropdownKey + ":" + opt, new int[]{(int)(mX + 4.0F), (int)curY, (int)(modalW - 8.0F), (int)itemH});
+            curY += itemH;
+         }
+
+         context.disableScissor();
+         if (maxScroll > 0.0F) {
+            float sbX = mX + modalW - 3.0F;
+            float sbY = mY + 4.0F;
+            float sbH = modalH - 8.0F;
+            RoundedRectShader.draw(context, sbX, sbY, 2.0F, sbH, 1.0F, this.withAlpha(dark ? 553648127 : 352321536, anim));
+            float thumbRatio = Math.max(0.2F, Math.min(1.0F, (modalH - 8.0F) / totalItemsH));
+            float thumbH = sbH * thumbRatio;
+            float scrollRatio = Math.max(0.0F, Math.min(1.0F, -this.dropdownScroll / maxScroll));
+            float thumbY = sbY + (sbH - thumbH) * scrollRatio;
+            RoundedRectShader.draw(context, sbX, thumbY, 2.0F, thumbH, 1.0F, this.withAlpha(dark ? 1895825407 : 1342177280, anim));
+         }
+
+      }
+   }
+
+   private void drawColorPickerHud(DrawContext context, boolean dark, float anim) {
+      if (this.activeColorPickerKey != null) {
+         float hudW = 140.0F;
+         float hudH = 125.0F;
+         float hX = Math.max(10.0F, Math.min(this.colorPickerX, (float)this.width - hudW - 15.0F));
+         float hY = Math.max(10.0F, Math.min(this.colorPickerY, (float)this.height - hudH - 15.0F));
+         int hudBg = dark ? -99544810 : -83886081;
+         RoundedRectShader.draw(context, hX, hY, hudW, hudH, 8.0F, this.withAlpha(hudBg, anim));
+         RoundedRectShader.draw(context, hX - 1.0F, hY - 1.0F, hudW + 2.0F, hudH + 2.0F, 9.0F, this.withAlpha(dark ? 1090519039 : 620756992, anim));
+         float[] hsv = (float[])ClientData.colorSettings.getOrDefault(this.activeColorPickerKey, new float[]{0.58F, 0.8F, 1.0F});
+         float hue = hsv[0];
+         float sat = hsv[1];
+         float val = hsv[2];
+         float svX = hX + 8.0F;
+         float svY = hY + 8.0F;
+         float svW = hudW - 16.0F;
+         float svH = 62.0F;
+         RoundedRectShader.draw(context, svX - 1.0F, svY - 1.0F, svW + 2.0F, svH + 2.0F, 4.0F, this.withAlpha(dark ? 822083583 : 536870912, anim));
+         context.enableScissor((int)svX, (int)svY, (int)(svX + svW), (int)(svY + svH));
+         int svStep = 3;
+
+         for(int px = 0; px < (int)svW; px += svStep) {
+            for(int py = 0; py < (int)svH; py += svStep) {
+               float s = (float)px / svW;
+               float v = 1.0F - (float)py / svH;
+               int rgb = -16777216 | Color.HSBtoRGB(hue, s, v) & 16777215;
+               context.fill((int)(svX + (float)px), (int)(svY + (float)py), (int)(svX + (float)px + (float)svStep), (int)(svY + (float)py + (float)svStep), this.withAlpha(rgb, anim));
+            }
+         }
+
+         context.disableScissor();
+         float dotX = svX + sat * svW;
+         float dotY = svY + (1.0F - val) * svH;
+         RoundedRectShader.draw(context, dotX - 2.5F, dotY - 2.5F, 5.0F, 5.0F, 2.5F, this.withAlpha(-1, anim));
+         RoundedRectShader.draw(context, dotX - 3.5F, dotY - 3.5F, 7.0F, 7.0F, 3.5F, this.withAlpha(-16777216, anim * 0.6F));
+         float hueX = svX;
+         float hueY = svY + svH + 6.0F;
+         float hueW = svW;
+         float hueH = 9.0F;
+         RoundedRectShader.draw(context, svX - 1.0F, hueY - 1.0F, svW + 2.0F, hueH + 2.0F, 3.5F, this.withAlpha(dark ? 822083583 : 536870912, anim));
+         context.enableScissor((int)svX, (int)hueY, (int)(svX + svW), (int)(hueY + hueH));
+
+         for(int px = 0; px < (int)hueW; ++px) {
+            float h = (float)px / hueW;
+            int rgb = -16777216 | Color.HSBtoRGB(h, 1.0F, 1.0F) & 16777215;
+            context.fill((int)(hueX + (float)px), (int)hueY, (int)(hueX + (float)px + 1.0F), (int)(hueY + hueH), this.withAlpha(rgb, anim));
+         }
+
+         context.disableScissor();
+         float hIndX = hueX + hue * hueW;
+         RoundedRectShader.draw(context, hIndX - 2.0F, hueY - 1.0F, 4.0F, hueH + 2.0F, 2.0F, this.withAlpha(-1, anim));
+         int curRgb = -16777216 | Color.HSBtoRGB(hue, sat, val) & 16777215;
+         float previewY = hueY + hueH + 7.0F;
+         RoundedRectShader.draw(context, svX, previewY, 16.0F, 16.0F, 4.0F, this.withAlpha(curRgb, anim));
+         String hex = String.format("#%06X", curRgb & 16777215);
+         SFUI.draw(context, hex, svX + 22.0F, previewY + 4.5F, 7.5F, this.withAlpha(dark ? -1118478 : -15461352, anim));
+         float doneW = 42.0F;
+         float doneX = hX + hudW - doneW - 8.0F;
+         RoundedRectShader.draw(context, doneX, previewY, doneW, 16.0F, 4.0F, this.withAlpha(dark ? -14013896 : -2170133, anim));
+         SFUI.draw(context, "Готово", doneX + 7.0F, previewY + 4.5F, 7.0F, this.withAlpha(dark ? -1 : -15461352, anim));
+         this.clickBounds.put("palette_done", new int[]{(int)doneX, (int)previewY, (int)doneW, 16});
+      }
+   }
+
+   private void updateSvFromMouse(double mx, double my, float svX, float svY, float svW, float svH) {
+      if (this.activeColorPickerKey != null) {
+         float sat = Math.max(0.0F, Math.min(1.0F, (float)((mx - (double)svX) / (double)svW)));
+         float val = Math.max(0.0F, Math.min(1.0F, 1.0F - (float)((my - (double)svY) / (double)svH)));
+         float[] hsv = (float[])ClientData.colorSettings.getOrDefault(this.activeColorPickerKey, new float[]{0.58F, 0.8F, 1.0F});
+         ClientData.colorSettings.put(this.activeColorPickerKey, new float[]{hsv[0], sat, val});
+         if (this.activeColorPickerKey.startsWith("gps_wp:")) {
             try {
-                for (com.lexoravisauls.client.utils.GPS.GpsWaypoint wp : com.lexoravisauls.client.utils.GPS.waypoints) {
-                    if (wp.name.equals(name)) {
-                        int rgb = wp.color;
-                        return Color.RGBtoHSB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, null);
-                    }
-                }
-            } catch (Throwable ignored) {
+               int idx = Integer.parseInt(this.activeColorPickerKey.substring("gps_wp:".length()));
+               if (idx >= 0 && idx < GPS.waypoints.size()) {
+                  ((GPS.GpsWaypoint)GPS.waypoints.get(idx)).color = -16777216 | Color.HSBtoRGB(hsv[0], sat, val) & 16777215;
+               }
+            } catch (Exception var13) {
             }
-            return new float[]{0f, 1f, 1f};
-        }
-        return ClientData.colorSettings.getOrDefault(id, new float[]{0f, 1f, 1f});
-    }
+         }
 
-    private void commitPaletteHsv(String id, float h, float s, float v) {
-        if (id.startsWith("ih:")) {
-            String name = id.substring(3);
-            for (Map.Entry<Item, ItemHighlighter.ItemConfig> e : ItemHighlighter.ITEM_CONFIGS.entrySet()) {
-                String itemName = ItemHighlighter.ITEM_NAMES.getOrDefault(e.getKey(), e.getKey().getName().getString());
-                if (itemName.equals(name)) {
-                    e.getValue().color = Color.HSBtoRGB(h, s, v) & 0xFFFFFF;
-                    return;
-                }
-            }
-            return;
-        }
-        if (id.startsWith("gps:")) {
-            String name = id.substring(4);
+      }
+   }
+
+   private void updateHueFromMouse(double mx, float hueX, float hueW) {
+      if (this.activeColorPickerKey != null) {
+         float hue = Math.max(0.0F, Math.min(1.0F, (float)((mx - (double)hueX) / (double)hueW)));
+         float[] hsv = (float[])ClientData.colorSettings.getOrDefault(this.activeColorPickerKey, new float[]{0.58F, 0.8F, 1.0F});
+         ClientData.colorSettings.put(this.activeColorPickerKey, new float[]{hue, hsv[1], hsv[2]});
+         if (this.activeColorPickerKey.startsWith("gps_wp:")) {
             try {
-                for (com.lexoravisauls.client.utils.GPS.GpsWaypoint wp : com.lexoravisauls.client.utils.GPS.waypoints) {
-                    if (wp.name.equals(name)) {
-                        wp.color = Color.HSBtoRGB(h, s, v) & 0xFFFFFF;
-                        return;
-                    }
-                }
-            } catch (Throwable ignored) {
+               int idx = Integer.parseInt(this.activeColorPickerKey.substring("gps_wp:".length()));
+               if (idx >= 0 && idx < GPS.waypoints.size()) {
+                  ((GPS.GpsWaypoint)GPS.waypoints.get(idx)).color = -16777216 | Color.HSBtoRGB(hue, hsv[1], hsv[2]) & 16777215;
+               }
+            } catch (Exception var8) {
             }
-            return;
-        }
-        ClientData.colorSettings.put(id, new float[]{h, s, v});
-    }
+         }
 
-    /** Рисует свотч + регистрирует его как точку роста палитры. Переиспользуется в панелях настроек. */
-    private void drawColorSwatch(DrawContext context, String id, float x, float y, float w2, float h2, float alpha) {
-        float[] hsv = getPaletteHsv(id);
-        int rgb = 0xFF000000 | (Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]) & 0xFFFFFF);
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w2, (int) h2, 4.0f, withAlpha(rgb, alpha));
-        paletteAnchor.put(id, new float[]{x + w2 / 2f, y + h2 / 2f});
-        settingClickBounds.put("palette:" + id, new int[]{(int) x - 3, (int) y - 3, (int) w2 + 6, (int) h2 + 6});
-    }
+      }
+   }
 
-    /**
-     * Чистая геометрия раскладной палитры для ключа: [svX,svY,svW,svH,hueY,hueH,boxX,boxY,boxW,boxH].
-     * Не зависит от анимации — одна и та же формула используется и рендером, и обработкой драга,
-     * поэтому даже в первый кадр нажатия (пока eased ещё маленький) перетаскивание уже попадает
-     * в верные координаты.
-     */
-    private float[] computePaletteGeom(String key) {
-        float[] anchor = paletteAnchor.get(key);
-        if (anchor == null) return null;
-        int svW = 108, svH = 60, hueH = 6;
-        int boxW = svW + 16, boxH = svH + hueH + 16 + 14;
-        float boxX = clamp(anchor[0] - boxW / 2f, 6f, width - boxW - 6f);
-        float boxY = clamp(anchor[1] - boxH / 2f, 6f, height - boxH - 6f);
-        float svX = boxX + 8, svY = boxY + 8;
-        float hueY = svY + svH + 8;
-        return new float[]{svX, svY, svW, svH, hueY, hueH, boxX, boxY, boxW, boxH};
-    }
+   private void drawCosmeticsScreen(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+      float switchAlpha = this.tabSwitchAnim;
+      float curY = y + switchOffset;
+      int textColor = dark ? -1 : -15461352;
+      int subTextColor = dark ? -8487282 : -8750454;
+      int themeCol = -16777216 | LexoraGui.getThemeColor(0.0F);
+      SFUI.draw(context, "Косметика и Плащи", x, curY + 1.0F, 11.0F, this.withAlpha(textColor, anim * switchAlpha));
+      SFUI.draw(context, "3D аксессуары, крылья, питомцы и кастомные плащи", x, curY + 13.0F, 7.5F, this.withAlpha(subTextColor, anim * switchAlpha));
+      curY += 26.0F;
+      float topBarH = 26.0F;
+      int barBg = dark ? -1072425959 : -704643073;
+      RoundedRectShader.draw(context, x, curY, w, topBarH, 6.0F, this.withAlpha(barBg, anim * switchAlpha));
+      int equippedCount = CosmeticManager.getInstance().getEquippedCount();
+      String countText = equippedCount + "/5 надето";
+      float badgeW = SFUI.getWidth(countText, 7.5F) + 10.0F;
+      float badgeX = x + w - badgeW - 5.0F;
+      RoundedRectShader.draw(context, badgeX, curY + 4.0F, badgeW, 18.0F, 4.0F, this.withAlpha(themeCol, anim * switchAlpha * 0.25F));
+      SFUI.draw(context, countText, badgeX + 5.0F, curY + 9.0F, 7.5F, this.withAlpha(textColor, anim * switchAlpha));
+      float availableW = badgeX - x - 8.0F;
+      float btnGap = 3.0F;
+      float btnW = Math.max(38.0F, (availableW - (float)(COSMETIC_TABS.length - 1) * btnGap - 4.0F) / (float)COSMETIC_TABS.length);
+      float btnH = 18.0F;
+      float btnX = x + 4.0F;
 
-    private void drawExpandedPalette(DrawContext context, String key, float t, float alphaOuter) {
-        float[] g = computePaletteGeom(key);
-        if (g == null) return;
-        float svX = g[0], svY = g[1], svW = g[2], svH = g[3], hueY = g[4], hueH = g[5];
-        float boxX = g[6], boxY = g[7], boxW = g[8], boxH = g[9];
-        float boxCx = boxX + boxW / 2f, boxCy = boxY + boxH / 2f;
+      for(int i = 0; i < COSMETIC_TABS.length; ++i) {
+         boolean active = cosmeticSubTab == i;
+         float btnY = curY + 4.0F;
+         if (active) {
+            RoundedRectShader.draw(context, btnX, btnY, btnW, btnH, 4.0F, this.withAlpha(themeCol, anim * switchAlpha));
+         } else if (this.inside(this.currentMouseX, this.currentMouseY, btnX, btnY, btnW, btnH)) {
+            int hCol = dark ? 1090519039 : 620756992;
+            RoundedRectShader.draw(context, btnX, btnY, btnW, btnH, 4.0F, this.withAlpha(hCol, anim * switchAlpha));
+         }
 
-        float eased = smoothT(t);
-        float curW = 16f + (boxW - 16f) * eased;
-        float curH = 16f + (boxH - 16f) * eased;
-        float curX = boxCx - curW / 2f;
-        float curY = boxCy - curH / 2f;
-        float curR = 8f + (12f - 8f) * eased;
+         int tCol = active ? -1 : subTextColor;
+         float labelW = SFUI.getWidth(COSMETIC_TABS[i], 7.5F);
+         SFUI.draw(context, COSMETIC_TABS[i], btnX + (btnW - labelW) / 2.0F, btnY + 5.0F, 7.5F, this.withAlpha(tCol, anim * switchAlpha));
+         this.clickBounds.put("cosmetic_sub:" + i, new int[]{(int)btnX, (int)btnY, (int)btnW, (int)btnH});
+         btnX += btnW + btnGap;
+      }
 
-        RoundedRectShader.draw(context, (int) curX, (int) curY, (int) curW, (int) curH, curR, withAlpha(DARK_THEME_BG, alphaOuter * eased));
-        if (eased < 0.5f) return;
+      curY += 30.0F;
+      float optBarH = 24.0F;
+      RoundedRectShader.draw(context, x, curY, w, optBarH, 6.0F, this.withAlpha(barBg, anim * switchAlpha));
+      boolean capeOn = CosmeticManager.getInstance().isCustomCapeEnabled();
+      this.drawTogglePill(context, "Плащ: " + (capeOn ? "ВКЛ" : "ВЫКЛ"), capeOn, x + 6.0F, curY + 3.0F, 94.0F, 18.0F, dark, anim * switchAlpha, "cosmetic_cape_toggle");
+      this.drawTogglePill(context, "Сбросить всё", false, x + 106.0F, curY + 3.0F, 90.0F, 18.0F, dark, anim * switchAlpha, "cosmetic_reset_all");
+      this.drawTogglePill(context, "Открыть папку", false, x + 202.0F, curY + 3.0F, 96.0F, 18.0F, dark, anim * switchAlpha, "cosmetic_open_folder");
+      curY += 28.0F;
+      float listH = y + h - curY;
+      this.secondaryScroll += (this.targetSecondaryScroll - this.secondaryScroll) * 0.25F;
+      this.drawCosmeticsGridScreen(context, x, curY, w, listH, dark, anim * switchAlpha);
+   }
 
-        float contentAlpha = alphaOuter * clamp((eased - 0.5f) / 0.5f, 0f, 1f);
-        float[] hsv = key.equals(paletteAnimKey) ? new float[]{paletteLive.h, paletteLive.s, paletteLive.v} : getPaletteHsv(key);
+   private void drawTogglePill(DrawContext context, String label, boolean active, float x, float y, float w, float h, boolean dark, float anim, String clickId) {
+      int themeCol = -16777216 | LexoraGui.getThemeColor(0.0F);
+      int bg = active ? themeCol : (dark ? 1076176176 : 820044012);
+      boolean hovered = this.inside(this.currentMouseX, this.currentMouseY, x, y, w, h);
+      if (hovered && !active) {
+         bg = dark ? 1614099781 : 1355862236;
+      }
 
-        drawSvArea(context, (int) svX, (int) svY, (int) svW, (int) svH, hsv[0], contentAlpha);
-        int dotX = clampInt((int) (svX + hsv[1] * (svW - 1)), (int) svX + 2, (int) (svX + svW - 2));
-        int dotY = clampInt((int) (svY + (1f - hsv[2]) * (svH - 1)), (int) svY + 2, (int) (svY + svH - 2));
-        RoundedRectShader.draw(context, dotX - 2, dotY - 2, 5, 5, 2.5f, withAlpha(0xFFFFFFFF, contentAlpha));
+      RoundedRectShader.draw(context, x, y, w, h, 4.0F, this.withAlpha(bg, anim));
+      int textCol = active ? -1 : (dark ? -6381906 : -10592658);
+      float tw = SFUI.getWidth(label, 7.5F);
+      SFUI.draw(context, label, x + (w - tw) / 2.0F, y + (h - 7.5F) / 2.0F + 0.5F, 7.5F, this.withAlpha(textCol, anim));
+      this.clickBounds.put(clickId, new int[]{(int)x, (int)y, (int)w, (int)h});
+   }
 
-        drawHueBar(context, (int) svX, (int) hueY, (int) svW, (int) hueH, contentAlpha);
-        int hx = clampInt((int) (svX + hsv[0] * (svW - 1)), (int) svX + 2, (int) (svX + svW - 2));
-        RoundedRectShader.draw(context, hx - 1, (int) hueY - 1, 3, (int) hueH + 2, 1.5f, withAlpha(0xFFFFFFFF, contentAlpha));
-    }
+   private void drawCosmeticsGridScreen(DrawContext context, float x, float listY, float w, float listH, boolean dark, float anim) {
+      CosmeticManager cm = CosmeticManager.getInstance();
+      String currentCat = COSMETIC_TYPES[cosmeticSubTab];
+      List<CosmeticManager.CosmeticEntry> items = cm.getFilteredEntries(currentCat);
+      if (this.searchInput != null && !this.searchInput.isBlank()) {
+         String query = this.searchInput.toLowerCase().trim();
+         List<CosmeticManager.CosmeticEntry> filtered = new ArrayList();
 
-    private void updatePaletteFromMouse(double mx, double my) {
-        if (paletteAnimKey == null) return;
-        float[] g = computePaletteGeom(paletteAnimKey);
-        if (g == null) return;
-        float svX = g[0], svY = g[1], svW = g[2], svH = g[3], hueY = g[4], hueH = g[5];
-        if (paletteDragMode == 2) {
-            paletteLive.h = clamp((float) ((mx - svX) / svW), 0f, 1f);
-        } else {
-            paletteLive.s = clamp((float) ((mx - svX) / svW), 0f, 1f);
-            paletteLive.v = clamp(1f - (float) ((my - svY) / svH), 0f, 1f);
-        }
-        commitPaletteHsv(paletteAnimKey, paletteLive.h, paletteLive.s, paletteLive.v);
-    }
-
-    /** true, если клик по (mx,my) попал именно в полосу Hue раскрытой палитры paletteAnimKey. */
-    private boolean isClickOnActiveHueBar(double mx, double my) {
-        if (paletteAnimKey == null) return false;
-        float[] g = computePaletteGeom(paletteAnimKey);
-        if (g == null) return false;
-        return inside(mx, my, g[0] - 3, g[4] - 3, g[2] + 6, g[5] + 6);
-    }
-
-    private void drawSvArea(DrawContext context, int x, int y, int w, int h, float hue, float alpha) {
-        int step = 2;
-        for (int ix = 0; ix < w; ix += step) {
-            for (int iy = 0; iy < h; iy += step) {
-                float s = clamp(ix / (float) w, 0.0f, 1.0f), v = clamp(1.0f - iy / (float) h, 0.0f, 1.0f);
-                context.fill(x + ix, y + iy, x + ix + step, y + iy + step, withAlpha(0xFF000000 | (Color.HSBtoRGB(hue, s, v) & 0xFFFFFF), alpha));
+         for(CosmeticManager.CosmeticEntry e : items) {
+            if (e.name.toLowerCase().contains(query) || e.type.toLowerCase().contains(query)) {
+               filtered.add(e);
             }
-        }
-    }
+         }
 
-    private void drawHueBar(DrawContext context, int x, int y, int w, int h, float alpha) {
-        int step = 2;
-        for (int ix = 0; ix < w; ix += step) {
-            float hue = clamp(ix / (float) w, 0.0f, 1.0f);
-            context.fill(x + ix, y, x + ix + step, y + h, withAlpha(0xFF000000 | (Color.HSBtoRGB(hue, 1.0f, 1.0f) & 0xFFFFFF), alpha));
-        }
-    }
+         items = filtered;
+      }
 
-    // =========================================================================
-    //  ОБЩИЕ РЕНДЕРЕРЫ НАСТРОЕК (toggle / slider / mode / color / bind / pad2d)
-    // =========================================================================
-    private float drawKronexSetting(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        if (!setting.isVisible()) return 0f;
-        return switch (setting.type) {
-            case TOGGLE -> drawKronexSettingToggle(context, setting, x, y, w, alpha);
-            case SLIDER -> drawKronexSlider(context, setting, x, y, w, alpha);
-            case MODE -> drawKronexMode(context, setting, x, y, w, alpha);
-            case COLOR -> drawKronexColor(context, setting, x, y, w, alpha);
-            case BIND -> drawKronexBind(context, setting, x, y, w, alpha);
-            case HEADER -> drawKronexHeader(context, setting, x, y, w, alpha);
-            case PAD2D -> drawKronexPad2D(context, setting, x, y, w, alpha);
-        };
-    }
+      if (items.isEmpty()) {
+         String emptyMsg = "Косметика не найдена";
+         float ew = SFUI.getWidth(emptyMsg, 9.0F);
+         SFUI.draw(context, emptyMsg, x + (w - ew) / 2.0F, listY + 50.0F, 9.0F, this.withAlpha(dark ? -8487282 : -8750454, anim));
+      } else {
+         int themeCol = -16777216 | LexoraGui.getThemeColor(0.0F);
+         float cardW = (w - 24.0F) / 4.0F;
+         float cardH = 88.0F;
+         float gap = 8.0F;
+         int cols = 4;
+         int rows = (items.size() + cols - 1) / cols;
+         float totalH = (float)rows * (cardH + gap);
+         float maxScroll = Math.max(0.0F, totalH - listH + 10.0F);
+         if (this.targetSecondaryScroll < -maxScroll) {
+            this.targetSecondaryScroll = -maxScroll;
+         }
 
-    private float drawKronexHeader(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        drawSfuiTiny(context, setting.label.toUpperCase(Locale.ROOT), x, y + 3f, withAlpha(SUBTEXT_COLOR, alpha));
-        return 11f;
-    }
+         if (this.targetSecondaryScroll > 0.0F) {
+            this.targetSecondaryScroll = 0.0F;
+         }
 
-    private float drawKronexSettingToggle(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        boolean enabled = ClientData.moduleStates.getOrDefault(setting.key, false);
-        boolean isHovered = !closing && inside(currentMouseX, currentMouseY, x, y, w, 13f);
-        float hoverT = updateHover("st:" + setting.key, isHovered);
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, 13, 4f, withAlpha(blendColors(ELEM_COLOR, 0xFFFFFFFF, hoverT * 0.05f), alpha));
-        drawMarqueeText(context, "lbl:" + setting.key, setting.label, x + 6f, y + 3.2f, w - 25f, 7f, withAlpha(TEXT_COLOR, alpha), isHovered);
-        drawCheckbox(context, x + w - 13f, y + 2f, enabled, setting.key, alpha);
-        return 13f + 3f;
-    }
+         if (this.secondaryScroll < -maxScroll) {
+            this.secondaryScroll = -maxScroll;
+         }
 
-    private float drawKronexSlider(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        float value = ClientData.numSettings.getOrDefault(setting.key, setting.min);
-        float t = clamp((value - setting.min) / Math.max(0.0001f, (setting.max - setting.min)), 0f, 1f);
-        boolean isHovered = !closing && inside(currentMouseX, currentMouseY, x, y, w, 13f);
+         if (this.secondaryScroll > 0.0F) {
+            this.secondaryScroll = 0.0F;
+         }
 
-        String valStr = (Math.abs(value - Math.round(value)) < 0.001f) ? String.valueOf(Math.round(value)) : String.format(Locale.US, "%.2f", value);
-        float valW = getSfuiWidth(valStr, 7f);
-        drawMarqueeText(context, "lbl:" + setting.key, setting.label, x + 1f, y, w - valW - 8f, 7f, withAlpha(TEXT_COLOR, alpha), isHovered);
-        drawSfuiCustom(context, valStr, x + w - valW, y, 7f, withAlpha(SUBTEXT_COLOR, alpha));
+         float startY = listY + this.secondaryScroll;
+         context.enableScissor((int)x, (int)listY, (int)(x + w), (int)(listY + listH));
+         float rotTime = (float)System.currentTimeMillis() / 20.0F % 360.0F;
 
-        float barY = y + 9f, barH = 3f;
-        RoundedRectShader.draw(context, (int) x, (int) barY, (int) w, (int) barH, barH / 2f, withAlpha(ELEM_COLOR, alpha));
-        float fillW = Math.max(barH, w * t);
-        RoundedRectShader.draw(context, (int) x, (int) barY, (int) fillW, (int) barH, barH / 2f, withAlpha(getThemeColor(), alpha));
-        RoundedRectShader.draw(context, (int) (x + fillW - 3f), (int) (barY - 1.5f), 6, 6, 3f, withAlpha(0xFFFFFFFF, alpha));
+         for(int i = 0; i < items.size(); ++i) {
+            CosmeticManager.CosmeticEntry entry = (CosmeticManager.CosmeticEntry)items.get(i);
+            int col = i % cols;
+            int row = i / cols;
+            float cx = x + (float)col * (cardW + gap);
+            float cy = startY + (float)row * (cardH + gap);
+            if (!(cy + cardH < listY) && !(cy > listY + listH)) {
+               boolean isEquipped = cm.isEquipped(entry);
+               boolean hovered = this.inside(this.currentMouseX, this.currentMouseY, cx, cy, cardW, cardH);
+               int cardBg = isEquipped ? this.withAlpha(themeCol, 0.22F * anim) : (hovered ? (dark ? -535028700 : -386861828) : (dark ? -1072425959 : -704643073));
+               RoundedRectShader.draw(context, cx, cy, cardW, cardH, 6.0F, this.withAlpha(cardBg, anim));
+               float stageW = cardW - 12.0F;
+               float stageH = 44.0F;
+               float stageX = cx + 6.0F;
+               float stageY = cy + 6.0F;
+               int stageBg = dark ? 1074794518 : 636152564;
+               RoundedRectShader.draw(context, stageX, stageY, stageW, stageH, 4.0F, this.withAlpha(stageBg, anim));
+               float previewCenterX = stageX + stageW / 2.0F;
+               float previewCenterY = stageY + stageH / 2.0F;
+               if (entry.isCape) {
+                  Identifier capeTex = entry.getTexture();
+                  if (capeTex != null) {
+                     GeckolibCosmeticRenderer.getInstance().renderCapeInGui(context, previewCenterX, previewCenterY, capeTex, rotTime, 12.0F);
+                  }
+               } else {
+                  CosmeticModel model = cm.getModel(entry.index);
+                  if (model != null) {
+                     GeckolibCosmeticRenderer.getInstance().renderModelInGui(model, context, previewCenterX, previewCenterY, 20.0F, rotTime, 12.0F);
+                  }
+               }
 
-        sliderBounds.put(setting.key, new float[]{x, barY - 5f, w, 13f, setting.min, setting.max});
-        return 9f + 3f + 6f;
-    }
+               String displayName = entry.name;
+               if (displayName.length() > 14) {
+                  displayName = displayName.substring(0, 13) + "..";
+               }
 
-    private final Map<String, Float> modeDropdownAnim = new HashMap<>();
+               float nw = SFUI.getWidth(displayName, 7.5F);
+               SFUI.draw(context, displayName, cx + (cardW - nw) / 2.0F, cy + 53.0F, 7.5F, this.withAlpha(dark ? -1118478 : -15461352, anim));
+               String action = isEquipped ? "НАДЕТО" : "НАДЕТЬ";
+               int actBg = isEquipped ? themeCol : (dark ? 1076176176 : 820044012);
+               if (hovered && !isEquipped) {
+                  actBg = dark ? 1614099781 : 1355862236;
+               }
 
-    private float getAnimatedModeDropdown(String key) {
-        float target = key.equals(openModeDropdown) ? 1f : 0f;
-        float current = modeDropdownAnim.getOrDefault(key, target);
-        current += (target - current) * 0.16f;
-        current = sanitize(current);
-        modeDropdownAnim.put(key, current);
-        return current;
-    }
-
-    private float drawKronexMode(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        String current = ClientData.modeSettings.getOrDefault(setting.key, setting.modes.isEmpty() ? "" : setting.modes.get(0));
-        boolean isOpen = setting.key.equals(openModeDropdown);
-        boolean isHovered = !closing && inside(currentMouseX, currentMouseY, x, y, w, 13f);
-        float hoverT = updateHover("md:" + setting.key, isHovered);
-
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, 13, 4f, withAlpha(blendColors(ELEM_COLOR, 0xFFFFFFFF, hoverT * 0.05f), alpha));
-        String shownCur = clipToWidth(current, w * 0.36f, 7f);
-        float curW = getSfuiWidth(shownCur, 7f);
-        drawMarqueeText(context, "lbl:" + setting.key, setting.label, x + 6f, y + 3.2f, w - curW - 25f, 7f, withAlpha(TEXT_COLOR, alpha), isHovered);
-        drawSfuiCustom(context, shownCur, x + w - curW - 11f, y + 3.2f, 7f, withAlpha(SUBTEXT_COLOR, alpha));
-        drawSfuiControlCentered(context, isOpen ? "▲" : "▼", x + w - 6f, y + 3.2f, withAlpha(SUBTEXT_COLOR, alpha));
-        settingClickBounds.put("mode_open:" + setting.key, new int[]{(int) x, (int) y, (int) w, 13});
-
-        float dropAnim = getAnimatedModeDropdown(setting.key);
-        float total = 13f + 3f;
-        if (isOpen || dropAnim > 0.02f) {
-            // Место под опции резервируем сразу целиком (без анимации самого layout — это опасно
-            // трогать сейчас, см. фикс со scissor у партиклов), а вот сами строки красиво и медленно
-            // проявляются и слегка сползают вниз на месте — не мешая соседям.
-            float dropAlpha = alpha * clamp(dropAnim * 1.3f, 0f, 1f);
-            float slide = (1f - smoothT(dropAnim)) * 5f;
-            for (String mode : setting.modes) {
-                float rowY = y + total - slide;
-                boolean rowHover = isOpen && !closing && inside(currentMouseX, currentMouseY, x, rowY, w, 12f);
-                float rowT = updateHover("mdopt:" + setting.key + ":" + mode, rowHover);
-                boolean isCur = mode.equals(current);
-                int rowBg = isCur ? blendColors(ELEM_COLOR, getThemeColor(), 0.30f) : blendColors(PANEL_COLOR, 0xFFFFFFFF, rowT * 0.06f);
-                RoundedRectShader.draw(context, (int) x, (int) rowY, (int) w, 12, 3f, withAlpha(rowBg, dropAlpha));
-                drawMarqueeText(context, "mdopt:" + setting.key + ":" + mode, mode, x + 6f, rowY + 2.8f, w - 10f, 7f, withAlpha(isCur ? TEXT_COLOR : SUBTEXT_COLOR, dropAlpha), rowHover);
-                if (isOpen) {
-                    settingClickBounds.put("mode_pick:" + setting.key + ":" + mode, new int[]{(int) x, (int) rowY, (int) w, 12});
-                }
-                total += 13f;
+               float btnH = 16.0F;
+               float btnW = cardW - 12.0F;
+               float btnY = cy + 65.0F;
+               RoundedRectShader.draw(context, cx + 6.0F, btnY, btnW, btnH, 3.5F, this.withAlpha(actBg, anim));
+               float actW = SFUI.getWidth(action, 7.5F);
+               SFUI.draw(context, action, cx + (cardW - actW) / 2.0F, btnY + 4.5F, 7.5F, this.withAlpha(isEquipped ? -1 : (dark ? -7434594 : -9539970), anim));
+               this.clickBounds.put("cosmetic_item:" + entry.index, new int[]{(int)cx, (int)cy, (int)cardW, (int)cardH});
             }
-        }
-        return total;
-    }
+         }
 
-    private float drawKronexColor(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        boolean isHovered = !closing && inside(currentMouseX, currentMouseY, x, y, w, 13f);
-        float hoverT = updateHover("cl:" + setting.key, isHovered);
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, 13, 4f, withAlpha(blendColors(ELEM_COLOR, 0xFFFFFFFF, hoverT * 0.05f), alpha));
-        drawMarqueeText(context, "lbl:" + setting.key, setting.label, x + 6f, y + 3.2f, w - 32f, 7f, withAlpha(TEXT_COLOR, alpha), isHovered);
-        drawColorSwatch(context, setting.key, x + w - 20f, y + 2.5f, 14f, 8f, alpha);
-        return 13f + 3f;
-    }
+         context.disableScissor();
+         if (totalH > listH && maxScroll > 0.0F) {
+            float sbTrackX = x + w - 2.5F;
+            float sbTrackY = listY + 2.0F;
+            float sbTrackH = listH - 4.0F;
+            RoundedRectShader.draw(context, sbTrackX, sbTrackY, 2.0F, sbTrackH, 1.0F, this.withAlpha(dark ? 553648127 : 352321536, anim));
+            float thumbRatio = Math.max(0.15F, Math.min(1.0F, listH / totalH));
+            float thumbH = sbTrackH * thumbRatio;
+            float scrollRatio = Math.max(0.0F, Math.min(1.0F, -this.secondaryScroll / maxScroll));
+            float thumbY = sbTrackY + (sbTrackH - thumbH) * scrollRatio;
+            int thumbCol = dark ? 1627389951 : 1342177280;
+            RoundedRectShader.draw(context, sbTrackX, thumbY, 2.0F, thumbH, 1.0F, this.withAlpha(thumbCol, anim));
+         }
 
-    private float drawKronexBind(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        boolean isHovered = !closing && inside(currentMouseX, currentMouseY, x, y, w, 13f);
-        float hoverT = updateHover("bnd:" + setting.key, isHovered);
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, 13, 4f, withAlpha(blendColors(ELEM_COLOR, 0xFFFFFFFF, hoverT * 0.05f), alpha));
+      }
+   }
 
-        String bindName = formatBindName(getStoredBindValue(setting.key));
-        float pillW = Math.min(getSfuiWidth(bindName, 7f) + 10f, 44f);
-        float pillX = x + w - pillW - 6f, pillY = y + 2f, pillH = 9f;
-        RoundedRectShader.draw(context, (int) pillX, (int) pillY, (int) pillW, (int) pillH, pillH / 2f, withAlpha(0x50000000, alpha));
-        drawMarqueeText(context, "bindname:" + setting.key, bindName, pillX + 4f, y + 3.2f, pillW - 8f, 7f, withAlpha(SUBTEXT_COLOR, alpha), isHovered);
+   private void drawEventsScreen(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+      float switchAlpha = this.tabSwitchAnim;
+      SFUI.draw(context, "Игровые Ивенты HolyWorld", x, y + switchOffset + 1.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      SFUI.draw(context, "Расписание спавна мистических сундуков, боссов, аирдропов и голосований", x, y + switchOffset + 13.0F, 7.5F, this.withAlpha(dark ? -8487282 : -8750454, anim * switchAlpha));
+      float listY = y + switchOffset + 28.0F;
+      float listH = h - 28.0F - switchOffset;
+      List<HolyWorldEventsApi.HwEvent> list = HolyWorldEventsApi.getEvents();
+      if (list == null || list.isEmpty()) {
+         list = HolyWorldEventsApi.parseRawEvents(EventFetcher.holyWorldEvents);
+      }
 
-        drawMarqueeText(context, "lbl:" + setting.key, setting.label, x + 6f, y + 3.2f, w - pillW - 18f, 7f, withAlpha(TEXT_COLOR, alpha), isHovered);
-        settingClickBounds.put("bind_open:" + setting.key, new int[]{(int) x, (int) y, (int) w, 13});
-        return 13f + 3f;
-    }
+      if (list != null && !list.isEmpty()) {
+         this.secondaryScroll += (this.targetSecondaryScroll - this.secondaryScroll) * 0.25F;
+         float totalH = (float)list.size() * 36.0F;
+         float maxScroll = Math.max(0.0F, totalH - listH + 10.0F);
+         if (this.targetSecondaryScroll < -maxScroll) {
+            this.targetSecondaryScroll = -maxScroll;
+         }
 
-    private float drawKronexPad2D(DrawContext context, ModernSetting setting, float x, float y, float w, float alpha) {
-        float padH = 28f;
-        drawSfuiCustom(context, setting.label, x + 1f, y, 7f, withAlpha(TEXT_COLOR, alpha));
-        float py = y + 9f;
-        RoundedRectShader.draw(context, (int) x, (int) py, (int) w, (int) padH, 4f, withAlpha(ELEM_COLOR, alpha));
+         if (this.targetSecondaryScroll > 0.0F) {
+            this.targetSecondaryScroll = 0.0F;
+         }
 
-        float vx = ClientData.numSettings.getOrDefault(setting.key, (setting.min + setting.max) / 2f);
-        float vy = ClientData.numSettings.getOrDefault(setting.keyY, (setting.minY + setting.maxY) / 2f);
-        float tx = clamp((vx - setting.min) / Math.max(0.0001f, setting.max - setting.min), 0f, 1f);
-        float ty = clamp((vy - setting.minY) / Math.max(0.0001f, setting.maxY - setting.minY), 0f, 1f);
+         float curY = listY + this.secondaryScroll;
+         context.enableScissor((int)x, (int)listY, (int)(x + w), (int)(listY + listH));
 
-        float dotX = x + tx * w;
-        float dotY = py + ty * padH;
-        RoundedRectShader.draw(context, (int) (x + w / 2f - 0.5f), (int) py, 1, (int) padH, 0f, withAlpha(0x30FFFFFF, alpha));
-        RoundedRectShader.draw(context, (int) x, (int) (py + padH / 2f - 0.5f), (int) w, 1, 0f, withAlpha(0x30FFFFFF, alpha));
-        RoundedRectShader.draw(context, (int) (dotX - 3f), (int) (dotY - 3f), 6, 6, 3f, withAlpha(getThemeColor(), alpha));
-
-        padBounds.put(setting.key, new float[]{x, py, w, padH, setting.min, setting.max, setting.minY, setting.maxY});
-        padKeyYMap.put(setting.key, setting.keyY);
-        return 9f + padH + 3f;
-    }
-
-    // =========================================================================
-    //  ДИСПЕТЧЕР СОДЕРЖИМОГО НАСТРОЕК МОДУЛЯ (для панели-слайда)
-    // =========================================================================
-    private void drawExpandedModuleContent(DrawContext context, String module, float x, float y, float w, float alpha) {
-        if (module.equals("Lock Slot")) { drawLockSlotSettings(context, x, y, w, alpha); return; }
-        if (module.equals("Aspect Ratio")) { drawAspectRatioSettings(context, x, y, w, alpha); return; }
-        if (module.equals("Fast Swap")) { drawFastSwapSettings(context, x, y, w, alpha); return; }
-        if (module.equals("Item Highlighter")) { drawItemHighlighterSettings(context, x, y, w, alpha); return; }
-        if (module.equals("Particles")) { drawParticlesSettings(context, x, y, w, alpha); return; }
-        if (module.equals("Item Swap")) { drawItemSwapCompactSettings(context, x, y, w, alpha); return; }
-        if (module.equals("GPS")) { drawGPSSettings(context, x, y, w, alpha); return; }
-
-        if (!ModernSettingsRegistry.hasSettings(module)) {
-            drawSfuiTiny(context, "Настроек нет", x, y + 2f, withAlpha(SUBTEXT_COLOR, alpha));
-            return;
-        }
-        float cy = y;
-        for (ModernSetting setting : ModernSettingsRegistry.get(module)) {
-            cy += drawKronexSetting(context, setting, x, cy, w, alpha);
-        }
-    }
-
-    private void drawGPSSettings(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y;
-        if (ModernSettingsRegistry.hasSettings("GPS")) {
-            for (ModernSetting setting : ModernSettingsRegistry.get("GPS")) {
-                cy += drawKronexSetting(context, setting, x, cy, w, alpha);
-            }
-        }
-
-        cy += 4f;
-        drawSfuiTiny(context, "МЕТКИ (WAYPOINTS)", x, cy, withAlpha(SUBTEXT_COLOR, alpha));
-        cy += 14f;
-
-        float addW = 20f;
-        float inputW = (w - addW - 12f) / 3f;
-        drawGpsInput(context, "Имя", gpsInputName, x, cy, inputW, focusedGpsInput == 1, alpha);
-        drawGpsInput(context, "X", gpsInputX, x + inputW + 4f, cy, inputW, focusedGpsInput == 2, alpha);
-        drawGpsInput(context, "Z", gpsInputZ, x + inputW * 2f + 8f, cy, inputW, focusedGpsInput == 3, alpha);
-
-        float addX = x + inputW * 3f + 12f;
-        RoundedRectShader.draw(context, (int) addX, (int) cy, (int) addW, 18, 4.0f, withAlpha(getThemeColor(), alpha));
-        drawSfuiControlCentered(context, "+", addX + addW / 2f, cy + 4f, withAlpha(0xFFFFFFFF, alpha));
-        settingClickBounds.put("gps_add", new int[]{(int) addX, (int) cy, (int) addW, 18});
-
-        cy += 26f;
-
-        try {
-            if (com.lexoravisauls.client.utils.GPS.waypoints != null) {
-                for (com.lexoravisauls.client.utils.GPS.GpsWaypoint wp : com.lexoravisauls.client.utils.GPS.waypoints) {
-                    RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, 20, 5.0f, withAlpha(ELEM_COLOR, alpha));
-                    String display = wp.name + " (" + (int) wp.x + ", " + (int) wp.z + ")";
-                    drawSfuiTiny(context, clipToWidth(display, w - 54f, 7f), x + 5f, cy + 6.5f, withAlpha(TEXT_COLOR, alpha));
-
-                    drawColorSwatch(context, "gps:" + wp.name, x + w - 46f, cy + 4f, 12f, 12f, alpha);
-
-                    float dX = x + w - 16f;
-                    boolean delHover = !closing && inside(currentMouseX, currentMouseY, dX, cy + 4f, 12f, 12f);
-                    updateHover("gps_del_h:" + wp.name, delHover);
-                    RoundedRectShader.draw(context, (int) dX, (int) cy + 4, 12, 12, 3.0f, withAlpha(0xFFFF4D4D, alpha));
-                    drawSfuiControlCentered(context, "✗", dX + 6f, cy + 6.5f, withAlpha(0xFFFFFFFF, alpha));
-                    settingClickBounds.put("gps_del:" + wp.name, new int[]{(int) dX, (int) cy + 4, 12, 12});
-
-                    cy += 24f;
-                }
-            }
-        } catch (Throwable ignored) {
-        }
-    }
-
-    private void drawGpsInput(DrawContext context, String placeholder, String value, float x, float y, float w, boolean focused, float alpha) {
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, 18, 4.0f, withAlpha(focused ? PANEL_COLOR : ELEM_COLOR, alpha));
-        if (focused) {
-            RoundedRectShader.draw(context, (int) x - 1, (int) y - 1, (int) w + 2, 20, 5.0f, withAlpha(getThemeColor(), 0.5f * alpha));
-        }
-        String text = value.isEmpty() ? placeholder : value;
-        int color = value.isEmpty() ? SUBTEXT_COLOR : TEXT_COLOR;
-        if (focused && (System.currentTimeMillis() / 500L) % 2L == 0L) text += "|";
-        drawSfuiTiny(context, text, x + 4f, y + 6f, withAlpha(color, alpha));
-        settingClickBounds.put("gps_in_" + placeholder, new int[]{(int) x, (int) y, (int) w, 18});
-    }
-
-    private void drawLockSlotSettings(DrawContext context, float x, float y, float w, float alpha) {
-        int size = 17, gap = 4;
-        int totalTopW = size * 4 + gap * 3;
-        int totalBottomW = size * 5 + gap * 4;
-        float startXTop = x + Math.max(0, (w - totalTopW) / 2f);
-        float startXBottom = x + Math.max(0, (w - totalBottomW) / 2f);
-        float row1Y = y + 2f, row2Y = y + 2f + size + gap;
-
-        for (int i = 0; i < 4; i++) drawLockSlotBox(context, i, startXTop + i * (size + gap), row1Y, size, alpha);
-        for (int i = 4; i < 9; i++) drawLockSlotBox(context, i, startXBottom + (i - 4) * (size + gap), row2Y, size, alpha);
-    }
-
-    private void drawLockSlotBox(DrawContext context, int slot, float x, float y, int size, float alpha) {
-        boolean locked = ClientData.moduleStates.getOrDefault("LockSlot_" + slot, false);
-        int bg = locked ? getThemeColor() : ELEM_COLOR;
-        int fg = locked ? 0xFFFFFFFF : TEXT_COLOR;
-        settingClickBounds.put("toggle:LockSlot_" + slot, new int[]{(int) x, (int) y, size, size});
-        RoundedRectShader.draw(context, (int) x, (int) y, size, size, 5.0f, withAlpha(bg, alpha));
-        drawSfuiControlCentered(context, String.valueOf(slot + 1), x + size / 2.0f, y + (size - 8f) / 2f, withAlpha(fg, alpha));
-    }
-
-    private void drawAspectRatioSettings(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y;
-        cy += drawKronexSetting(context, ModernSetting.mode("Ratio Mode", "Режим", "Default", "4:3", "16:9", "16:10", "Custom"), x, cy, w, alpha);
-        if (ClientData.modeSettings.getOrDefault("Ratio Mode", "Default").equals("Custom")) {
-            drawKronexSetting(context, ModernSetting.slider("Aspect Ratio Val", "Значение", 0.5f, 3.0f), x, cy, w, alpha);
-        }
-    }
-
-    private void drawFastSwapSettings(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y;
-        cy += drawKronexSetting(context, ModernSetting.toggle("Show Hotbar Binds", "Бинды"), x, cy, w, alpha);
-        drawSfuiTiny(context, "ФТ", x, cy, withAlpha(0xFFFF55FF, alpha));
-        cy += 14f;
-        cy = drawFastSwapBind(context, "Bind_Дезка", "Дезка", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Явная пыль", "Явная пыль", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Божья аура", "Божья аура", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Пласт", "Пласт", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Трапка ФТ", "Трапка", x, cy, w, alpha);
-        drawSfuiTiny(context, "ХВ", x, cy, withAlpha(0xFFFF55FF, alpha));
-        cy += 14f;
-        cy = drawFastSwapBind(context, "Bind_Стан", "Стан", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Взр. штучка", "Взр. штучка", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Трапка ХВ", "Трапка ХВ", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Взр. трапка", "Взр. трапка", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Ком снега", "Ком снега", x, cy, w, alpha);
-        drawSfuiTiny(context, "Другое", x, cy, withAlpha(0xFFFF55FF, alpha));
-        cy += 14f;
-        cy = drawFastSwapBind(context, "Bind_Хорус", "Хорус", x, cy, w, alpha);
-        cy = drawFastSwapBind(context, "Bind_Эндер перл", "Эндер перл", x, cy, w, alpha);
-        drawFastSwapBind(context, "Bind_Исцеление", "Зелье", x, cy, w, alpha);
-    }
-
-    private float drawFastSwapBind(DrawContext context, String key, String label, float x, float y, float w, float alpha) {
-        return y + drawKronexSetting(context, ModernSetting.bind(key, label), x, y, w, alpha);
-    }
-
-    private void drawItemHighlighterSettings(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y;
-        cy += drawKronexSetting(context, ModernSetting.slider("Highlighter Alpha", "Прозрачность", 0f, 255f), x, cy, w, alpha);
-        cy += drawKronexSetting(context, ModernSetting.toggle("Highlighter Pulsation", "Пульсация"), x, cy, w, alpha);
-        cy += 4f;
-
-        for (Map.Entry<Item, ItemHighlighter.ItemConfig> entry : ItemHighlighter.ITEM_CONFIGS.entrySet()) {
-            Item item = entry.getKey();
-            ItemHighlighter.ItemConfig cfg = entry.getValue();
-            String name = ItemHighlighter.ITEM_NAMES.getOrDefault(item, item.getName().getString());
-
-            RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, 20, 5.0f, withAlpha(ELEM_COLOR, alpha));
-            drawScaledItem(context, item, x + 1, cy + 2, 0.52f);
-            drawSfuiTiny(context, clipToWidth(name, w - 66f, 7.5f), x + 13f, cy + 6.5f, withAlpha(TEXT_COLOR, alpha));
-
-            drawCheckmarkAnimated(context, "ihchk:" + name, cfg.enabled, x + w - 38f, cy + 5f, 10f, alpha);
-            settingClickBounds.put("ih_toggle:" + name, new int[]{(int) (x + w - 44f), (int) cy + 2, 21, 16});
-
-            drawColorSwatch(context, "ih:" + name, x + w - 16f, cy + 4f, 12f, 12f, alpha);
-
-            cy += 24f;
-        }
-    }
-
-    private void drawParticlesSettings(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y;
-        cy += drawKronexSetting(context, ModernSetting.mode("Part. Texture", "Текстура", "Star", "Skull", "Bucks", "Snow", "Blast", "Brich", "Core", "Show", "Snowbag", "Genshin", "Heart", "Cube"), x, cy, w, alpha);
-
-        cy += drawKronexSetting(context, ModernSetting.header("Цвет частиц"), x, cy, w, alpha);
-        cy += drawKronexSetting(context, ModernSetting.mode("Part. Color Mode", "Источник цвета", "Theme", "Custom"), x, cy, w, alpha);
-        if (ClientData.modeSettings.getOrDefault("Part. Color Mode", "Theme").equals("Custom")) {
-            cy += drawKronexSetting(context, ModernSetting.mode("Part. Color Type", "Тип цвета", "Solid", "Gradient"), x, cy, w, alpha);
-            if (ClientData.modeSettings.getOrDefault("Part. Color Type", "Solid").equals("Solid")) {
-                cy += drawKronexSetting(context, ModernSetting.color("Part. Custom Color", "Свой цвет"), x, cy, w, alpha);
-            } else {
-                cy += drawKronexSetting(context, ModernSetting.color("Part. Custom Color 1", "Цвет 1 (Градиент)"), x, cy, w, alpha);
-                cy += drawKronexSetting(context, ModernSetting.color("Part. Custom Color 2", "Цвет 2 (Градиент)"), x, cy, w, alpha);
-            }
-        }
-
-        // Возврат к простому мгновенному позиционированию: попытка плавно "подтягивать" соседние
-        // секции лерпом одной и той же переменной 6 раз за кадр подряд создавала дрожание на
-        // стыках (каждый вызов лерпил к уже сдвинутой на предыдущем шаге цели, из-за чего
-        // сглаживание никогда толком не устаканивалось). Резерв места под секцию как был
-        // мгновенным (см. комментарий в drawParticlesSection про наезд секций), так и остался —
-        // это осознанный компромисс, отрыв при открытии секции есть, но без каши.
-        cy += drawParticlesSection(context, x, cy, w, alpha, "Эмбиент", "Part. Ambient", new ModernSetting[]{ModernSetting.slider("Amb Chance", "Шанс", 1.0f, 100.0f), ModernSetting.slider("Amb Size", "Размер", 0.2f, 3.0f), ModernSetting.slider("Amb Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Amb Life", "Жизнь", 10.0f, 200.0f)});
-        cy += drawParticlesSection(context, x, cy, w, alpha, "Ходьба", "Part. Walk", new ModernSetting[]{ModernSetting.slider("Walk Count", "Кол-во", 1.0f, 15.0f), ModernSetting.slider("Walk Size", "Размер", 0.2f, 3.0f), ModernSetting.slider("Walk Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Walk Life", "Жизнь", 5.0f, 80.0f)});
-        cy += drawParticlesSection(context, x, cy, w, alpha, "Удар", "Part. Hit", new ModernSetting[]{ModernSetting.slider("Hit Size", "Размер", 0.2f, 15.0f), ModernSetting.slider("Hit Count", "Кол-во", 1.0f, 20.0f), ModernSetting.slider("Hit Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Hit Life", "Жизнь", 5.0f, 100.0f)});
-        cy += drawParticlesSection(context, x, cy, w, alpha, "Крит", "Part. Crit", new ModernSetting[]{ModernSetting.slider("Crit Size", "Размер", 0.2f, 15.0f), ModernSetting.slider("Crit Count", "Кол-во", 1.0f, 20.0f), ModernSetting.slider("Crit Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Crit Life", "Жизнь", 5.0f, 100.0f)});
-        cy += drawParticlesSection(context, x, cy, w, alpha, "Снаряды", "Part. Projectiles", new ModernSetting[]{ModernSetting.slider("Proj Count", "Кол-во", 1.0f, 25.0f), ModernSetting.slider("Proj Size", "Размер", 0.2f, 3.0f), ModernSetting.slider("Proj Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Proj Life", "Жизнь", 5.0f, 100.0f)});
-        drawParticlesSection(context, x, cy, w, alpha, "Тотем", "Part. Totem", new ModernSetting[]{ModernSetting.slider("Totem Size", "Размер", 0.2f, 4.0f), ModernSetting.slider("Totem Count", "Кол-во", 5.0f, 100.0f), ModernSetting.slider("Totem Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Totem Life", "Жизнь", 10.0f, 150.0f), ModernSetting.toggle("Disable Vanilla Totem", "Скрыть ванильный тотем")});
-    }
-
-    private float drawParticlesSection(DrawContext context, float x, float y, float w, float alpha, String title, String toggleKey, ModernSetting[] settings) {
-        float cy = y;
-        cy += drawKronexSetting(context, ModernSetting.toggle(toggleKey, title), x, cy, w, alpha);
-        float toggleH = cy - y;
-
-        boolean sectionOn = ClientData.moduleStates.getOrDefault(toggleKey, false);
-        float anim = getAnimatedParticlesSection(toggleKey);
-        float fullHeight = 0.0f;
-        for (ModernSetting s : settings) fullHeight += getKronexSettingHeight(s);
-
-        if (sectionOn || anim > 0.02f) {
-            // ВАЖНО: место резервируем ПОЛНОЕ сразу (fullHeight), а не fullHeight*anim — раньше
-            // тут был реальный баг: строки рисовались в полный рост всегда (плавно менялась только
-            // прозрачность), а возвращаемая высота была урезана анимацией — следующая секция
-            // получала меньше места, чем реально занято, и наезжала на текущую.
-            float contentAlpha = alpha * clamp(anim * 1.3f, 0.0f, 1.0f);
-            float slide = (1f - smoothT(anim)) * 5f;
-            float innerY = cy - slide;
-            for (ModernSetting setting : settings) innerY += drawKronexSetting(context, setting, x, innerY, w, contentAlpha);
-            return toggleH + fullHeight + 6.0f;
-        }
-        return toggleH + 2.0f;
-    }
-
-    private void drawItemSwapCompactSettings(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y;
-        for (ModernSetting setting : ModernSettingsRegistry.get("Item Swap")) {
-            cy += drawKronexSetting(context, setting, x, cy, w, alpha);
-        }
-    }
-
-    private float getAnimatedParticlesSection(String toggleKey) {
-        float target = ClientData.moduleStates.getOrDefault(toggleKey, false) ? 1.0f : 0.0f;
-        float current = particlesSectionAnimations.getOrDefault(toggleKey, target);
-        current += (target - current) * 0.35f;
-        particlesSectionAnimations.put(toggleKey, sanitize(current));
-        return current;
-    }
-
-    private float getKronexSettingHeight(ModernSetting setting) {
-        if (!setting.isVisible()) return 0f;
-        // ФИКС "огромного отрыва" в партиклах: тут были придуманные числа (28/16/88), которые
-        // разъехались с тем, что реально возвращают отрисовщики — drawKronexSettingToggle
-        // (16f), drawKronexSlider (18f), drawKronexColor (16f), drawKronexBind (16f),
-        // drawKronexHeader (11f), drawKronexPad2D (40f). А drawParticlesSection считает
-        // fullHeight (сколько места зарезервировать под открытую секцию) именно через эту
-        // функцию — для 4 слайдеров "Ходьбы" разница набегала 4×(28-18)=40px чистой пустоты
-        // между последним слайдером и следующей секцией. Заодно это же завышало maxScroll
-        // везде, где он считается через getExpandedTargetHeight, не только в партиклах.
-        return switch (setting.type) {
-            case TOGGLE, COLOR, BIND -> 16f;
-            case SLIDER -> 18f;
-            case HEADER -> 11f;
-            case PAD2D -> 40f;
-            case MODE -> modeSettingHeight(setting);
-        };
-    }
-
-    private float modeSettingHeight(ModernSetting setting) {
-        boolean open = setting.key.equals(openModeDropdown);
-        float dropAnim = modeDropdownAnim.getOrDefault(setting.key, open ? 1f : 0f);
-        float h = 16f;
-        if (open || dropAnim > 0.02f) h += setting.modes.size() * 13f;
-        return h;
-    }
-
-    private float getParticlesSettingsHeight() {
-        float h = getKronexSettingHeight(ModernSetting.mode("Part. Texture", "Текстура", "Star", "Skull", "Bucks", "Snow", "Blast", "Brich", "Core", "Show", "Snowbag", "Genshin", "Heart"));
-
-        h += getKronexSettingHeight(ModernSetting.header("Цвет частиц"));
-        h += getKronexSettingHeight(ModernSetting.mode("Part. Color Mode", "Источник цвета", "Theme", "Custom"));
-        if (ClientData.modeSettings.getOrDefault("Part. Color Mode", "Theme").equals("Custom")) {
-            h += getKronexSettingHeight(ModernSetting.mode("Part. Color Type", "Тип цвета", "Solid", "Gradient"));
-            if (ClientData.modeSettings.getOrDefault("Part. Color Type", "Solid").equals("Solid")) {
-                h += getKronexSettingHeight(ModernSetting.color("Part. Custom Color", "Свой цвет"));
-            } else {
-                h += getKronexSettingHeight(ModernSetting.color("Part. Custom Color 1", "Цвет 1 (Градиент)"));
-                h += getKronexSettingHeight(ModernSetting.color("Part. Custom Color 2", "Цвет 2 (Градиент)"));
-            }
-        }
-
-        h += getParticlesSectionHeight("Part. Ambient", new ModernSetting[]{ModernSetting.slider("Amb Chance", "Шанс", 1.0f, 100.0f), ModernSetting.slider("Amb Size", "Размер", 0.2f, 3.0f), ModernSetting.slider("Amb Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Amb Life", "Жизнь", 10.0f, 200.0f)});
-        h += getParticlesSectionHeight("Part. Walk", new ModernSetting[]{ModernSetting.slider("Walk Count", "Кол-во", 1.0f, 15.0f), ModernSetting.slider("Walk Size", "Размер", 0.2f, 3.0f), ModernSetting.slider("Walk Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Walk Life", "Жизнь", 5.0f, 80.0f)});
-        h += getParticlesSectionHeight("Part. Hit", new ModernSetting[]{ModernSetting.slider("Hit Size", "Размер", 0.2f, 15.0f), ModernSetting.slider("Hit Count", "Кол-во", 1.0f, 20.0f), ModernSetting.slider("Hit Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Hit Life", "Жизнь", 5.0f, 100.0f)});
-        h += getParticlesSectionHeight("Part. Crit", new ModernSetting[]{ModernSetting.slider("Crit Size", "Размер", 0.2f, 15.0f), ModernSetting.slider("Crit Count", "Кол-во", 1.0f, 20.0f), ModernSetting.slider("Crit Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Crit Life", "Жизнь", 5.0f, 100.0f)});
-        h += getParticlesSectionHeight("Part. Projectiles", new ModernSetting[]{ModernSetting.slider("Proj Count", "Кол-во", 1.0f, 25.0f), ModernSetting.slider("Proj Size", "Размер", 0.2f, 3.0f), ModernSetting.slider("Proj Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Proj Life", "Жизнь", 5.0f, 100.0f)});
-        h += getParticlesSectionHeight("Part. Totem", new ModernSetting[]{ModernSetting.slider("Totem Size", "Размер", 0.2f, 4.0f), ModernSetting.slider("Totem Count", "Кол-во", 5.0f, 100.0f), ModernSetting.slider("Totem Spread", "Разброс", 0.1f, 5.0f), ModernSetting.slider("Totem Life", "Жизнь", 10.0f, 150.0f), ModernSetting.toggle("Disable Vanilla Totem", "Скрыть ванильный тотем")});
-        return h;
-    }
-
-    private float getParticlesSectionHeight(String toggleKey, ModernSetting[] settings) {
-        float toggleH = getKronexSettingHeight(ModernSetting.toggle(toggleKey, "")); // должно 1-в-1 совпадать с toggleH в drawParticlesSection
-        boolean sectionOn = ClientData.moduleStates.getOrDefault(toggleKey, false);
-        // Только читаем текущее значение анимации, НЕ тикаем его — иначе оно продвигается дважды
-        // за кадр (тут и ещё раз в drawParticlesSection при рендере) и медленно рассинхронизируется.
-        float anim = particlesSectionAnimations.getOrDefault(toggleKey, sectionOn ? 1f : 0f);
-        if (!sectionOn && anim <= 0.02f) return toggleH + 2.0f;
-        float fullH = 0.0f;
-        for (ModernSetting setting : settings) fullH += getKronexSettingHeight(setting);
-        return toggleH + fullH + 6.0f;
-    }
-
-    private float getExpandedTargetHeight(String m) {
-        if (m.equals("Lock Slot")) return 48.0f;
-        if (m.equals("Aspect Ratio")) {
-            return ClientData.modeSettings.getOrDefault("Ratio Mode", "Default").equals("Custom") ? 85.0f : 55.0f;
-        }
-        if (m.equals("Fast Swap")) return 400.0f;
-        if (m.equals("Item Highlighter")) return 60.0f + ItemHighlighter.ITEM_CONFIGS.size() * 24.0f;
-        if (m.equals("Particles")) return getParticlesSettingsHeight();
-
-        if (m.equals("GPS")) {
-            float h = 18f;
-            if (ModernSettingsRegistry.hasSettings(m)) {
-                for (ModernSetting setting : ModernSettingsRegistry.get(m)) h += getKronexSettingHeight(setting);
-            }
-            h += 44f;
-            try {
-                if (com.lexoravisauls.client.utils.GPS.waypoints != null) {
-                    h += com.lexoravisauls.client.utils.GPS.waypoints.size() * 24f;
-                }
-            } catch (Throwable ignored) {
-            }
-            return h;
-        }
-
-        if (m.equals("Item Swap")) {
-            float h = 4f;
-            for (ModernSetting setting : ModernSettingsRegistry.get("Item Swap")) h += getKronexSettingHeight(setting);
-            return h;
-        }
-
-        if (!ModernSettingsRegistry.hasSettings(m)) return 20.0f;
-        float h = 4f;
-        for (ModernSetting setting : ModernSettingsRegistry.get(m)) h += getKronexSettingHeight(setting);
-        return h;
-    }
-
-    // =========================================================================
-    //  МИНИ-ПАНЕЛЬ: PARTY
-    // =========================================================================
-    private void drawPartyTab(DrawContext context, float x, float y, float w, float h, float alpha) {
-        net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
-        if (mc.player == null) return;
-
-        int themeColor = getThemeColor();
-        float cx = x + w / 2f;
-        float curY = y - scrolls[SCROLL_PARTY];
-
-        if (!LexoraPartyManager.inParty() && !LexoraPartyManager.waitingForResponse) {
-            int btnW = (int) (w * 0.72f);
-            int btnX = (int) (cx - btnW / 2f);
-            boolean createHovered = !closing && inside(currentMouseX, currentMouseY, btnX, curY, btnW, 22);
-            float createHoverT = updateHover("party_create", createHovered);
-            RoundedRectShader.draw(context, btnX, (int) curY, btnW, 22, 6f, withAlpha(blendColors(themeColor, 0xFFFFFFFF, createHoverT * 0.12f), 0.85f * alpha));
-            drawSfuiCustom(context, "✦ Создать пати", cx - getSfuiWidth("✦ Создать пати", 9f) / 2f, curY + 7f, 9f, withAlpha(0xFFFFFFFF, alpha));
-            settingClickBounds.put("party_create", new int[]{btnX, (int) curY, btnW, 22});
-            curY += 34f;
-
-            drawSfuiCustom(context, "— или введите код —", cx - getSfuiWidth("— или введите код —", 7.5f) / 2f, curY, 7.5f, withAlpha(SUBTEXT_COLOR, alpha));
-            curY += 18f;
-
-            int inputW = (int) (w * 0.8f);
-            int inputX = (int) (cx - inputW / 2f);
-
-            boolean inputActive = partyCodeInputFocused;
-            int inputBg = withAlpha(inputActive ? 0xFF1E1E2E : ELEM_COLOR, alpha);
-            RoundedRectShader.draw(context, inputX, (int) curY, inputW, 22, 6f, inputBg);
-            if (inputActive) {
-                RoundedRectShader.draw(context, inputX - 1, (int) curY - 1, inputW + 2, 24, 7f, withAlpha(themeColor, 0.6f * alpha));
+         for(HolyWorldEventsApi.HwEvent evt : list) {
+            if (curY + 32.0F >= listY - 32.0F && curY <= listY + listH + 32.0F) {
+               int cardBg = dark ? -1072425959 : -704643073;
+               RoundedRectShader.draw(context, x, curY, w, 32.0F, 6.0F, this.withAlpha(cardBg, anim * switchAlpha));
+               int tierCol = HolyWorldEventsApi.tierColor(evt.rarityTier());
+               RoundedRectShader.draw(context, x + 8.0F, curY + 7.0F, 4.0F, 18.0F, 2.0F, this.withAlpha(tierCol, anim * switchAlpha));
+               SFUI.draw(context, evt.displayName(), x + 18.0F, curY + 7.0F, 8.5F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+               SFUI.draw(context, evt.serverName(), x + 18.0F, curY + 18.0F, 7.0F, this.withAlpha(dark ? -8750454 : -7697766, anim * switchAlpha));
+               float rW = SFUI.getWidth(evt.rarityDisplay(), 7.0F) + 10.0F;
+               float rX = x + w - rW - 10.0F;
+               RoundedRectShader.draw(context, rX, curY + 8.0F, rW, 15.0F, 3.5F, this.withAlpha(tierCol, anim * switchAlpha * 0.25F));
+               SFUI.draw(context, evt.rarityDisplay(), rX + 5.0F, curY + 12.0F, 7.0F, this.withAlpha(tierCol, anim * switchAlpha));
+               this.clickBounds.put("hw_join:" + evt.serverCode(), new int[]{(int)x, (int)curY, (int)w, 32});
             }
 
-            String displayCode = partyCodeInput.isEmpty() && !inputActive ? "Код из 10 цифр..." : partyCodeInput;
-            int codeColor = partyCodeInput.isEmpty() ? withAlpha(SUBTEXT_COLOR, alpha) : withAlpha(TEXT_COLOR, alpha);
-            if (inputActive) {
-                boolean showCursor = (System.currentTimeMillis() / 500L) % 2L == 0L;
-                drawSfuiCustom(context, partyCodeInput + (showCursor ? "|" : " "), inputX + 8f, curY + 7f, 8f, withAlpha(TEXT_COLOR, alpha));
-            } else {
-                drawSfuiCustom(context, displayCode, inputX + 8f, curY + 7f, 8f, codeColor);
+            curY += 36.0F;
+         }
+
+         context.disableScissor();
+         if (totalH > listH && maxScroll > 0.0F) {
+            float sbTrackX = x + w - 2.5F;
+            float sbTrackY = listY + 2.0F;
+            float sbTrackH = listH - 4.0F;
+            RoundedRectShader.draw(context, sbTrackX, sbTrackY, 2.0F, sbTrackH, 1.0F, this.withAlpha(dark ? 553648127 : 352321536, anim * switchAlpha));
+            float thumbRatio = Math.max(0.15F, Math.min(1.0F, listH / totalH));
+            float thumbH = sbTrackH * thumbRatio;
+            float scrollRatio = Math.max(0.0F, Math.min(1.0F, -this.secondaryScroll / maxScroll));
+            float thumbY = sbTrackY + (sbTrackH - thumbH) * scrollRatio;
+            int thumbCol = dark ? 1627389951 : 1342177280;
+            RoundedRectShader.draw(context, sbTrackX, thumbY, 2.0F, thumbH, 1.0F, this.withAlpha(thumbCol, anim * switchAlpha));
+         }
+
+      } else {
+         String raw = EventFetcher.holyWorldEvents;
+         int cardBg = dark ? -1072425959 : -704643073;
+         RoundedRectShader.draw(context, x, listY, w, 70.0F, 7.0F, this.withAlpha(cardBg, anim * switchAlpha));
+         SFUI.draw(context, raw != null ? raw : "Загрузка ивентов HolyWorld...", x + 12.0F, listY + 12.0F, 8.0F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+      }
+   }
+
+   private void drawThemesScreen(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+      float switchAlpha = this.tabSwitchAnim;
+      float curY = y + switchOffset;
+      SFUI.draw(context, "Палитра и Темы Интерфейса", x, curY + 1.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      SFUI.draw(context, "Выберите готовый пресет или настройте градиент темы", x, curY + 13.0F, 7.5F, this.withAlpha(dark ? -8487282 : -8750454, anim * switchAlpha));
+      curY += 25.0F;
+      float topBarH = 34.0F;
+      int topBarBg = dark ? -1072425959 : -704643073;
+      RoundedRectShader.draw(context, x, curY, w, topBarH, 8.0F, this.withAlpha(topBarBg, anim * switchAlpha));
+      float[] hsv1 = (float[])ClientData.colorSettings.getOrDefault("Theme Color 1", new float[]{0.58F, 0.8F, 1.0F});
+      float[] hsv2 = (float[])ClientData.colorSettings.getOrDefault("Theme Color 2", new float[]{0.85F, 0.7F, 1.0F});
+      int c1 = Color.HSBtoRGB(hsv1[0], hsv1[1], hsv1[2]);
+      int c2 = Color.HSBtoRGB(hsv2[0], hsv2[1], hsv2[2]);
+      float gradX = x + 10.0F;
+      float gradY = curY + 9.0F;
+      float gradW = w - 175.0F;
+      float gradH = 16.0F;
+      RoundedRectShader.drawGradient(context, gradX, gradY, gradW, gradH, 5.0F, this.withAlpha(c1, anim * switchAlpha), this.withAlpha(c2, anim * switchAlpha));
+      RoundedRectShader.draw(context, gradX - 1.0F, gradY - 1.0F, gradW + 2.0F, gradH + 2.0F, 6.0F, this.withAlpha(dark ? 637534207 : 352321536, anim * switchAlpha));
+      float swW = 72.0F;
+      float sw1X = x + w - swW * 2.0F - 10.0F;
+      float sw2X = x + w - swW - 6.0F;
+      float swY = curY + 7.0F;
+      float swH = 20.0F;
+      RoundedRectShader.draw(context, sw1X, swY, swW, swH, 4.0F, this.withAlpha(dark ? -14540244 : -2038548, anim * switchAlpha));
+      RoundedRectShader.draw(context, sw1X + 5.0F, swY + 5.0F, 10.0F, 10.0F, 5.0F, this.withAlpha(c1, anim * switchAlpha));
+      SFUI.draw(context, "Цвет 1", sw1X + 18.0F, swY + 6.5F, 7.0F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+      this.clickBounds.put("open_palette:Theme Color 1", new int[]{(int)sw1X, (int)swY, (int)swW, (int)swH});
+      RoundedRectShader.draw(context, sw2X, swY, swW, swH, 4.0F, this.withAlpha(dark ? -14540244 : -2038548, anim * switchAlpha));
+      RoundedRectShader.draw(context, sw2X + 5.0F, swY + 5.0F, 10.0F, 10.0F, 5.0F, this.withAlpha(c2, anim * switchAlpha));
+      SFUI.draw(context, "Цвет 2", sw2X + 18.0F, swY + 6.5F, 7.0F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+      this.clickBounds.put("open_palette:Theme Color 2", new int[]{(int)sw2X, (int)swY, (int)swW, (int)swH});
+      curY += topBarH + 12.0F;
+      SFUI.draw(context, "Дизайнерские пресеты (12 вариантов)", x, curY, 8.5F, this.withAlpha(dark ? -7697766 : -10132107, anim * switchAlpha));
+      curY += 10.0F;
+      String[][] presets = new String[][]{{"Lexora Purple", "#8A2BE2", "#DA70D6"}, {"Ocean Wave", "#00C6FF", "#0072FF"}, {"Emerald Matrix", "#00F260", "#0575E6"}, {"Sunset Fire", "#FF4E50", "#F9D423"}, {"Rose Sakura", "#F857A6", "#FF5858"}, {"Monochrome", "#4B6CB7", "#182848"}, {"Cyber Neon", "#00F5D4", "#7B2CBF"}, {"Blood Moon", "#FF0844", "#FFB199"}, {"Golden Hour", "#F6D365", "#FDA085"}, {"Arctic Frost", "#89F7FE", "#66A6FF"}, {"Toxic Lime", "#11998E", "#38EF7D"}, {"Vaporwave", "#F72585", "#7209B7"}};
+      float pW = (w - 14.0F) / 3.0F;
+      float pH = 24.0F;
+
+      for(int i = 0; i < presets.length; ++i) {
+         float px = x + (float)(i % 3) * (pW + 7.0F);
+         float py = curY + (float)(i / 3) * (pH + 5.0F);
+         int pc1 = this.parseHex(presets[i][1]);
+         int pc2 = this.parseHex(presets[i][2]);
+         boolean hPreset = this.inside(this.currentMouseX, this.currentMouseY, px, py, pW, pH);
+         float hAnim = this.updateHover("preset:" + presets[i][0], hPreset);
+         int pBg = this.interpolateColor(dark ? -1072425959 : -704643073, dark ? -14540244 : -1512459, hAnim);
+         RoundedRectShader.draw(context, px, py, pW, pH, 5.0F, this.withAlpha(pBg, anim * switchAlpha));
+         float circleX = px + 8.0F;
+         float circleY = py + 7.0F;
+         RoundedRectShader.drawGradient(context, circleX, circleY, 10.0F, 10.0F, 5.0F, this.withAlpha(pc1, anim * switchAlpha), this.withAlpha(pc2, anim * switchAlpha));
+         SFUI.draw(context, presets[i][0], px + 24.0F, py + 8.5F, 7.2F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+         this.clickBounds.put("apply_preset:" + presets[i][1] + ":" + presets[i][2], new int[]{(int)px, (int)py, (int)pW, (int)pH});
+      }
+
+   }
+
+   private int parseHex(String hex) {
+      try {
+         return -16777216 | Integer.parseInt(hex.replace("#", ""), 16);
+      } catch (Exception var3) {
+         return -7722014;
+      }
+   }
+
+   private void drawGuiSettingsScreen(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+      float switchAlpha = this.tabSwitchAnim;
+      float curY = y + switchOffset;
+      SFUI.draw(context, "Настройки Интерфейса", x, curY + 1.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      SFUI.draw(context, "Кастомизация звуков, горячих клавиш и поведения меню", x, curY + 13.0F, 7.5F, this.withAlpha(dark ? -8487282 : -8750454, anim * switchAlpha));
+      curY += 28.0F;
+      int cardBg = dark ? -1072425959 : -704643073;
+      float card1H = 92.0F;
+      RoundedRectShader.draw(context, x, curY, w, card1H, 7.0F, this.withAlpha(cardBg, anim * switchAlpha));
+      SFUI.draw(context, "Звуковые эффекты", x + 12.0F, curY + 9.0F, 8.5F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      this.drawSettingRow(context, x + 12.0F, curY + 22.0F, w - 24.0F, "Settings", ModernSetting.mode("GuiSounds", "Звуки интерфейса", "On", "Off"), dark, anim * switchAlpha);
+      this.drawSettingRow(context, x + 12.0F, curY + 54.0F, w - 24.0F, "Settings", ModernSetting.mode("ModuleSoundMode", "Стиль щелчка", "Default", "Sound 1", "Sound 2", "Sound 3", "Sound 4"), dark, anim * switchAlpha);
+      curY += card1H + 12.0F;
+      float card2H = 55.0F;
+      RoundedRectShader.draw(context, x, curY, w, card2H, 7.0F, this.withAlpha(cardBg, anim * switchAlpha));
+      SFUI.draw(context, "Горячие клавиши", x + 12.0F, curY + 9.0F, 8.5F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      Integer guiBind = (Integer)ClientData.moduleBinds.get("GUI");
+      String guiBindText = this.bindingTarget != null && this.bindingTarget.equals("GUI") ? "..." : (guiBind != null && guiBind > 0 ? GLFW.glfwGetKeyName(guiBind, 0) : "RSHIFT");
+      SFUI.draw(context, "Открыть ClickGUI", x + 12.0F, curY + 26.0F, 7.5F, this.withAlpha(dark ? -2565920 : -14671832, anim * switchAlpha));
+      SFUI.draw(context, "Клавиша для вызова меню клиента", x + 12.0F, curY + 36.0F, 6.5F, this.withAlpha(dark ? -10132107 : -7697766, anim * switchAlpha));
+      float bW = 46.0F;
+      float bX = x + w - bW - 12.0F;
+      RoundedRectShader.draw(context, bX, curY + 25.0F, bW, 16.0F, 3.5F, this.withAlpha(dark ? -1876613840 : -1864507160, anim * switchAlpha));
+      SFUI.draw(context, guiBindText.toUpperCase(), bX + (bW - SFUI.getWidth(guiBindText.toUpperCase(), 7.0F)) / 2.0F, curY + 29.5F, 7.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      this.clickBounds.put("bind:GUI", new int[]{(int)bX, (int)curY + 25, (int)bW, 16});
+   }
+
+   private void drawConfigsScreen(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+      float switchAlpha = this.tabSwitchAnim;
+      float curY = y + switchOffset;
+      SFUI.draw(context, "Конфигурации", x, curY + 1.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      SFUI.draw(context, "Управление сохранениями и профилями настроек", x, curY + 13.0F, 7.5F, this.withAlpha(dark ? -8487282 : -8750454, anim * switchAlpha));
+      curY += 28.0F;
+      RoundedRectShader.draw(context, x, curY, w - 80.0F, 22.0F, 5.0F, this.withAlpha(dark ? -1876942808 : -1864309523, anim * switchAlpha));
+      String text = this.configInput.isEmpty() && !this.configInputFocused ? "Имя нового конфига..." : this.configInput;
+      int tCol = this.configInput.isEmpty() && !this.configInputFocused ? (dark ? -11184794 : -6710870) : (dark ? -1 : -15461352);
+      SFUI.draw(context, text, x + 8.0F, curY + 6.0F, 7.5F, this.withAlpha(tCol, anim * switchAlpha));
+      this.clickBounds.put("input:config", new int[]{(int)x, (int)curY, (int)w - 80, 22});
+      boolean hBtn = this.inside(this.currentMouseX, this.currentMouseY, x + w - 70.0F, curY, 70.0F, 22.0F);
+      float hBtnAnim = this.updateHover("btn:cfg_create", hBtn);
+      int btnBg = this.interpolateColor(dark ? -1 : -15461352, dark ? -2039572 : -14013896, hBtnAnim);
+      RoundedRectShader.draw(context, x + w - 70.0F, curY, 70.0F, 22.0F, 5.0F, this.withAlpha(btnBg, anim * switchAlpha));
+      SFUI.draw(context, "Создать", x + w - 56.0F, curY + 6.0F, 7.5F, this.withAlpha(dark ? -15856110 : -1, anim * switchAlpha));
+      this.clickBounds.put("btn:create_config", new int[]{(int)(x + w - 70.0F), (int)curY, 70, 22});
+      curY += 30.0F;
+
+      for(String cfg : LexoraGui.savedConfigs) {
+         boolean sel = cfg.equals(this.selectedConfig);
+         boolean hRow = this.inside(this.currentMouseX, this.currentMouseY, x, curY, w, 26.0F);
+         float hRowAnim = this.updateHover("cfg_row:" + cfg, hRow);
+         int rowBg = sel ? (dark ? -14013896 : -2564888) : this.interpolateColor(dark ? 1880627232 : 1894444271, dark ? -1876811220 : -1864375573, hRowAnim);
+         RoundedRectShader.draw(context, x, curY, w, 26.0F, 5.0F, this.withAlpha(rowBg, anim * switchAlpha));
+         SFUI.draw(context, cfg, x + 8.0F, curY + 8.0F, 8.0F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+         float bX = x + w - 145.0F;
+         RoundedRectShader.draw(context, bX, curY + 4.0F, 42.0F, 18.0F, 3.5F, this.withAlpha(dark ? -1875890112 : -1865888552, anim * switchAlpha));
+         SFUI.draw(context, "Загрузить", bX + 3.0F, curY + 8.5F, 7.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+         this.clickBounds.put("cfg_load:" + cfg, new int[]{(int)bX, (int)curY + 4, 42, 18});
+         bX += 46.0F;
+         RoundedRectShader.draw(context, bX, curY + 4.0F, 46.0F, 18.0F, 3.5F, this.withAlpha(dark ? -1875890112 : -1865888552, anim * switchAlpha));
+         SFUI.draw(context, "Сохранить", bX + 3.0F, curY + 8.5F, 7.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+         this.clickBounds.put("cfg_save:" + cfg, new int[]{(int)bX, (int)curY + 4, 46, 18});
+         bX += 50.0F;
+         RoundedRectShader.draw(context, bX, curY + 4.0F, 40.0F, 18.0F, 3.5F, this.withAlpha(-1862319036, anim * switchAlpha));
+         SFUI.draw(context, "Удалить", bX + 5.0F, curY + 8.5F, 7.0F, this.withAlpha(-1, anim * switchAlpha));
+         this.clickBounds.put("cfg_del:" + cfg, new int[]{(int)bX, (int)curY + 4, 40, 18});
+         curY += 32.0F;
+      }
+
+   }
+
+   private void drawFriendsScreen(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+      float switchAlpha = this.tabSwitchAnim;
+      float curY = y + switchOffset;
+      SFUI.draw(context, "Пати и Друзья", x, curY + 1.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      SFUI.draw(context, "Совместная игра, статус участников и общий чат", x, curY + 13.0F, 7.5F, this.withAlpha(dark ? -8487282 : -8750454, anim * switchAlpha));
+      curY += 26.0F;
+      int cardBg = dark ? -1072425959 : -704643073;
+      RoundedRectShader.draw(context, x, curY, w, 32.0F, 5.0F, this.withAlpha(cardBg, anim * switchAlpha));
+      SFUI.draw(context, "Горячая клавиша хелпы (GPS метка в пати):", x + 12.0F, curY + 11.0F, 7.5F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+      float bindW = 75.0F;
+      float bindX = x + w - bindW - 10.0F;
+      float bindY = curY + 7.0F;
+      boolean hBind = this.inside(this.currentMouseX, this.currentMouseY, bindX, bindY, bindW, 18.0F);
+      float hBindAnim = this.updateHover("btn:party_bind", hBind);
+      int bKeyVal = BindManager.getStoredBindValue("PartyHelpBind");
+      if (bKeyVal == -1) {
+         bKeyVal = BindManager.getStoredBindValue("PartyWaypointBind");
+      }
+
+      String bindText = this.bindingTarget != null && this.bindingTarget.equals("PartyHelpBind") ? "..." : (bKeyVal != -1 && bKeyVal != -1 ? BindManager.formatBindName(bKeyVal) : "NONE");
+      int bindBg = this.interpolateColor(dark ? -14540242 : -2038804, dark ? -13487550 : -1, hBindAnim);
+      RoundedRectShader.draw(context, bindX, bindY, bindW, 18.0F, 4.0F, this.withAlpha(bindBg, anim * switchAlpha));
+      float txtW = SFUI.getWidth(bindText, 7.0F);
+      SFUI.draw(context, bindText, bindX + (bindW - txtW) / 2.0F, bindY + 5.0F, 7.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      this.clickBounds.put("bind:PartyHelpBind", new int[]{(int)bindX, (int)bindY, (int)bindW, 18});
+      curY += 38.0F;
+      List<LexoraPartyManager.PendingRequest> pending = LexoraPartyManager.pendingRequests;
+      if (!pending.isEmpty()) {
+         SFUI.draw(context, "Входящие запросы (" + pending.size() + "):", x, curY, 8.5F, this.withAlpha(-15681151, anim * switchAlpha));
+         curY += 13.0F;
+
+         for(LexoraPartyManager.PendingRequest req : pending) {
+            RoundedRectShader.draw(context, x, curY, w, 36.0F, 5.5F, this.withAlpha(dark ? -535160284 : -436207617, anim * switchAlpha));
+            RoundedRectShader.draw(context, x, curY, 3.0F, 36.0F, 1.5F, this.withAlpha(-15681151, anim * switchAlpha));
+            SFUI.draw(context, req.name, x + 12.0F, curY + 7.0F, 8.5F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+            SFUI.draw(context, "Хочет присоединиться к вашей команде", x + 12.0F, curY + 19.0F, 7.0F, this.withAlpha(dark ? -7829351 : -8750454, anim * switchAlpha));
+            float acW = 68.0F;
+            float btnH = 20.0F;
+            float acX = x + w - acW * 2.0F - 18.0F;
+            float btnY = curY + 8.0F;
+            boolean hAc = this.inside(this.currentMouseX, this.currentMouseY, acX, btnY, acW, btnH);
+            float hAcA = this.updateHover("btn:req_ac:" + req.uuid, hAc);
+            int acCol = this.interpolateColor(-15681151, -13315175, hAcA);
+            RoundedRectShader.draw(context, acX, btnY, acW, btnH, 4.0F, this.withAlpha(acCol, anim * switchAlpha));
+            float lAcW = SFUI.getWidth("Принять", 7.0F);
+            SFUI.draw(context, "Принять", acX + (acW - lAcW) / 2.0F, btnY + 5.5F, 7.0F, this.withAlpha(-1, anim * switchAlpha));
+            this.clickBounds.put("party:accept:" + req.uuid, new int[]{(int)acX, (int)btnY, (int)acW, (int)btnH});
+            float decX = acX + acW + 6.0F;
+            boolean hDec = this.inside(this.currentMouseX, this.currentMouseY, decX, btnY, acW, btnH);
+            float hDecA = this.updateHover("btn:req_dec:" + req.uuid, hDec);
+            int decCol = this.interpolateColor(-1096636, -495247, hDecA);
+            RoundedRectShader.draw(context, decX, btnY, acW, btnH, 4.0F, this.withAlpha(decCol, anim * switchAlpha));
+            float lDecW = SFUI.getWidth("Отклонить", 7.0F);
+            SFUI.draw(context, "Отклонить", decX + (acW - lDecW) / 2.0F, btnY + 5.5F, 7.0F, this.withAlpha(-1, anim * switchAlpha));
+            this.clickBounds.put("party:decline:" + req.uuid, new int[]{(int)decX, (int)btnY, (int)acW, (int)btnH});
+            curY += 42.0F;
+         }
+
+         curY += 4.0F;
+      }
+
+      RoundedRectShader.draw(context, x, curY, w, 44.0F, 6.0F, this.withAlpha(cardBg, anim * switchAlpha));
+      SFUI.draw(context, "Код команды:", x + 12.0F, curY + 8.0F, 7.5F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+      String code = LexoraPartyManager.partyCode;
+      SFUI.draw(context, code != null && !code.isEmpty() ? code : "Вы не состоите в пати", x + 12.0F, curY + 22.0F, 9.5F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      float bX = x + w - 85.0F;
+      boolean hParty = this.inside(this.currentMouseX, this.currentMouseY, bX, curY + 9.0F, 75.0F, 24.0F);
+      float hPartyAnim = this.updateHover("btn:party", hParty);
+      int partyBg = this.interpolateColor(dark ? -1 : -15461352, dark ? -2039572 : -14013896, hPartyAnim);
+      RoundedRectShader.draw(context, bX, curY + 9.0F, 75.0F, 24.0F, 4.5F, this.withAlpha(partyBg, anim * switchAlpha));
+      String bText = LexoraPartyManager.inParty() ? "Покинуть" : "Создать";
+      float bTextW = SFUI.getWidth(bText, 7.5F);
+      SFUI.draw(context, bText, bX + (75.0F - bTextW) / 2.0F, curY + 17.0F, 7.5F, this.withAlpha(dark ? -15856110 : -1, anim * switchAlpha));
+      this.clickBounds.put("party:toggle", new int[]{(int)bX, (int)curY + 9, 75, 24});
+      curY += 52.0F;
+      if (LexoraPartyManager.inParty()) {
+         List<LexoraPartyManager.PartyMember> members = LexoraPartyManager.members;
+         MsdfFont var10000 = SFUI;
+         int var10002 = members.size();
+         var10000.draw(context, "Участники (" + var10002 + "/10):", x, curY, 8.5F, this.withAlpha(dark ? -3355444 : -13421773, anim * switchAlpha));
+         curY += 13.0F;
+
+         for(LexoraPartyManager.PartyMember m : members) {
+            RoundedRectShader.draw(context, x, curY, w, 28.0F, 4.5F, this.withAlpha(cardBg, anim * switchAlpha));
+            int dotCol = m.online ? -15681151 : -9342598;
+            RoundedRectShader.draw(context, x + 12.0F, curY + 11.0F, 6.0F, 6.0F, 3.0F, this.withAlpha(dotCol, anim * switchAlpha));
+            SFUI.draw(context, m.name, x + 24.0F, curY + 9.0F, 8.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+            if (m.server != null && !m.server.isEmpty()) {
+               float sW = SFUI.getWidth(m.server, 7.0F);
+               SFUI.draw(context, m.server, x + w - sW - 12.0F, curY + 9.5F, 7.0F, this.withAlpha(dark ? -8947832 : -7829351, anim * switchAlpha));
             }
 
-            partyCodeInputBounds = new int[]{inputX, (int) curY, inputW, 22};
-            settingClickBounds.put("party_code_input", partyCodeInputBounds);
-            curY += 30f;
+            curY += 32.0F;
+         }
 
-            boolean canJoin = partyCodeInput.length() == 10;
-            int joinColor = canJoin ? withAlpha(0xFF22C55E, alpha) : withAlpha(0xFF3A3A4A, alpha);
-            RoundedRectShader.draw(context, inputX, (int) curY, inputW, 22, 6f, joinColor);
-            drawSfuiCustom(context, "Вступить →", cx - getSfuiWidth("Вступить →", 9f) / 2f, curY + 7f, 9f, withAlpha(canJoin ? 0xFFFFFFFF : SUBTEXT_COLOR, alpha));
-            if (canJoin) settingClickBounds.put("party_join", new int[]{inputX, (int) curY, inputW, 22});
+         curY += 6.0F;
+      }
 
-        } else if (LexoraPartyManager.waitingForResponse) {
-            float dotTime = (System.currentTimeMillis() % 1200) / 1200f;
-            String dots = dotTime < 0.33f ? "." : dotTime < 0.66f ? ".." : "...";
-            drawSfuiCustom(context, "Ожидание ответа лидера" + dots, cx - getSfuiWidth("Ожидание ответа лидера...", 9f) / 2f, curY + 8f, 9f, withAlpha(0xFFFFAA00, alpha));
-            curY += 30f;
-            String codeTxt = "Код: " + LexoraPartyManager.waitingCode;
-            drawSfuiCustom(context, codeTxt, cx - getSfuiWidth(codeTxt, 8f) / 2f, curY, 8f, withAlpha(SUBTEXT_COLOR, alpha));
-            curY += 28f;
-            int cancelW = 100;
-            int cancelX = (int) (cx - cancelW / 2f);
-            RoundedRectShader.draw(context, cancelX, (int) curY, cancelW, 20, 6f, withAlpha(0xFF4A1A1A, alpha));
-            drawSfuiCustom(context, "Отменить", cx - getSfuiWidth("Отменить", 8.5f) / 2f, curY + 6f, 8.5f, withAlpha(0xFFFF6666, alpha));
-            settingClickBounds.put("party_cancel_wait", new int[]{cancelX, (int) curY, cancelW, 20});
+      RoundedRectShader.draw(context, x, curY, w, 44.0F, 6.0F, this.withAlpha(cardBg, anim * switchAlpha));
+      SFUI.draw(context, "Присоединиться к чужой пати:", x + 12.0F, curY + 8.0F, 7.5F, this.withAlpha(dark ? -1118478 : -15461352, anim * switchAlpha));
+      float inputW = w - 110.0F;
+      float inputX = x + 12.0F;
+      float inputY = curY + 19.0F;
+      int inBg = this.partyCodeInputFocused ? (dark ? -14540242 : -2564888) : (dark ? -15066590 : -1709840);
+      RoundedRectShader.draw(context, inputX, inputY, inputW, 18.0F, 3.5F, this.withAlpha(inBg, anim * switchAlpha));
+      String pText = this.partyCodeInput.isEmpty() && !this.partyCodeInputFocused ? "Введите 10-значный код..." : this.partyCodeInput;
+      int pCol = this.partyCodeInput.isEmpty() && !this.partyCodeInputFocused ? (dark ? -11184794 : -6710870) : (dark ? -1 : -15461352);
+      SFUI.draw(context, pText, inputX + 6.0F, inputY + 5.0F, 7.0F, this.withAlpha(pCol, anim * switchAlpha));
+      this.clickBounds.put("input:party_code", new int[]{(int)inputX, (int)inputY, (int)inputW, 18});
+      float jbX = x + w - 85.0F;
+      boolean hJoin = this.inside(this.currentMouseX, this.currentMouseY, jbX, inputY, 75.0F, 18.0F);
+      float hJoinAnim = this.updateHover("btn:party_join", hJoin);
+      int joinBg = this.interpolateColor(dark ? -14013896 : -3090976, dark ? -1 : -15461352, hJoinAnim);
+      RoundedRectShader.draw(context, jbX, inputY, 75.0F, 18.0F, 3.5F, this.withAlpha(joinBg, anim * switchAlpha));
+      String jText = LexoraPartyManager.waitingForResponse ? "Ожидание..." : "Присоединиться";
+      float jTextW = SFUI.getWidth(jText, 6.5F);
+      SFUI.draw(context, jText, jbX + (75.0F - jTextW) / 2.0F, inputY + 5.0F, 6.5F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      this.clickBounds.put("party:join", new int[]{(int)jbX, (int)inputY, 75, 18});
+   }
 
-        } else {
-            String codeLabel = LexoraPartyManager.isOwner ? "Ваш код (поделитесь):" : "Код пати:";
-            drawSfuiCustom(context, codeLabel, cx - getSfuiWidth(codeLabel, 7.5f) / 2f, curY, 7.5f, withAlpha(SUBTEXT_COLOR, alpha));
-            curY += 14f;
-            drawSfuiCustom(context, LexoraPartyManager.partyCode, cx - getSfuiWidth(LexoraPartyManager.partyCode, 13f) / 2f, curY, 13f, withAlpha(themeColor, alpha));
-            curY += 24f;
+   private void drawWaypointsScreen(DrawContext context, float x, float y, float w, float h, boolean dark, float anim) {
+      float switchOffset = (1.0F - this.tabSwitchAnim) * 14.0F;
+      float switchAlpha = this.tabSwitchAnim;
+      float curY = y + switchOffset;
+      List<GPS.GpsWaypoint> waypoints = GPS.getWaypoints();
+      SFUI.draw(context, "GPS Метки и Редактор", x, curY + 1.0F, 11.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+      SFUI.draw(context, "Создание, редактирование координат и выбор кастомных иконок", x, curY + 13.0F, 7.5F, this.withAlpha(dark ? -8487282 : -8750454, anim * switchAlpha));
+      float clrW = 72.0F;
+      float btnH = 18.0F;
+      float btnY = curY + 2.0F;
+      float clrX = x + w - clrW;
+      boolean hClr = this.inside(this.currentMouseX, this.currentMouseY, clrX, btnY, clrW, btnH);
+      float hClrA = this.updateHover("btn:gps_clear_all", hClr);
+      int clrBg = this.interpolateColor(dark ? 1090470980 : 637486148, -2130754492, hClrA);
+      RoundedRectShader.draw(context, clrX, btnY, clrW, btnH, 4.0F, this.withAlpha(clrBg, anim * switchAlpha));
+      float clrTxtW = SFUI.getWidth("Очистить все", 7.0F);
+      SFUI.draw(context, "Очистить все", clrX + (clrW - clrTxtW) / 2.0F, btnY + 5.0F, 7.0F, this.withAlpha(-1, anim * switchAlpha));
+      this.clickBounds.put("btn:gps_clear_all", new int[]{(int)clrX, (int)btnY, (int)clrW, (int)btnH});
+      float addW = 90.0F;
+      float addX = clrX - addW - 6.0F;
+      boolean hAdd = this.inside(this.currentMouseX, this.currentMouseY, addX, btnY, addW, btnH);
+      float hAddA = this.updateHover("wp:add_new", hAdd);
+      int addBg = this.interpolateColor(dark ? 1611708801 : 1074837889, -1877952127, hAddA);
+      RoundedRectShader.draw(context, addX, btnY, addW, btnH, 4.0F, this.withAlpha(addBg, anim * switchAlpha));
+      float addTxtW = SFUI.getWidth("+ Новая метка", 7.0F);
+      SFUI.draw(context, "+ Новая метка", addX + (addW - addTxtW) / 2.0F, btnY + 5.0F, 7.0F, this.withAlpha(-1, anim * switchAlpha));
+      this.clickBounds.put("wp:add_new", new int[]{(int)addX, (int)btnY, (int)addW, (int)btnH});
+      curY += 26.0F;
+      float panelsH = h - (curY - y);
+      float col1W = 185.0F;
+      float col2X = x + col1W + 10.0F;
+      float col2W = w - col1W - 10.0F;
+      int cardBg = dark ? -1072425959 : -704643073;
+      RoundedRectShader.draw(context, x, curY, col1W, panelsH, 8.0F, this.withAlpha(cardBg, anim * switchAlpha));
+      MsdfFont var10000 = SFUI;
+      int var10002 = waypoints.size();
+      var10000.draw(context, "СПИСОК МЕТОК (" + var10002 + ")", x + 10.0F, curY + 8.0F, 7.0F, this.withAlpha(dark ? -8750454 : -7697766, anim * switchAlpha));
+      float listStartY = curY + 22.0F;
+      float listAreaH = panelsH - 26.0F;
+      if (waypoints.isEmpty()) {
+         SFUI.draw(context, "Нет созданных меток", x + 12.0F, listStartY + 12.0F, 8.0F, this.withAlpha(dark ? -10132107 : -6974043, anim * switchAlpha));
+         SFUI.draw(context, "Нажмите «+ Новая метка»", x + 12.0F, listStartY + 24.0F, 7.0F, this.withAlpha(dark ? -12237483 : -5197632, anim * switchAlpha));
+      } else {
+         this.secondaryScroll += (this.targetSecondaryScroll - this.secondaryScroll) * 0.25F;
+         float rowH = 34.0F;
+         float totalH = (float)waypoints.size() * rowH;
+         float maxScroll = Math.max(0.0F, totalH - listAreaH + 6.0F);
+         if (this.targetSecondaryScroll < -maxScroll) {
+            this.targetSecondaryScroll = -maxScroll;
+         }
 
-            String membersLabel = "Участники (" + LexoraPartyManager.members.size() + "/10):";
-            drawSfui(context, membersLabel, x + 2f, curY, withAlpha(TEXT_COLOR, alpha));
-            curY += 16f;
+         if (this.targetSecondaryScroll > 0.0F) {
+            this.targetSecondaryScroll = 0.0F;
+         }
 
-            for (LexoraPartyManager.PartyMember m : LexoraPartyManager.members) {
-                float cardH = 28f;
-                RoundedRectShader.draw(context, (int) x, (int) curY, (int) w, (int) cardH, 6f, withAlpha(ELEM_COLOR, alpha));
-                int dotColor = m.online ? withAlpha(0xFF22C55E, alpha) : withAlpha(0xFF555555, alpha);
-                RoundedRectShader.draw(context, (int) (x + 9), (int) (curY + 10), 8, 8, 4f, dotColor);
+         float rowDrawY = listStartY + this.secondaryScroll;
+         context.enableScissor((int)x, (int)listStartY, (int)(x + col1W), (int)(listStartY + listAreaH));
+         PlayerEntity player = MinecraftClient.getInstance().player;
+         if (wpSelected == null || !waypoints.contains(wpSelected)) {
+            this.selectWaypointForEdit((GPS.GpsWaypoint)waypoints.get(0));
+         }
 
-                boolean isOwnerMember = m.uuid.equals(LexoraPartyManager.ownerUuid);
-                String nameTxt = (isOwnerMember ? "★ " : "") + m.name;
-                drawSfuiTiny(context, clipToWidth(nameTxt, w * 0.5f, 7.5f), x + 22f, curY + 10f, isOwnerMember ? withAlpha(themeColor, alpha) : withAlpha(TEXT_COLOR, alpha));
+         for(int i = 0; i < waypoints.size(); ++i) {
+            GPS.GpsWaypoint wp = (GPS.GpsWaypoint)waypoints.get(i);
+            if (rowDrawY + rowH >= listStartY - rowH && rowDrawY <= listStartY + listAreaH + rowH) {
+               boolean isSel = wp == wpSelected;
+               boolean isHov = this.inside(this.currentMouseX, this.currentMouseY, x + 5.0F, rowDrawY, col1W - 10.0F, rowH - 4.0F);
+               float hovA = this.updateHover("wp_row:" + i, isHov);
+               int rowColor = isSel ? (dark ? -534502348 : -522000654) : this.interpolateColor(dark ? 1612191778 : 1626337784, dark ? -1876942802 : -1863915020, hovA);
+               RoundedRectShader.draw(context, x + 5.0F, rowDrawY, col1W - 10.0F, rowH - 4.0F, 5.0F, this.withAlpha(rowColor, anim * switchAlpha));
+               int accent = wp.color;
+               RoundedRectShader.draw(context, x + 5.0F, rowDrawY, 2.5F, rowH - 4.0F, 1.2F, this.withAlpha(accent, anim * switchAlpha));
+               int iconIdx = wp.iconBackgroundIndex % GPS.MARKER_TEXTURES.length;
+               Identifier iconTex = GPS.MARKER_TEXTURES[iconIdx];
+               int iconBoxSize = 22;
+               float iconX = x + 11.0F;
+               float iconY = rowDrawY + (rowH - 4.0F - (float)iconBoxSize) / 2.0F;
+               int ibBg = dark ? -1877929704 : -1864835864;
+               RoundedRectShader.draw(context, iconX, iconY, (float)iconBoxSize, (float)iconBoxSize, 4.5F, this.withAlpha(ibBg, anim * switchAlpha));
+               int innerSz = 16;
+               float inX = iconX + (float)(iconBoxSize - innerSz) / 2.0F;
+               float inY = iconY + (float)(iconBoxSize - innerSz) / 2.0F;
+               GPS.ensureLinearFilter(iconTex);
+               RenderSystem.enableBlend();
+               RenderSystem.defaultBlendFunc();
+               RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, anim * switchAlpha);
+               context.drawTexture(GPS::getSmoothGuiTextured, iconTex, (int)inX, (int)inY, 0.0F, 0.0F, innerSz, innerSz, innerSz, innerSz);
+               RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+               String nameText = wp.name != null ? wp.name : "Метка";
+               if (SFUI.getWidth(nameText, 8.0F) > col1W - 75.0F) {
+                  String var130 = nameText.substring(0, Math.min(nameText.length(), 10));
+                  nameText = var130 + "..";
+               }
 
-                String serverTxt = m.online ? (m.server.isEmpty() ? "Онлайн" : "► " + m.server) : "Офлайн";
-                float serverW = getSfuiWidth(serverTxt, 6.5f);
-                drawSfuiTiny(context, serverTxt, x + w - serverW - 7f, curY + 10.5f, m.online ? withAlpha(0xFF22C55E, alpha) : withAlpha(SUBTEXT_COLOR, alpha));
+               SFUI.draw(context, nameText, iconX + (float)iconBoxSize + 7.0F, rowDrawY + 6.5F, 8.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+               if (player != null) {
+                  double dist = Math.sqrt(player.squaredDistanceTo(wp.x, wp.y, wp.z));
+                  String distStr = dist > 1000.0 ? String.format(Locale.ROOT, "%.1f км", dist / 1000.0) : String.format(Locale.ROOT, "%d м", (int)dist);
+                  SFUI.draw(context, distStr, iconX + (float)iconBoxSize + 7.0F, rowDrawY + 17.0F, 6.8F, this.withAlpha(dark ? -8750454 : -7697766, anim * switchAlpha));
+               }
 
-                curY += cardH + 4f;
-                if (curY > y + h - 34f) break;
+               float delBtnX = x + col1W - 24.0F;
+               float delBtnY = rowDrawY + 6.0F;
+               boolean hDel = this.inside(this.currentMouseX, this.currentMouseY, delBtnX, delBtnY, 15.0F, 15.0F);
+               float hDelA = this.updateHover("wp_del_quick:" + i, hDel);
+               int delCol = this.interpolateColor(dark ? -10461072 : -7697766, -48060, hDelA);
+               SFUI.draw(context, "✕", delBtnX + 3.5F, delBtnY + 3.5F, 7.5F, this.withAlpha(delCol, anim * switchAlpha));
+               this.clickBounds.put("wp_del_row:" + i, new int[]{(int)delBtnX, (int)delBtnY, 15, 15});
+               this.clickBounds.put("wp_select:" + i, new int[]{(int)(x + 5.0F), (int)rowDrawY, (int)(col1W - 32.0F), (int)(rowH - 4.0F)});
             }
 
-            int leaveW = 96;
-            int leaveX = (int) (cx - leaveW / 2f);
-            float leaveY = y + h - 26f;
-            RoundedRectShader.draw(context, leaveX, (int) leaveY, leaveW, 20, 6f, withAlpha(0xFF4A1A1A, alpha));
-            drawSfuiCustom(context, "Выйти из пати", cx - getSfuiWidth("Выйти из пати", 8f) / 2f, leaveY + 6f, 8f, withAlpha(0xFFFF5555, alpha));
-            settingClickBounds.put("party_leave", new int[]{leaveX, (int) leaveY, leaveW, 20});
-        }
-    }
-
-    // =========================================================================
-    //  МИНИ-ПАНЕЛЬ: EVENTS
-    // =========================================================================
-    private void drawEventsTab(DrawContext context, float x, float y, float w, float alpha) {
-        final float visibleH = 300f;
-        float cy = y - scrolls[SCROLL_EVENTS];
-
-        if (!HolyWorldEventsApi.hasData()) {
-            drawSfuiTiny(context, "🔄 Подключение к HW API...", x, cy + 10f, withAlpha(SUBTEXT_COLOR, alpha));
-            targetScrolls[SCROLL_EVENTS] = 0f;
-            return;
-        }
-
-        List<HolyWorldEventsApi.HwEvent> list = HolyWorldEventsApi.getEvents();
-        float contentTop = cy;
-
-        context.enableScissor((int) x, (int) y, (int) (x + w), (int) (y + visibleH));
-        try {
-            if (list.isEmpty()) {
-                drawSfuiTiny(context, "Сейчас на серверах спокойно — ивентов нет", x, cy + 10f, withAlpha(SUBTEXT_COLOR, alpha));
-            } else {
-                for (HolyWorldEventsApi.HwEvent ev : list) {
-                    int accentColor = HolyWorldEventsApi.tierColor(ev.rarityTier());
-                    cy = drawEventCard(context, x, cy, w, alpha, ev.displayName(), ev.rarityDisplay(), ev.serverName(), "", accentColor);
-                }
-            }
-        } finally {
-            context.disableScissor();
-        }
-
-        // ФИКС "не листает, хотя ивенты ещё есть": раньше максимум скролла считался как
-        // totalHeight - 250, а видимая (scissor) область была 300 — несовпадающие числа в двух
-        // местах. На малом количестве карточек разница не давала о себе знать, на большом —
-        // скролл упирался в потолок, недодавая ~50px, и до части карточек было physически не
-        // долистать. Теперь maxScroll и высота scissor берутся из одной и той же visibleH.
-        float totalContentH = cy - contentTop;
-        targetScrolls[SCROLL_EVENTS] = clamp(targetScrolls[SCROLL_EVENTS], 0f, Math.max(0f, totalContentH - visibleH));
-    }
-
-    private String decrementTimeInString(String status, long elapsedMillis) {
-        if (status == null || status.isEmpty()) return status;
-        long elapsedSecs = elapsedMillis / 1000;
-        try {
-            Matcher m = TIME_PATTERN.matcher(status);
-            if (m.find()) {
-                String prefix = m.group(1);
-                int mins = m.group(2) != null ? Integer.parseInt(m.group(2)) : 0;
-                int secs = m.group(3) != null ? Integer.parseInt(m.group(3)) : 0;
-                int totalSecs = mins * 60 + secs - (int) elapsedSecs;
-                if (totalSecs <= 0) return status.toLowerCase().contains("до конца") ? "Завершено" : "Призван / Ожидается";
-                int newMins = totalSecs / 60, newSecs = totalSecs % 60;
-                String newTime = prefix + " " + (newMins > 0 ? newMins + "м " : "") + newSecs + "с";
-                return status.replace(m.group(0), newTime.trim());
-            }
-        } catch (Exception ignored) {
-        }
-        return status;
-    }
-
-    private String extractAnarchyNumber(String text) {
-        Matcher m = NUMBER_PATTERN.matcher(text);
-        return m.find() ? m.group(1) : "";
-    }
-
-    private int getIconColorBasedOnNameOrRarity(String name, String rarity) {
-        String combined = (name + " " + (rarity == null ? "" : rarity)).toLowerCase();
-        if (combined.contains("элитный") || combined.contains("лайт")) return 0xFF55FFFF;
-        if (combined.contains("легендарный") || combined.contains("мифический") || combined.contains("маяк")) return 0xFFFFAA00;
-        if (combined.contains("смерти") || combined.contains("резня") || combined.contains("босс")) return 0xFFFF5555;
-        if (combined.contains("обычный")) return 0xFFFFFFFF;
-        return 0xFF22C55E;
-    }
-
-    private void drawSelectorButton(DrawContext context, String text, boolean active, float x, float y, float w, float h, float alpha, String clickId) {
-        int bg = active ? getThemeColor() : ELEM_COLOR;
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, (int) h, 5.0f, withAlpha(bg, alpha));
-        drawSfuiControlCentered(context, text, x + w / 2f, y + h / 2f - 3f, withAlpha(active ? 0xFFFFFFFF : SUBTEXT_COLOR, alpha));
-        settingClickBounds.put(clickId, new int[]{(int) x, (int) y, (int) w, (int) h});
-    }
-
-    private float drawEventCard(DrawContext context, float x, float y, float w, float alpha, String name, String rarity, String server, String status, int accentColor) {
-        float padding = 8f, leftSpace = 4f, rightSpace = w * 0.42f;
-        float maxNameW = w - leftSpace - rightSpace - 8f;
-
-        List<String> wrappedName = wrapText(name, maxNameW, 8f);
-        List<String> wrappedStatus = wrapText(status, rightSpace - 10f, 7f);
-        float nameH = wrappedName.size() * 10f;
-        float statH = wrappedStatus.size() * 9f;
-        float bottomTagsH = 13f;
-
-        float contentH = Math.max(nameH + bottomTagsH + 4f, statH);
-        float h = contentH + padding * 2;
-
-        RoundedRectShader.draw(context, (int) x, (int) y, (int) w, (int) h, 6.0f, withAlpha(PANEL_COLOR, alpha));
-
-        float textY = y + padding;
-        for (String line : wrappedName) {
-            drawSfuiCustom(context, line, x + leftSpace, textY, 8f, withAlpha(TEXT_COLOR, alpha));
-            textY += 10f;
-        }
-
-        float tagsY = textY + 1f, tagX = x + leftSpace;
-        if (rarity != null && !rarity.isEmpty()) {
-            // ФИКС "налезающего текста": в отличие от имени (wrapText) и сервера (clipToWidth
-            // ниже), rarity рисовалась на полную естественную ширину без всякого предела —
-            // если сервер иногда присылал длинную редкость, плашка вылезала на строку с
-            // сервером и на статус-бейдж справа. Ограничиваем её половиной ширины карточки.
-            String shownRarity = clipToWidth(rarity, w * 0.5f - 12f, 6.5f);
-            float rarW = getSfuiWidth(shownRarity, 6.5f) + 8f;
-            RoundedRectShader.draw(context, (int) tagX, (int) tagsY - 2, (int) rarW, 12, 3.0f, withAlpha(accentColor, 0.18f * alpha));
-            drawSfuiTiny(context, shownRarity, tagX + 4f, tagsY + 1f, withAlpha(accentColor, alpha));
-            tagX += rarW + 5f;
-        }
-        drawSfuiTiny(context, clipToWidth("📍 " + server, w - (tagX - x) - 4f, 6.5f), tagX, tagsY + 1f, withAlpha(SUBTEXT_COLOR, alpha));
-
-        if (status != null && !status.isEmpty()) {
-            boolean isSpawned = status.toLowerCase().contains("призван") || status.toLowerCase().contains("идет") || status.toLowerCase().contains("координаты") || status.toLowerCase().contains("завершено");
-            int statusColor = isSpawned ? 0xFFFF4D4D : 0xFF22C55E;
-            float maxW = 0;
-            for (String s : wrappedStatus) maxW = Math.max(maxW, getSfuiWidth(s, 7f));
-            float sW = maxW + 10f, sH = statH + 6f;
-            float sX = x + w - sW - 6f, sY = y + padding;
-            RoundedRectShader.draw(context, (int) sX, (int) sY, (int) sW, (int) sH, 5.0f, withAlpha(statusColor, 0.15f * alpha));
-            float curSy = sY + 3f;
-            for (String s : wrappedStatus) {
-                drawSfuiTiny(context, s, sX + 5f, curSy, withAlpha(statusColor, alpha));
-                curSy += 9f;
-            }
-        }
-
-        return y + h + 5f;
-    }
-
-    // =========================================================================
-    //  МИНИ-ПАНЕЛЬ: GUI SETTINGS
-    // =========================================================================
-    private void drawGuiTab(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y - scrolls[SCROLL_GUI];
-
-        ModernSetting blurToggle = ModernSetting.toggle("UseBlurTheme", "Жидкое стекло (Blur)");
-        ModernSetting guiBind = ModernSetting.bind("ClickGuiBind", "Бинд открытия меню");
-        float h1 = 6f + getKronexSettingHeight(blurToggle) + getKronexSettingHeight(guiBind);
-        RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, (int) h1, 7.0f, withAlpha(PANEL_COLOR, alpha));
-        float iy = cy + 3f;
-        iy += drawKronexSetting(context, blurToggle, x + 6, iy, w - 12, alpha);
-        drawKronexSetting(context, guiBind, x + 6, iy, w - 12, alpha);
-        cy += h1 + 6f;
-
-        ModernSetting scrollSound = ModernSetting.toggle("ScrollSound", "Звук при скролле");
-        ModernSetting soundMode = ModernSetting.mode("ModuleSoundMode", "Звуки модулей", "Default", "Sound 1", "Sound 2", "Sound 3", "Sound 4");
-        float h2 = 6f + getKronexSettingHeight(scrollSound) + getKronexSettingHeight(soundMode);
-        RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, (int) h2, 7.0f, withAlpha(PANEL_COLOR, alpha));
-        iy = cy + 3f;
-        iy += drawKronexSetting(context, scrollSound, x + 6, iy, w - 12, alpha);
-        drawKronexSetting(context, soundMode, x + 6, iy, w - 12, alpha);
-        cy += h2 + 6f;
-
-        ModernSetting calloutBind = ModernSetting.bind(CALLOUT_BIND_KEY, "Кнопка вызова");
-        float bindH = getKronexSettingHeight(calloutBind);
-        float h3 = 8f + 9f + 8f + bindH + 3f + 18f + 5f;
-        RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, (int) h3, 7.0f, withAlpha(PANEL_COLOR, alpha));
-        drawSfuiCustom(context, "Позови на мету", x + 6f, cy + 6f, 8f, withAlpha(TEXT_COLOR, alpha));
-        drawSfuiTiny(context, "Уведомит всех в пати", x + 6f, cy + 16f, withAlpha(SUBTEXT_COLOR, alpha));
-        float bindY = cy + 25f;
-        drawKronexSetting(context, calloutBind, x + 6, bindY, w - 12, alpha);
-
-        float callBtnY = bindY + bindH + 3f;
-        int callBtnW = (int) (w - 12f);
-        int callBtnX = (int) (x + 6f);
-        RoundedRectShader.draw(context, callBtnX, (int) callBtnY, callBtnW, 18, 5f, withAlpha(getThemeColor(), 0.85f * alpha));
-        drawSfuiControlCentered(context, "📍 Позвать на мету", x + w / 2f, callBtnY + 5f, withAlpha(0xFFFFFFFF, alpha));
-        settingClickBounds.put("callout_now", new int[]{callBtnX, (int) callBtnY, callBtnW, 18});
-
-        float totalH = h1 + 6f + h2 + 6f + h3;
-        targetScrolls[SCROLL_GUI] = clamp(targetScrolls[SCROLL_GUI], 0f, Math.max(0f, totalH - 260f));
-    }
-
-    // =========================================================================
-    //  МИНИ-ПАНЕЛЬ: CONFIGS
-    // =========================================================================
-    private void drawConfigsTab(DrawContext context, float x, float y, float w, float alpha) {
-        float cy = y - scrolls[SCROLL_CONFIGS];
-
-        RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, 20, 6.0f, withAlpha(configInputFocused ? ELEM_COLOR : PANEL_COLOR, alpha));
-        String display = configInput.isEmpty() ? "Название конфига..." : configInput;
-        drawSfuiTiny(context, display, x + 6f, cy + 6f, withAlpha(configInput.isEmpty() ? SUBTEXT_COLOR : TEXT_COLOR, alpha));
-        settingClickBounds.put("cfg_input", new int[]{(int) x - 2, (int) cy - 2, (int) w + 4, 24});
-        cy += 25f;
-
-        int bw = (int) ((w - 8f) / 2f);
-        settingClickBounds.put("cfg_new", new int[]{(int) x - 2, (int) cy - 2, bw + 4, 22});
-        RoundedRectShader.draw(context, (int) x, (int) cy, bw, 18, 6.0f, withAlpha(PANEL_COLOR, alpha));
-        drawSfuiControlCentered(context, "Создать", x + bw / 2f, cy + 5f, withAlpha(TEXT_COLOR, alpha));
-
-        settingClickBounds.put("cfg_save", new int[]{(int) (x + bw + 8f) - 2, (int) cy - 2, bw + 4, 22});
-        RoundedRectShader.draw(context, (int) (x + bw + 8f), (int) cy, bw, 18, 6.0f, withAlpha(PANEL_COLOR, alpha));
-        drawSfuiControlCentered(context, "Сохранить", x + bw + 8f + bw / 2f, cy + 5f, withAlpha(TEXT_COLOR, alpha));
-        cy += 26f;
-
-        for (String cfg : ClientData.savedConfigs) {
-            boolean selected = cfg.equals(selectedConfig);
-            RoundedRectShader.draw(context, (int) x, (int) cy, (int) w, 20, 6.0f, withAlpha(selected ? ELEM_COLOR : PANEL_COLOR, alpha));
-            drawSfuiTiny(context, clipToWidth(cfg, w - 44f, 7.5f), x + 6f, cy + 6f, withAlpha(TEXT_COLOR, alpha));
-
-            settingClickBounds.put("cfg_sel:" + cfg, new int[]{(int) x - 2, (int) cy - 2, (int) (w - 40f) + 4, 24});
-            settingClickBounds.put("cfg_load:" + cfg, new int[]{(int) (x + w - 34f) - 3, (int) cy + 3 - 3, 14 + 6, 14 + 6});
-            drawSfuiTiny(context, "L", x + w - 30f, cy + 7f, withAlpha(getThemeColor(), alpha));
-            settingClickBounds.put("cfg_del:" + cfg, new int[]{(int) (x + w - 18f) - 3, (int) cy + 3 - 3, 14 + 6, 14 + 6});
-            drawSfuiTiny(context, "X", x + w - 14f, cy + 7f, withAlpha(0xFFFF4D4D, alpha));
-            cy += 24f;
-        }
-        targetScrolls[SCROLL_CONFIGS] = clamp(targetScrolls[SCROLL_CONFIGS], 0f, Math.max(0f, 25f + 26f + ClientData.savedConfigs.size() * 24f - 180f));
-    }
-
-    // =========================================================================
-    //  ОКНО БИНДА — маленькое, рядом с модулем/настройкой, не на весь экран
-    // =========================================================================
-    private void drawBindWindow(DrawContext context, float anim) {
-        boolean useBlur = ClientData.moduleStates.getOrDefault("UseBlurTheme", true);
-
-        float bw = 132f, bh = 70f;
-        float bx = clamp(bindPopupX - bw / 2f, 6f, width - bw - 6f);
-        float by = clamp(bindPopupY - bh - 16f, 6f, height - bh - 6f);
-        float pivotX = bx + bw / 2f, pivotY = by + bh / 2f;
-        float sc = 0.85f + 0.15f * smoothT(anim);
-
-        context.getMatrices().push();
-        context.getMatrices().translate(pivotX, pivotY, 0);
-        context.getMatrices().scale(sc, sc, 1f);
-        context.getMatrices().translate(-pivotX, -pivotY, 0);
-
-        drawTowerBackground(context, bx, by, bw, bh, anim, useBlur);
-
-        String shownName = bindingTarget == null ? "" : bindingTarget;
-        drawMarqueeText(context, "bindpop_title", shownName, bx + 8f, by + 6f, bw - 16f, 8f, withAlpha(TEXT_COLOR, anim), true);
-
-        float promptY;
-        if (isModuleBind) {
-            // Удержание / 1 клик — только для биндов модулей, у ClickGuiBind/CalloutBind/Bind_*
-            // такого понятия нет (BindManager.handleInputEvents всегда триггерит их по фронту).
-            boolean holdMode = bindingTarget != null && ClientData.moduleStates.getOrDefault("HoldMode_" + bindingTarget, false);
-            float segY = by + 20f, segH = 15f, segGap = 3f, segW = (bw - 16f - segGap) / 2f;
-
-            int holdBg = holdMode ? getThemeColor() : ELEM_COLOR;
-            RoundedRectShader.draw(context, (int) (bx + 8f), (int) segY, (int) segW, (int) segH, 5f, withAlpha(holdBg, anim));
-            drawSfuiControlCentered(context, "Удержание", bx + 8f + segW / 2f, segY + 4f, withAlpha(0xFFFFFFFF, anim));
-            settingClickBounds.put("bind_hold_mode", new int[]{(int) (bx + 8f), (int) segY, (int) segW, (int) segH});
-
-            int clickBg = !holdMode ? getThemeColor() : ELEM_COLOR;
-            RoundedRectShader.draw(context, (int) (bx + 8f + segW + segGap), (int) segY, (int) segW, (int) segH, 5f, withAlpha(clickBg, anim));
-            drawSfuiControlCentered(context, "1 клик", bx + 8f + segW + segGap + segW / 2f, segY + 4f, withAlpha(0xFFFFFFFF, anim));
-            settingClickBounds.put("bind_click_mode", new int[]{(int) (bx + 8f + segW + segGap), (int) segY, (int) segW, (int) segH});
-            promptY = segY + segH + 8f;
-        } else {
-            settingClickBounds.remove("bind_hold_mode");
-            settingClickBounds.remove("bind_click_mode");
-            promptY = by + 26f;
-        }
-
-        float pulse = 0.6f + 0.4f * (float) Math.sin(System.currentTimeMillis() / 150.0);
-        drawSfuiControlCentered(context, "Нажми клавишу...", bx + bw / 2f, promptY, withAlpha(getThemeColor(), anim * pulse));
-        drawSfuiTiny(context, "ESC отмена · DEL снять", bx + bw / 2f - getSfuiWidth("ESC отмена · DEL снять", 6f) / 2f, by + bh - 10f, withAlpha(0xFF8A8A96, anim));
-
-        context.getMatrices().pop();
-    }
-
-    // =========================================================================
-    //  ТЕМЫ И БИНДЫ — ВСПОМОГАТЕЛЬНЫЕ
-    // =========================================================================
-    private boolean isPresetActive(String preset) {
-        float[] c1 = getPaletteHsv("Theme Color 1");
-        float[] c2 = getPaletteHsv("Theme Color 2");
-        float[] p1 = ClientData.colorSettings.getOrDefault("ThemePreset_" + preset + "_1", new float[]{-1f, -1f, -1f});
-        float[] p2 = ClientData.colorSettings.getOrDefault("ThemePreset_" + preset + "_2", new float[]{-1f, -1f, -1f});
-        return hsvClose(c1, p1) && hsvClose(c2, p2);
-    }
-
-    private boolean hsvClose(float[] a, float[] b) {
-        return Math.abs(a[0] - b[0]) < 0.01f && Math.abs(a[1] - b[1]) < 0.01f && Math.abs(a[2] - b[2]) < 0.01f;
-    }
-
-    /** "Мазки краски" — два перекрывающихся кружка вместо квадрата с жёстким градиентом. */
-    private void drawPresetPaintBlob(DrawContext context, String preset, float x, float y, float size, float alpha) {
-        float[] hsv1 = ClientData.colorSettings.getOrDefault("ThemePreset_" + preset + "_1", new float[]{0f, 1f, 1f});
-        float[] hsv2 = ClientData.colorSettings.getOrDefault("ThemePreset_" + preset + "_2", hsv1);
-        int rgb1 = 0xFF000000 | (Color.HSBtoRGB(hsv1[0], hsv1[1], hsv1[2]) & 0xFFFFFF);
-        int rgb2 = 0xFF000000 | (Color.HSBtoRGB(hsv2[0], hsv2[1], hsv2[2]) & 0xFFFFFF);
-
-        float blobSize = size * 0.74f;
-        float yOff = (size - blobSize) / 2f;
-        RoundedRectShader.draw(context, (int) x, (int) (y + yOff), (int) blobSize, (int) blobSize, blobSize / 2f, withAlpha(rgb1, alpha));
-        RoundedRectShader.draw(context, (int) (x + size - blobSize), (int) (y + yOff), (int) blobSize, (int) blobSize, blobSize / 2f, withAlpha(rgb2, alpha * 0.9f));
-    }
-
-    private void applyTheme(String n) {
-        float[] c1 = ClientData.colorSettings.getOrDefault("ThemePreset_" + n + "_1", new float[]{0f, 1f, 1f});
-        float[] c2 = ClientData.colorSettings.getOrDefault("ThemePreset_" + n + "_2", c1);
-        ClientData.colorSettings.put("Theme Color 1", new float[]{c1[0], c1[1], c1[2]});
-        ClientData.colorSettings.put("Theme Color 2", new float[]{c2[0], c2[1], c2[2]});
-    }
-
-    private void ensureThemeDefaults() {
-        ensureThemeColor("ThemePreset_Прост белый_1", 0xFFF5F5F5);
-        ensureThemeColor("ThemePreset_Прост белый_2", 0xFFD8D8D8);
-        ensureThemeColor("ThemePreset_Ягодный пунш_1", 0xFFFF2D95);
-        ensureThemeColor("ThemePreset_Ягодный пунш_2", 0xFFC724B1);
-        ensureThemeColor("ThemePreset_Осенний лес_1", 0xFF4CAF50);
-        ensureThemeColor("ThemePreset_Осенний лес_2", 0xFFFF9800);
-        ensureThemeColor("ThemePreset_Безупречный_1", 0xFFFFC46B);
-        ensureThemeColor("ThemePreset_Безупречный_2", 0xFFFFA726);
-        ensureThemeColor("ThemePreset_Сладкие мечты_1", 0xFFFF4569);
-        ensureThemeColor("ThemePreset_Сладкие мечты_2", 0xFF9C27B0);
-        ensureThemeColor("ThemePreset_Космос_1", 0xFF2196F3);
-        ensureThemeColor("ThemePreset_Космос_2", 0xFF7C4DFF);
-        ensureThemeColor("ThemePreset_Закат_1", 0xFFFF7043);
-        ensureThemeColor("ThemePreset_Закат_2", 0xFFFF5252);
-        if (!ClientData.colorSettings.containsKey("Theme Color 1")) ensureThemeColor("Theme Color 1", 0xFFFF2D95);
-        if (!ClientData.colorSettings.containsKey("Theme Color 2")) ensureThemeColor("Theme Color 2", 0xFFC724B1);
-    }
-
-    private void ensureThemeColor(String key, int rgb) {
-        if (!ClientData.colorSettings.containsKey(key)) {
-            float[] hsb = Color.RGBtoHSB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, null);
-            ClientData.colorSettings.put(key, new float[]{hsb[0], hsb[1], hsb[2]});
-        }
-    }
-
-    // ClickGuiBind/CalloutBind/PartyWaypointBind — единственные три ключа, которые
-    // BindManager.handleInputEvents читает НАПРЯМУЮ из ClientData.numSettings в обход
-    // getStoredBindValue (см. пункты 1-3 там же) — держим их тут так же, отдельно.
-    private static final Set<String> RAW_NUM_BIND_KEYS = Set.of("ClickGuiBind", "CalloutBind", "PartyWaypointBind");
-
-    private int getStoredBindValue(String key) {
-        if (key.equals("ClickGuiBind")) {
-            return ClientData.numSettings.getOrDefault(key, (float) GLFW.GLFW_KEY_RIGHT_SHIFT).intValue();
-        }
-        if (RAW_NUM_BIND_KEYS.contains(key)) {
-            return ClientData.numSettings.getOrDefault(key, (float) GLFW.GLFW_KEY_UNKNOWN).intValue();
-        }
-        return BindManager.getStoredBindValue(key);
-    }
-
-    private void setStoredBindValue(String key, int bind) {
-        if (RAW_NUM_BIND_KEYS.contains(key)) {
-            ClientData.numSettings.put(key, (float) bind);
-            return;
-        }
-        BindManager.setStoredBindValue(key, bind);
-    }
-
-    private String formatBindName(int b) {
-        return BindManager.formatBindName(b);
-    }
-
-    // =========================================================================
-    //  ОБЩИЕ УТИЛИТЫ ОТРИСОВКИ/ТЕКСТА
-    // =========================================================================
-    private void drawSfui(DrawContext c, String t, float x, float y, int clr) {
-        if (t != null) SFUI.draw(c.getMatrices(), t, x, y, 8.5f, clr);
-    }
-
-    private void drawSfuiCustom(DrawContext c, String t, float x, float y, float size, int clr) {
-        if (t != null) SFUI.draw(c.getMatrices(), t, x, y, size, clr);
-    }
-
-    private void drawSfuiTiny(DrawContext c, String t, float x, float y, int clr) {
-        if (t != null) SFUI.draw(c.getMatrices(), t, x, y, 6.5f, clr);
-    }
-
-    private void drawSfuiControlCentered(DrawContext c, String t, float cx, float y, int clr) {
-        if (t != null) SFUI.draw(c.getMatrices(), t, cx - getSfuiWidth(t, 8.5f) / 2.0f, y, 8.5f, clr);
-    }
-
-    private int getSfuiWidth(String t, float s) {
-        return (int) SFUI.getWidth(t, s);
-    }
-
-    private String clipToWidth(String text, float maxWidth, float size) {
-        if (text == null) return "";
-        if (getSfuiWidth(text, size) <= maxWidth) return text;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < text.length(); i++) {
-            if (getSfuiWidth(sb.toString() + text.charAt(i) + "…", size) > maxWidth) break;
-            sb.append(text.charAt(i));
-        }
-        return sb + "…";
-    }
-
-    private boolean inside(double mx, double my, double x, double y, double w, double h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
-    }
-
-    private int withAlpha(int c, float a) {
-        if (Float.isNaN(a) || a < 0.0f) a = 0.0f;
-        else if (a > 1.0f) a = 1.0f;
-        return (((int) (((c >> 24) & 255) * a)) << 24) | (c & 0x00FFFFFF);
-    }
-
-    // =========================================================================
-    //  MARQUEE-ТЕКСТ: если строка не помещается — при наведении едет туда-обратно,
-    //  на краю стоит секунду и разворачивается. Не наведено — стоит в начале.
-    // =========================================================================
-    private final Map<String, float[]> marqueeState = new HashMap<>(); // [offset, direction(+-1), holdUntilMillis(0=не ждём)]
-
-    private float updateMarquee(String key, float overflow, boolean hovered) {
-        if (overflow <= 0.5f || !hovered) {
-            marqueeState.remove(key);
-            return 0f;
-        }
-        float[] st = marqueeState.computeIfAbsent(key, k -> new float[]{0f, 1f, 0f});
-        long now = System.currentTimeMillis();
-        if (st[2] > 0f) {
-            if (now >= st[2]) {
-                st[1] = -st[1];
-                st[2] = 0f;
-            }
-            return clamp(st[0], 0f, overflow);
-        }
-        float speed = 0.10f;
-        st[0] += st[1] * speed;
-        if (st[1] > 0 && st[0] >= overflow) {
-            st[0] = overflow;
-            st[2] = now + 1000L;
-        } else if (st[1] < 0 && st[0] <= 0f) {
-            st[0] = 0f;
-            st[2] = now + 1000L;
-        }
-        return clamp(st[0], 0f, overflow);
-    }
-
-    /** Рисует текст с обрезкой по ширине; если не влезает и наведено — едет marquee'ем. */
-    private void drawMarqueeText(DrawContext context, String key, String text, float x, float y, float maxW, float size, int color, boolean hovered) {
-        if (text == null) return;
-        float textW = getSfuiWidth(text, size);
-        float overflow = textW - maxW;
-        if (overflow <= 0.5f || maxW <= 4f) {
-            drawSfuiCustom(context, text, x, y, size, color);
-            return;
-        }
-        float offset = updateMarquee(key, overflow, hovered);
-        context.enableScissor((int) x, (int) (y - 2f), (int) (x + maxW), (int) (y + size + 3f));
-        drawSfuiCustom(context, text, x - offset, y, size, color);
-        context.disableScissor();
-    }
-
-    private float clamp(float v, float min, float max) {
-        return Math.max(min, Math.min(max, v));
-    }
-
-    private int clampInt(int v, int min, int max) {
-        return Math.max(min, Math.min(max, v));
-    }
-
-    private int blendColors(int c1, int c2, float t) {
-        t = clamp(sanitize(t), 0.0f, 1.0f);
-        float it = 1f - t;
-        return (((int) (((c1 >> 24) & 255) * it + ((c2 >> 24) & 255) * t)) << 24)
-                | (((int) (((c1 >> 16) & 255) * it + ((c2 >> 16) & 255) * t)) << 16)
-                | (((int) (((c1 >> 8) & 255) * it + ((c2 >> 8) & 255) * t)) << 8)
-                | ((int) ((c1 & 255) * it + (c2 & 255) * t));
-    }
-
-    private List<String> wrapText(String text, float maxWidth, float size) {
-        List<String> lines = new ArrayList<>();
-        if (text == null || text.isEmpty()) return lines;
-        StringBuilder currentLine = new StringBuilder();
-        for (String word : text.split(" ")) {
-            String testLine = currentLine.length() == 0 ? word : currentLine + " " + word;
-            if (getSfuiWidth(testLine, size) <= maxWidth) {
-                if (currentLine.length() > 0) currentLine.append(" ");
-                currentLine.append(word);
-            } else {
-                if (currentLine.length() > 0) lines.add(currentLine.toString());
-                currentLine = new StringBuilder(word);
-            }
-        }
-        if (currentLine.length() > 0) lines.add(currentLine.toString());
-        return lines;
-    }
-
-    private void drawScaledItem(DrawContext context, Item item, float x, float y, float scale) {
-        context.getMatrices().push();
-        context.getMatrices().scale(scale, scale, 1.0f);
-        context.drawItem(item.getDefaultStack(), Math.round(x / scale), Math.round(y / scale));
-        context.getMatrices().pop();
-    }
-
-    // =========================================================================
-    //  HOLYWORLD JOINER — автонавигация по меню телепорта (без изменений)
-    // =========================================================================
-    public static class HolyWorldJoiner {
-        public static boolean active = false;
-        public static int targetAnarchy = -1;
-        public static int waitTicks = 0;
-        public static int state = 0;
-
-        public static void start(int anNum) {
-            targetAnarchy = anNum;
-            active = true;
-            state = 0;
-            waitTicks = 5;
-            net.minecraft.client.MinecraftClient.getInstance().player.networkHandler.sendCommand("hub");
-        }
-
-        public static void tick() {
-            if (!active) return;
-            net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
-            if (mc.player == null) { active = false; return; }
-            if (waitTicks > 0) { waitTicks--; return; }
-
-            if (state == 0) {
-                mc.player.getInventory().selectedSlot = 0;
-                mc.interactionManager.interactItem(mc.player, net.minecraft.util.Hand.MAIN_HAND);
-                state = 1;
-                waitTicks = 15;
-            } else if (state == 1) {
-                if (mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen<?> screen) {
-                    String title = screen.getTitle().getString();
-                    if (title.contains("Выберите режим")) {
-                        mc.interactionManager.clickSlot(screen.getScreenHandler().syncId, 12, 0, net.minecraft.screen.slot.SlotActionType.PICKUP, mc.player);
-                        state = 2;
-                        waitTicks = 15;
-                    }
-                }
-            } else if (state == 2) {
-                if (mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen<?> screen) {
-                    String title = screen.getTitle().getString();
-                    if (title.contains("Лайт") || title.contains("анархи")) {
-                        int categorySlot = 0;
-                        if (targetAnarchy >= 16 && targetAnarchy <= 31) categorySlot = 1;
-                        else if (targetAnarchy >= 32 && targetAnarchy <= 47) categorySlot = 2;
-                        else if (targetAnarchy >= 48) categorySlot = 3;
-                        mc.interactionManager.clickSlot(screen.getScreenHandler().syncId, categorySlot, 0, net.minecraft.screen.slot.SlotActionType.PICKUP, mc.player);
-                        state = 3;
-                        waitTicks = 12;
-                    }
-                }
-            } else if (state == 3) {
-                if (mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen<?> screen) {
-                    int baseNum = 1;
-                    if (targetAnarchy >= 16 && targetAnarchy <= 31) baseNum = 16;
-                    else if (targetAnarchy >= 32 && targetAnarchy <= 47) baseNum = 32;
-                    else if (targetAnarchy >= 48) baseNum = 48;
-                    int clickSlotIndex = 18 + (targetAnarchy - baseNum);
-                    mc.interactionManager.clickSlot(screen.getScreenHandler().syncId, clickSlotIndex, 0, net.minecraft.screen.slot.SlotActionType.PICKUP, mc.player);
-                    active = false;
-                }
-            }
-        }
-    }
-
-    // =========================================================================
-    //  МЫШЬ / КЛАВИАТУРА
-    // =========================================================================
-    private boolean isClickInsideOpenModeDropdown(double mx, double my) {
-        if (openModeDropdown == null) return false;
-        int[] b1 = settingClickBounds.get("mode_open:" + openModeDropdown);
-        if (b1 != null && inside(mx, my, b1[0], b1[1], b1[2], b1[3])) return true;
-        for (Map.Entry<String, int[]> e : settingClickBounds.entrySet()) {
-            if (e.getKey().startsWith("mode_pick:" + openModeDropdown + ":")) {
-                int[] b = e.getValue();
-                if (inside(mx, my, b[0], b[1], b[2], b[3])) return true;
-            }
-        }
-        return false;
-    }
-
-    private void updateDraggedSlider(double mouseX) {
-        if (draggingSettingSlider == null) return;
-        float[] b = sliderBounds.get(draggingSettingSlider);
-        if (b == null) return;
-        float t = clamp((float) ((mouseX - b[0]) / b[2]), 0.0f, 1.0f);
-        ClientData.numSettings.put(draggingSettingSlider, b[4] + (b[5] - b[4]) * t);
-    }
-
-    private void updateDraggedPad(double mx, double my) {
-        if (draggingPadSetting == null) return;
-        float[] b = padBounds.get(draggingPadSetting);
-        if (b == null) return;
-        float tx = clamp((float) ((mx - b[0]) / b[2]), 0.0f, 1.0f);
-        float ty = 1.0f - clamp((float) ((my - b[1]) / b[3]), 0.0f, 1.0f);
-        String keyY = padKeyYMap.getOrDefault(draggingPadSetting, draggingPadSetting + "Y");
-        ClientData.numSettings.put(draggingPadSetting, b[4] + (b[5] - b[4]) * tx);
-        ClientData.numSettings.put(keyY, b[6] + (b[7] - b[6]) * ty);
-    }
-
-    private void updatePaletteDragMode(double mx, double my) {
-        float[] g = computePaletteGeom(paletteAnimKey);
-        if (g == null) return;
-        float hueY = g[4], hueH = g[5];
-        paletteDragMode = (my >= hueY - 4 && my <= hueY + hueH + 4) ? 2 : 1;
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Бинды в этом клиенте — только с клавиатуры (см. keyPressed). Пока открыто окно
-        // "нажми клавишу", клики мышью просто гасим, чтобы не тыкать в гуи под ним.
-        if (bindingTarget != null) return true;
-
-        if (openModeDropdown != null && !isClickInsideOpenModeDropdown(mouseX, mouseY)) {
-            openModeDropdown = null;
-        }
-
-        // 0) Иконки расширенного острова (Party/Events/GUI/Configs) — работают, пока это окно активно,
-        //    т.к. именно ModernClickGui сейчас ловит все клики мыши.
-        Map<String, float[]> islandIcons = DynamicIslandRenderer.GUI_ICON_BOUNDS;
-        if (islandIcons != null) {
-            for (Map.Entry<String, float[]> e : islandIcons.entrySet()) {
-                float[] b = e.getValue();
-                if (inside(mouseX, mouseY, b[0], b[1], b[2], b[3])) {
-                    activeIslandPanel = e.getKey().equals(activeIslandPanel) ? null : e.getKey();
-                    playSound("click");
-                    return true;
-                }
-            }
-        }
-
-        for (Map.Entry<String, int[]> e : new HashMap<>(settingClickBounds).entrySet()) {
-            int[] b = e.getValue();
-            if (!inside(mouseX, mouseY, b[0], b[1], b[2], b[3])) continue;
-            String id = e.getKey();
-
-            if (id.startsWith("palette:")) {
-                String pid = id.substring("palette:".length());
-                float[] hsv = getPaletteHsv(pid);
-                paletteLive.h = hsv[0];
-                paletteLive.s = hsv[1];
-                paletteLive.v = hsv[2];
-                paletteAnimKey = pid;
-                updatePaletteDragMode(mouseX, mouseY);
-                updatePaletteFromMouse(mouseX, mouseY);
-                return true;
+            rowDrawY += rowH;
+         }
+
+         context.disableScissor();
+      }
+
+      RoundedRectShader.draw(context, col2X, curY, col2W, panelsH, 8.0F, this.withAlpha(cardBg, anim * switchAlpha));
+      if (wpSelected == null) {
+         float midX = col2X + col2W / 2.0F;
+         float midY = curY + panelsH / 2.0F;
+         ModernGuiIcons.draw(context, ModernGuiIcons.Icon.PIN, midX - 12.0F, midY - 24.0F, 24.0F, this.withAlpha(dark ? -12237483 : -5197632, anim * switchAlpha));
+         String emptyHint = "Выберите метку слева для редактирования";
+         float hintW = SFUI.getWidth(emptyHint, 8.5F);
+         SFUI.draw(context, emptyHint, midX - hintW / 2.0F, midY + 8.0F, 8.5F, this.withAlpha(dark ? -10132107 : -7697766, anim * switchAlpha));
+      } else {
+         float edPad = 14.0F;
+         float edY = curY + edPad;
+         int curIconIdx = wpSelected.iconBackgroundIndex % GPS.MARKER_TEXTURES.length;
+         Identifier curIconTex = GPS.MARKER_TEXTURES[curIconIdx];
+         int headBoxSz = 24;
+         float headBoxX = col2X + edPad;
+         RoundedRectShader.draw(context, headBoxX, edY, (float)headBoxSz, (float)headBoxSz, 5.0F, this.withAlpha(dark ? -15000792 : -2170387, anim * switchAlpha));
+         int headAccent = curIconIdx < GPS.MARKER_COLORS.length ? GPS.MARKER_COLORS[curIconIdx] : -11755777;
+         RoundedRectShader.drawOutline(context, headBoxX, edY, (float)headBoxSz, (float)headBoxSz, 5.0F, 1.0F, this.withAlpha(headAccent, anim * switchAlpha));
+         int innerHeadSz = 18;
+         float inHX = headBoxX + (float)(headBoxSz - innerHeadSz) / 2.0F;
+         float inHY = edY + (float)(headBoxSz - innerHeadSz) / 2.0F;
+         GPS.ensureLinearFilter(curIconTex);
+         RenderSystem.enableBlend();
+         RenderSystem.defaultBlendFunc();
+         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, anim * switchAlpha);
+         context.drawTexture(GPS::getSmoothGuiTextured, curIconTex, (int)inHX, (int)inHY, 0.0F, 0.0F, innerHeadSz, innerHeadSz, innerHeadSz, innerHeadSz);
+         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+         String var132 = wpSelected.name != null ? wpSelected.name : "";
+         SFUI.draw(context, "Настройки метки: " + var132, col2X + edPad + 30.0F, edY + 3.0F, 9.0F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
+         String var131 = (new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())).format(new Date(wpSelected.createdAt));
+         String createdDate = "Создана: " + var131;
+         SFUI.draw(context, createdDate, col2X + edPad + 30.0F, edY + 14.0F, 6.8F, this.withAlpha(dark ? -9539970 : -7697766, anim * switchAlpha));
+         edY += 28.0F;
+         SFUI.draw(context, "НАЗВАНИЕ МЕТКИ", col2X + edPad, edY, 6.8F, this.withAlpha(dark ? -8750454 : -7697766, anim * switchAlpha));
+         edY += 10.0F;
+         float nameFieldW = col2W - edPad * 2.0F;
+         float fieldH = 19.0F;
+         int nameFieldBg = wpFocusedField == 1 ? (dark ? -14540238 : -2564888) : (dark ? -2145904606 : -2132219150);
+         RoundedRectShader.draw(context, col2X + edPad, edY, nameFieldW, fieldH, 4.0F, this.withAlpha(nameFieldBg, anim * switchAlpha));
+         if (wpFocusedField == 1) {
+            RoundedRectShader.draw(context, col2X + edPad - 1.0F, edY - 1.0F, nameFieldW + 2.0F, fieldH + 2.0F, 5.0F, this.withAlpha(-11755777, 0.5F * anim * switchAlpha));
+         }
+
+         String shownName = wpEditName;
+         if (wpFocusedField == 1 && System.currentTimeMillis() % 900L < 450L) {
+            shownName = shownName + "|";
+         }
+
+         SFUI.draw(context, shownName.isEmpty() ? "Введите название..." : shownName, col2X + edPad + 8.0F, edY + 5.0F, 7.5F, this.withAlpha(shownName.isEmpty() ? (dark ? -10461072 : -6645080) : (dark ? -1 : -15461352), anim * switchAlpha));
+         this.clickBounds.put("wp_field:name", new int[]{(int)(col2X + edPad), (int)edY, (int)nameFieldW, (int)fieldH});
+         edY += fieldH + 12.0F;
+         SFUI.draw(context, "КООРДИНАТЫ (X / Y / Z)", col2X + edPad, edY, 6.8F, this.withAlpha(dark ? -8750454 : -7697766, anim * switchAlpha));
+         float fillBtnW = 75.0F;
+         float fillBtnH = 13.0F;
+         float fillBtnX = col2X + col2W - edPad - fillBtnW;
+         boolean hFill = this.inside(this.currentMouseX, this.currentMouseY, fillBtnX, edY - 2.0F, fillBtnW, fillBtnH);
+         float hFillA = this.updateHover("wp_fill_cur", hFill);
+         int fillCol = this.interpolateColor(dark ? -2145049291 : -2133468955, dark ? -11755777 : -13796640, hFillA);
+         RoundedRectShader.draw(context, fillBtnX, edY - 2.0F, fillBtnW, fillBtnH, 3.0F, this.withAlpha(fillCol, anim * switchAlpha));
+         float fillTxtW = SFUI.getWidth("Моя позиция", 6.5F);
+         SFUI.draw(context, "Моя позиция", fillBtnX + (fillBtnW - fillTxtW) / 2.0F, edY + 1.5F, 6.5F, this.withAlpha(-1, anim * switchAlpha));
+         this.clickBounds.put("wp_fill_current", new int[]{(int)fillBtnX, (int)(edY - 2.0F), (int)fillBtnW, (int)fillBtnH});
+         edY += 10.0F;
+         float coordGap = 6.0F;
+         float coordW = (nameFieldW - coordGap * 2.0F) / 3.0F;
+         this.drawCoordEditField(context, "X: ", wpEditX, col2X + edPad, edY, coordW, fieldH, wpFocusedField == 2, "wp_field:x", dark, anim * switchAlpha);
+         this.drawCoordEditField(context, "Y: ", wpEditY, col2X + edPad + coordW + coordGap, edY, coordW, fieldH, wpFocusedField == 3, "wp_field:y", dark, anim * switchAlpha);
+         this.drawCoordEditField(context, "Z: ", wpEditZ, col2X + edPad + (coordW + coordGap) * 2.0F, edY, coordW, fieldH, wpFocusedField == 4, "wp_field:z", dark, anim * switchAlpha);
+         edY += fieldH + 12.0F;
+         SFUI.draw(context, "ВЫБЕРИТЕ ИКОНКУ МЕТКИ", col2X + edPad, edY, 6.8F, this.withAlpha(dark ? -8750454 : -7697766, anim * switchAlpha));
+         edY += 11.0F;
+         int tileSz = 24;
+         int tileGap = 6;
+         int cols = 5;
+         String hoveredMarkerName = null;
+         int hoverTooltipX = 0;
+         int hoverTooltipY = 0;
+
+         for(int i = 0; i < GPS.MARKER_TEXTURES.length; ++i) {
+            int tc = i % cols;
+            int tr = i / cols;
+            float tx = col2X + edPad + (float)(tc * (tileSz + tileGap));
+            float ty = edY + (float)(tr * (tileSz + tileGap));
+            boolean isCurrentIcon = wpSelected.iconBackgroundIndex == i;
+            boolean isHovIcon = this.inside(this.currentMouseX, this.currentMouseY, tx, ty, (float)tileSz, (float)tileSz);
+            int iconAccent = i < GPS.MARKER_COLORS.length ? GPS.MARKER_COLORS[i] : -11755777;
+            int tileBg = isCurrentIcon ? (dark ? -14540236 : -2959644) : (isHovIcon ? (dark ? -14934998 : -2038544) : (dark ? -15461346 : -1381132));
+            RoundedRectShader.draw(context, tx, ty, (float)tileSz, (float)tileSz, 5.0F, this.withAlpha(tileBg, anim * switchAlpha));
+            if (isCurrentIcon) {
+               RoundedRectShader.drawOutline(context, tx, ty, (float)tileSz, (float)tileSz, 5.0F, 1.2F, this.withAlpha(iconAccent, anim * switchAlpha));
+            } else if (isHovIcon) {
+               RoundedRectShader.drawOutline(context, tx, ty, (float)tileSz, (float)tileSz, 5.0F, 0.8F, this.withAlpha(1627389951, anim * switchAlpha));
+               if (i < GPS.MARKER_NAMES.length) {
+                  hoveredMarkerName = GPS.MARKER_NAMES[i];
+                  hoverTooltipX = (int)this.currentMouseX + 8;
+                  hoverTooltipY = (int)this.currentMouseY - 14;
+               }
             }
 
-            if (id.equals("callout_now")) {
-                com.lexoravisauls.client.utils.CalloutManager.sendCallout();
-                return true;
-            }
-            if (id.equals("party_create")) {
-                LexoraPartyClient.createParty(net.minecraft.client.MinecraftClient.getInstance());
-                return true;
-            }
-            if (id.equals("party_join") && partyCodeInput.length() == 10) {
-                LexoraPartyClient.requestJoin(net.minecraft.client.MinecraftClient.getInstance(), partyCodeInput);
-                partyCodeInput = "";
-                partyCodeInputFocused = false;
-                return true;
-            }
-            if (id.equals("party_code_input")) {
-                partyCodeInputFocused = true;
-                return true;
-            }
-            if (id.equals("party_cancel_wait")) {
-                LexoraPartyManager.waitingForResponse = false;
-                LexoraPartyManager.waitingCode = null;
-                return true;
-            }
-            if (id.equals("party_leave")) {
-                LexoraPartyClient.leaveParty(net.minecraft.client.MinecraftClient.getInstance());
-                return true;
-            }
+            int pad = 3;
+            int innerTileSz = tileSz - pad * 2;
+            GPS.ensureLinearFilter(GPS.MARKER_TEXTURES[i]);
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, anim * switchAlpha);
+            context.drawTexture(GPS::getSmoothGuiTextured, GPS.MARKER_TEXTURES[i], (int)(tx + (float)pad), (int)(ty + (float)pad), 0.0F, 0.0F, innerTileSz, innerTileSz, innerTileSz, innerTileSz);
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            this.clickBounds.put("wp_icon:" + i, new int[]{(int)tx, (int)ty, tileSz, tileSz});
+         }
 
-            if (id.startsWith("toggle:")) {
-                String key = id.substring("toggle:".length());
-                boolean state = !ClientData.moduleStates.getOrDefault(key, false);
-                ClientData.moduleStates.put(key, state);
-                ConfigManager.saveConfig();
-                playModuleToggleSound(state);
-                return true;
-            }
-            if (id.startsWith("mode_open:")) {
-                String key = id.substring("mode_open:".length());
-                openModeDropdown = key.equals(openModeDropdown) ? null : key;
-                return true;
-            }
-            if (id.startsWith("mode_pick:")) {
-                String rest = id.substring("mode_pick:".length());
-                int sep = rest.indexOf(':');
-                ClientData.modeSettings.put(rest.substring(0, sep), rest.substring(sep + 1));
-                openModeDropdown = null;
-                ConfigManager.saveConfig();
-                return true;
-            }
-            if (id.startsWith("bind_open:")) {
-                bindingTarget = id.substring("bind_open:".length());
-                isModuleBind = false;
-                bindAnim = 0f;
-                bindPopupX = (float) mouseX;
-                bindPopupY = (float) mouseY;
-                return true;
-            }
-            if (id.equals("bind_hold_mode") && bindingTarget != null) {
-                ClientData.moduleStates.put("HoldMode_" + bindingTarget, true);
-                ConfigManager.saveConfig();
-                return true;
-            }
-            if (id.equals("bind_click_mode") && bindingTarget != null) {
-                ClientData.moduleStates.put("HoldMode_" + bindingTarget, false);
-                ConfigManager.saveConfig();
-                return true;
-            }
-            if (id.startsWith("theme:")) {
-                applyTheme(id.substring(6));
-                ConfigManager.saveConfig();
-                return true;
-            }
+         if (hoveredMarkerName != null) {
+            float tw = SFUI.getWidth(hoveredMarkerName, 7.0F);
+            RoundedRectShader.draw(context, (float)(hoverTooltipX - 4), (float)(hoverTooltipY - 2), (float)((int)tw + 8), 13.0F, 4.0F, this.withAlpha(-267382760, anim * switchAlpha));
+            SFUI.draw(context, hoveredMarkerName, (float)hoverTooltipX, (float)hoverTooltipY + 2.5F, 7.0F, this.withAlpha(-1, anim * switchAlpha));
+         }
 
-            if (id.startsWith("ih_toggle:")) {
-                String name = id.substring("ih_toggle:".length());
-                for (Map.Entry<Item, ItemHighlighter.ItemConfig> entry : ItemHighlighter.ITEM_CONFIGS.entrySet()) {
-                    String itemName = ItemHighlighter.ITEM_NAMES.getOrDefault(entry.getKey(), entry.getKey().getName().getString());
-                    if (itemName.equals(name)) {
-                        entry.getValue().enabled = !entry.getValue().enabled;
-                        ConfigManager.saveConfig();
-                        playModuleToggleSound(entry.getValue().enabled);
-                        return true;
-                    }
-                }
-            }
+         edY += (float)(2 * (tileSz + tileGap)) + 12.0F;
+         float actH = 22.0F;
+         float actW = 95.0F;
+         float applyX = col2X + edPad;
+         boolean hApply = this.inside(this.currentMouseX, this.currentMouseY, applyX, edY, actW, actH);
+         float hApplyA = this.updateHover("wp_apply", hApply);
+         int applyCol = this.interpolateColor(-15681151, -13315175, hApplyA);
+         RoundedRectShader.draw(context, applyX, edY, actW, actH, 4.5F, this.withAlpha(applyCol, anim * switchAlpha));
+         float appTxtW = SFUI.getWidth("Применить", 7.5F);
+         SFUI.draw(context, "Применить", applyX + (actW - appTxtW) / 2.0F, edY + 6.5F, 7.5F, this.withAlpha(-1, anim * switchAlpha));
+         this.clickBounds.put("wp_apply", new int[]{(int)applyX, (int)edY, (int)actW, (int)actH});
+         float delX = applyX + actW + 8.0F;
+         float delW = 85.0F;
+         boolean hDelAct = this.inside(this.currentMouseX, this.currentMouseY, delX, edY, delW, actH);
+         float hDelActA = this.updateHover("wp_del_selected", hDelAct);
+         int delActCol = this.interpolateColor(dark ? -2130754492 : 1627341892, -570473404, hDelActA);
+         RoundedRectShader.draw(context, delX, edY, delW, actH, 4.5F, this.withAlpha(delActCol, anim * switchAlpha));
+         float delTxtW = SFUI.getWidth("Удалить", 7.5F);
+         SFUI.draw(context, "Удалить", delX + (delW - delTxtW) / 2.0F, edY + 6.5F, 7.5F, this.withAlpha(-1, anim * switchAlpha));
+         this.clickBounds.put("wp_delete_selected", new int[]{(int)delX, (int)edY, (int)delW, (int)actH});
+      }
+   }
 
-            if (id.equals("gps_in_Имя")) { focusedGpsInput = 1; return true; }
-            if (id.equals("gps_in_X")) { focusedGpsInput = 2; return true; }
-            if (id.equals("gps_in_Z")) { focusedGpsInput = 3; return true; }
-            if (id.equals("gps_add")) {
-                try {
-                    double pX = Double.parseDouble(gpsInputX);
-                    double pZ = Double.parseDouble(gpsInputZ);
-                    String pName = gpsInputName.isEmpty() ? "Метка" : gpsInputName;
-                    double pY = net.minecraft.client.MinecraftClient.getInstance().player != null
-                            ? net.minecraft.client.MinecraftClient.getInstance().player.getY() : 64.0;
-                    com.lexoravisauls.client.utils.GPS.removeWaypoint(pName);
-                    com.lexoravisauls.client.utils.GPS.addWaypoint(pName, pX, pY, pZ);
-                    gpsInputName = "";
-                    gpsInputX = "";
-                    gpsInputZ = "";
-                    focusedGpsInput = 0;
-                } catch (Exception ignored) {
-                }
-                return true;
-            }
-            if (id.startsWith("gps_del:")) {
-                com.lexoravisauls.client.utils.GPS.removeWaypoint(id.substring("gps_del:".length()));
-                return true;
-            }
+   private void drawCoordEditField(DrawContext context, String prefix, String val, float x, float y, float w, float h, boolean focused, String clickKey, boolean dark, float anim) {
+      int bg = focused ? (dark ? -14540238 : -2564888) : (dark ? -2145904606 : -2132219150);
+      RoundedRectShader.draw(context, x, y, w, h, 4.0F, this.withAlpha(bg, anim));
+      if (focused) {
+         RoundedRectShader.draw(context, x - 1.0F, y - 1.0F, w + 2.0F, h + 2.0F, 5.0F, this.withAlpha(-11755777, 0.5F * anim));
+      }
 
-            if (id.equals("cfg_input")) {
-                configInputFocused = true;
-                return true;
-            }
-            if (id.equals("cfg_new")) {
-                if (!configInput.isEmpty()) {
-                    ConfigManager.saveConfig(configInput);
-                    selectedConfig = configInput;
-                    ConfigManager.updateConfigList();
-                }
-                return true;
-            }
-            if (id.equals("cfg_save")) {
-                String n = selectedConfig != null ? selectedConfig : configInput;
-                if (!n.isEmpty()) {
-                    ConfigManager.saveConfig(n);
-                    ConfigManager.updateConfigList();
-                }
-                return true;
-            }
-            if (id.startsWith("cfg_sel:")) {
-                selectedConfig = id.substring("cfg_sel:".length());
-                configInput = selectedConfig;
-                return true;
-            }
-            if (id.startsWith("cfg_load:")) {
-                ConfigManager.loadConfig(id.substring("cfg_load:".length()));
-                return true;
-            }
-            if (id.startsWith("cfg_del:")) {
-                ConfigManager.deleteConfig(id.substring("cfg_del:".length()));
-                selectedConfig = null;
-                ConfigManager.updateConfigList();
-                return true;
-            }
+      SFUI.draw(context, prefix, x + 6.0F, y + 5.0F, 7.5F, this.withAlpha(dark ? -8750454 : -7697766, anim));
+      float prefW = SFUI.getWidth(prefix, 7.5F);
+      String shown = val;
+      if (focused && System.currentTimeMillis() % 900L < 450L) {
+         shown = val + "|";
+      }
 
-            if (id.startsWith("tower_back:")) {
-                String towerId = id.substring("tower_back:".length());
-                if (towerId.equals("Themes")) {
-                    activeIslandPanel = null;
-                } else {
-                    towerOpenModule.remove(towerId);
-                }
-                return true;
-            }
-            if (id.startsWith("modulerow:")) {
-                String rest = id.substring("modulerow:".length());
-                int sep = rest.indexOf(':');
-                String towerId = rest.substring(0, sep);
-                String mod = rest.substring(sep + 1);
-                if (button == 0) {
-                    boolean state = !ClientData.moduleStates.getOrDefault(mod, false);
-                    ClientData.moduleStates.put(mod, state);
-                    playModuleToggleSound(state);
-                    ConfigManager.saveConfig();
-                } else if (button == 1) {
-                    if (moduleHasSettings(mod)) {
-                        towerOpenModule.put(towerId, mod);
-                        towerSettingsScroll.put(towerId, 0f);
-                        openModeDropdown = null;
-                    } else {
-                        shakeStartTime.put(towerId + ":" + mod, System.currentTimeMillis());
-                    }
-                } else if (button == 2) {
-                    bindingTarget = mod;
-                    isModuleBind = true;
-                    bindAnim = 0f;
-                    bindPopupX = (float) mouseX;
-                    bindPopupY = (float) mouseY;
-                    ClientData.moduleStates.put("HoldMode_" + mod, BindManager.getModuleBindMode(mod) == BindManager.BindMode.HOLD);
-                }
-                return true;
-            }
-        }
+      SFUI.draw(context, shown, x + 6.0F + prefW, y + 5.0F, 7.5F, this.withAlpha(dark ? -1 : -15461352, anim));
+      this.clickBounds.put(clickKey, new int[]{(int)x, (int)y, (int)w, (int)h});
+   }
 
-        // Если дошли сюда, ни одно из трёх gps-полей не было нажато (иначе метод уже вернул true выше) — снимаем фокус.
-        focusedGpsInput = 0;
-
-        for (Map.Entry<String, float[]> e : sliderBounds.entrySet()) {
-            if (inside(mouseX, mouseY, e.getValue()[0], e.getValue()[1], e.getValue()[2], e.getValue()[3])) {
-                draggingSettingSlider = e.getKey();
-                updateDraggedSlider(mouseX);
-                return true;
-            }
-        }
-        for (Map.Entry<String, float[]> e : padBounds.entrySet()) {
-            float[] b = e.getValue();
-            if (inside(mouseX, mouseY, b[0], b[1], b[2], b[3])) {
-                draggingPadSetting = e.getKey();
-                updateDraggedPad(mouseX, mouseY);
-                return true;
-            }
-        }
-
-        configInputFocused = false;
-        partyCodeInputFocused = false;
-        return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (paletteAnimKey != null) {
-            updatePaletteDragMode(mouseX, mouseY);
-            updatePaletteFromMouse(mouseX, mouseY);
+   public boolean mouseClicked(double mouseX, double mouseY, int button) {
+      if (this.bindingTarget != null) {
+         if (button == 0) {
+            this.bindingTarget = null;
+            playSound("click");
             return true;
-        }
-        if (draggingSettingSlider != null) {
-            updateDraggedSlider(mouseX);
-            return true;
-        }
-        if (draggingPadSetting != null) {
-            updateDraggedPad(mouseX, mouseY);
-            return true;
-        }
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (paletteAnimKey != null) {
-            paletteAnimKey = null;
-            paletteDragMode = 0;
+         } else if (button == 1) {
+            BindManager.setStoredBindValue(this.bindingTarget, -1);
+            ClientData.moduleBinds.remove(this.bindingTarget);
+            this.bindingTarget = null;
+            playSound("click");
             ConfigManager.saveConfig();
             return true;
-        }
-        if (draggingSettingSlider != null || draggingPadSetting != null) {
-            draggingSettingSlider = null;
-            draggingPadSetting = null;
+         } else {
+            int mouseBindCode = BindManager.encodeMouseBind(button);
+            BindManager.setStoredBindValue(this.bindingTarget, mouseBindCode);
+            ClientData.moduleBinds.put(this.bindingTarget, mouseBindCode);
+            this.bindingTarget = null;
+            playSound("click");
             ConfigManager.saveConfig();
             return true;
-        }
-        return super.mouseReleased(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (bindingTarget != null) return true;
-
-        float guiW = GUI_W, guiH = GUI_H;
-        float gx = (width - guiW) / 2f, gy = (height - guiH) / 2f;
-        float hudX = gx + (TOWER_W + TOWER_GAP) * 2f;
-        float themesX = gx + (TOWER_W + TOWER_GAP) * 3f;
-
-        // ФИКС: если в наведённой башне открыт модуль (towerOpenModule) — колесо должно
-        // крутить панель его настроек (towerSettingsScroll), а не список модулей. Раньше
-        // сюда вообще не заходили: mouseScrolled знал только про targetScrolls (список
-        // модулей), а towerSettingsScroll хоть и honestly читается и клэмпится в рендере
-        // (drawTowerSettingsSlide), выставлять его значение было некому — отсюда "нельзя
-        // пролистать настройки, если тумблеров много".
-        String hoveredTower = null;
-        if (inside(mouseX, mouseY, gx, gy, TOWER_W, guiH)) hoveredTower = "Utils";
-        else if (inside(mouseX, mouseY, gx + TOWER_W + TOWER_GAP, gy, TOWER_W, guiH)) hoveredTower = "Visual";
-        else if (inside(mouseX, mouseY, hudX, gy, TOWER_W, guiH)) hoveredTower = "HUD";
-
-        if (hoveredTower != null && towerOpenModule.containsKey(hoveredTower)) {
-            String openModule = towerOpenModule.get(hoveredTower);
-            // Та же цепочка, что и в drawTower()->contentH и drawTowerSettingsSlide()->sh
-            // (contentH = guiH - HEADER_H - 16, а внутри слайда из неё ещё вычитается 26 под
-            // заголовок с кнопкой "назад") — считаем идентично, чтобы скролл и рендер не
-            // могли разъехаться, как уже было с партиклами.
-            float visibleH = GUI_H - HEADER_H - 16f - 26f;
-            float maxScroll = Math.max(0f, getExpandedTargetHeight(openModule) - visibleH);
-            float scroll = clamp(towerSettingsScroll.getOrDefault(hoveredTower, 0f) + (float) (-verticalAmount * 22.0), 0f, maxScroll);
-            towerSettingsScroll.put(hoveredTower, scroll);
-            return true;
-        }
-
-        int scrollIdx = -1;
-        if ("Utils".equals(hoveredTower)) {
-            scrollIdx = SCROLL_UTILS;
-        } else if ("Visual".equals(hoveredTower)) {
-            scrollIdx = SCROLL_VISUAL;
-        } else if ("HUD".equals(hoveredTower)) {
-            scrollIdx = SCROLL_HUD;
-        } else if (inside(mouseX, mouseY, themesX, gy, TOWER_W, guiH) && activeIslandPanel != null) {
-            scrollIdx = switch (activeIslandPanel) {
-                case "Party" -> SCROLL_PARTY;
-                case "Events" -> SCROLL_EVENTS;
-                case "GUI" -> SCROLL_GUI;
-                case "Configs" -> SCROLL_CONFIGS;
-                default -> -1;
-            };
-        }
-
-        if (scrollIdx == -1) return true;
-
-        float oldTarget = targetScrolls[scrollIdx];
-        targetScrolls[scrollIdx] = clamp(targetScrolls[scrollIdx] + (float) (-verticalAmount * 22.0), 0.0f, 2500f);
-        if (oldTarget != targetScrolls[scrollIdx] && ClientData.moduleStates.getOrDefault("ScrollSound", false)) {
-            playSound("scroll");
-        }
-        return true;
-    }
-
-    @Override
-    public boolean charTyped(char chr, int modifiers) {
-        if (bindingTarget != null) return true;
-        if (configInputFocused) {
-            if (configInput.length() < 20) configInput += chr;
-            return true;
-        }
-        if (partyCodeInputFocused && Character.isDigit(chr) && partyCodeInput.length() < 10) {
-            partyCodeInput += chr;
-            return true;
-        }
-        if (focusedGpsInput == 1) {
-            if (gpsInputName.length() < 18) gpsInputName += chr;
-            return true;
-        }
-        if (focusedGpsInput == 2 && (Character.isDigit(chr) || chr == '-')) {
-            if (gpsInputX.length() < 8) gpsInputX += chr;
-            return true;
-        }
-        if (focusedGpsInput == 3 && (Character.isDigit(chr) || chr == '-')) {
-            if (gpsInputZ.length() < 8) gpsInputZ += chr;
-            return true;
-        }
-        return super.charTyped(chr, modifiers);
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (bindingTarget != null) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                bindingTarget = null;
-            } else if (keyCode == GLFW.GLFW_KEY_DELETE) {
-                if (isModuleBind) {
-                    BindManager.setModuleBind(bindingTarget, GLFW.GLFW_KEY_UNKNOWN, BindManager.getModuleBindMode(bindingTarget));
-                } else {
-                    setStoredBindValue(bindingTarget, GLFW.GLFW_KEY_UNKNOWN);
-                }
-                bindingTarget = null;
-            } else {
-                // Снимаем этот физический код со всего, на чём он мог висеть раньше (другой модуль,
-                // команда, экшн-бинд) — одна клавиша не должна тихо триггерить сразу два действия.
-                BindManager.clearAnyBindOnKeyEverywhere(keyCode, bindingTarget);
-                if (isModuleBind) {
-                    boolean holdMode = ClientData.moduleStates.getOrDefault("HoldMode_" + bindingTarget, false);
-                    BindManager.setModuleBind(bindingTarget, keyCode, holdMode ? BindManager.BindMode.HOLD : BindManager.BindMode.TOGGLE);
-                } else {
-                    setStoredBindValue(bindingTarget, keyCode);
-                }
-                bindingTarget = null;
+         }
+      } else {
+         if (button == 1) {
+            for(Map.Entry<String, int[]> e : this.clickBounds.entrySet()) {
+               String key = (String)e.getKey();
+               int[] b = (int[])e.getValue();
+               if (this.inside((float)mouseX, (float)mouseY, (float)b[0], (float)b[1], (float)b[2], (float)b[3]) && key.startsWith("bind:")) {
+                  String target = key.substring(5);
+                  BindManager.setStoredBindValue(target, -1);
+                  ClientData.moduleBinds.remove(target);
+                  playSound("click");
+                  ConfigManager.saveConfig();
+                  return true;
+               }
             }
-            ConfigManager.saveConfig();
-            return true;
-        }
+         }
 
-        if (configInputFocused && keyCode == GLFW.GLFW_KEY_BACKSPACE && !configInput.isEmpty()) {
-            configInput = configInput.substring(0, configInput.length() - 1);
+         if (button == 0) {
+            if (DynamicIslandRenderer.handlePartyNotifClick(mouseX, mouseY, button)) {
+               playSound("click");
+               return true;
+            }
+
+            if (this.activeColorPickerKey != null) {
+               float hudW = 140.0F;
+               float hudH = 125.0F;
+               float hX = Math.max(10.0F, Math.min(this.colorPickerX, (float)this.width - hudW - 15.0F));
+               float hY = Math.max(10.0F, Math.min(this.colorPickerY, (float)this.height - hudH - 15.0F));
+               float svX = hX + 8.0F;
+               float svY = hY + 8.0F;
+               float svW = hudW - 16.0F;
+               float svH = 62.0F;
+               float hueY = svY + svH + 6.0F;
+               float hueH = 9.0F;
+               if (this.inside((float)mouseX, (float)mouseY, svX, svY, svW, svH)) {
+                  this.draggingSv = true;
+                  this.updateSvFromMouse(mouseX, mouseY, svX, svY, svW, svH);
+                  return true;
+               }
+
+               if (this.inside((float)mouseX, (float)mouseY, svX, hueY - 2.0F, svW, hueH + 4.0F)) {
+                  this.draggingHue = true;
+                  this.updateHueFromMouse(mouseX, svX, svW);
+                  return true;
+               }
+
+               int[] doneB = (int[])this.clickBounds.get("palette_done");
+               if (doneB != null && this.inside((float)mouseX, (float)mouseY, (float)doneB[0], (float)doneB[1], (float)doneB[2], (float)doneB[3])) {
+                  this.activeColorPickerKey = null;
+                  playSound("click");
+                  return true;
+               }
+
+               if (!this.inside((float)mouseX, (float)mouseY, hX - 5.0F, hY - 5.0F, hudW + 10.0F, hudH + 10.0F)) {
+                  this.activeColorPickerKey = null;
+                  playSound("click");
+               }
+
+               return true;
+            }
+
+            if (this.activeDropdownKey != null) {
+               boolean clickedInside = false;
+
+               for(Map.Entry<String, int[]> e : this.clickBounds.entrySet()) {
+                  if (((String)e.getKey()).startsWith("set_mode:")) {
+                     int[] b = (int[])e.getValue();
+                     if (this.inside((float)mouseX, (float)mouseY, (float)b[0], (float)b[1], (float)b[2], (float)b[3])) {
+                        this.handleClickAction((String)e.getKey(), (float)mouseX, (float)mouseY);
+                        clickedInside = true;
+                        break;
+                     }
+                  }
+               }
+
+               if (!clickedInside) {
+                  this.activeDropdownKey = null;
+                  playSound("click");
+               }
+
+               return true;
+            }
+
+            float[] chb = (float[])this.crosshairBounds.get("canvas");
+            if (chb != null && this.inside((float)mouseX, (float)mouseY, chb[0], chb[1], chb[2], chb[3])) {
+               float cellSize = chb[4];
+               int cx = (int)((mouseX - (double)chb[0]) / (double)cellSize);
+               int cy = (int)((mouseY - (double)chb[1]) / (double)cellSize);
+               if (cx >= 0 && cx < 21 && cy >= 0 && cy < 21) {
+                  this.isErasingCrosshair = CustomCrosshairData.MATRIX[cy][cx];
+                  CustomCrosshairData.set(cx, cy, !this.isErasingCrosshair);
+                  this.draggingCrosshair = true;
+                  playSound("click");
+                  return true;
+               }
+            }
+
+            for(Map.Entry<String, int[]> e : this.clickBounds.entrySet()) {
+               String key = (String)e.getKey();
+               int[] b = (int[])e.getValue();
+               if (this.inside((float)mouseX, (float)mouseY, (float)b[0], (float)b[1], (float)b[2], (float)b[3])) {
+                  this.handleClickAction(key, (float)mouseX, (float)mouseY);
+                  return true;
+               }
+            }
+
+            for(Map.Entry<String, float[]> e : this.sliderBounds.entrySet()) {
+               String key = (String)e.getKey();
+               float[] b = (float[])e.getValue();
+               if (this.inside((float)mouseX, (float)mouseY, b[0], b[1], b[2], b[3])) {
+                  this.draggingSlider = key;
+                  this.updateSliderValue(key, (float)mouseX, b);
+                  return true;
+               }
+            }
+
+            for(Map.Entry<String, float[]> e : this.padBounds.entrySet()) {
+               String key = (String)e.getKey();
+               float[] b = (float[])e.getValue();
+               if (this.inside((float)mouseX, (float)mouseY, b[0], b[1], b[2], b[3])) {
+                  this.draggingPad = key;
+                  this.updatePadValue(key, (float)mouseX, (float)mouseY, b);
+                  return true;
+               }
+            }
+
+            this.searchFocused = false;
+            this.partyCodeInputFocused = false;
+            this.configInputFocused = false;
+         }
+
+         return super.mouseClicked(mouseX, mouseY, button);
+      }
+   }
+
+   private void handleClickAction(String key, float clickX, float clickY) {
+      if (key.startsWith("tab:")) {
+         String newTab = key.substring(4);
+         if (!newTab.equals(this.activeTab)) {
+            savedTabColScrolls.put(this.activeTab, (float[])this.colScrolls.clone());
+            savedTabTargetColScrolls.put(this.activeTab, (float[])this.targetColScrolls.clone());
+            savedTabSecondaryScrolls.put(this.activeTab, this.secondaryScroll);
+            savedTabTargetSecondaryScrolls.put(this.activeTab, this.targetSecondaryScroll);
+            this.prevTab = this.activeTab;
+            this.activeTab = newTab;
+            savedActiveTab = newTab;
+            this.tabSwitchAnim = 0.0F;
+            this.activeDropdownKey = null;
+            this.activeColorPickerKey = null;
+            float[] s = (float[])savedTabColScrolls.get(newTab);
+            if (s != null) {
+               System.arraycopy(s, 0, this.colScrolls, 0, 3);
+            } else {
+               Arrays.fill(this.colScrolls, 0.0F);
+            }
+
+            float[] ts = (float[])savedTabTargetColScrolls.get(newTab);
+            if (ts != null) {
+               System.arraycopy(ts, 0, this.targetColScrolls, 0, 3);
+            } else {
+               Arrays.fill(this.targetColScrolls, 0.0F);
+            }
+
+            this.secondaryScroll = (Float)savedTabSecondaryScrolls.getOrDefault(newTab, 0.0F);
+            this.targetSecondaryScroll = (Float)savedTabTargetSecondaryScrolls.getOrDefault(newTab, 0.0F);
+            if (this.activeTab.equals("Search")) {
+               this.searchFocused = true;
+            }
+
+            playSound("click");
+         }
+      } else if (key.equals("input:search")) {
+         this.searchFocused = true;
+         this.partyCodeInputFocused = false;
+         this.configInputFocused = false;
+         playSound("click");
+      } else if (key.equals("action:clear_search")) {
+         this.searchInput = "";
+         this.searchFocused = false;
+         this.tabSwitchAnim = 0.0F;
+         playSound("click");
+      } else if (key.equals("action:theme")) {
+         this.toggleTheme(clickX, clickY);
+      } else if (key.equals("action:lang")) {
+         this.oldLang = GuiLocalization.getLanguage();
+         GuiLocalization.toggleLanguage();
+         this.targetLang = GuiLocalization.getLanguage();
+         this.langSwitchAnim = 0.0F;
+         playSound("click");
+      } else if (key.equals("action:favorites")) {
+         ClientData.onlyFavoritesFilter = !ClientData.onlyFavoritesFilter;
+         this.tabSwitchAnim = 0.0F;
+         playSound("click");
+      } else if (key.equals("action:close")) {
+         this.close();
+      } else if (key.startsWith("cosmetic_sub:")) {
+         cosmeticSubTab = Integer.parseInt(key.substring("cosmetic_sub:".length()));
+         this.targetSecondaryScroll = 0.0F;
+         this.secondaryScroll = 0.0F;
+         this.tabSwitchAnim = 0.0F;
+         if (cosmeticSubTab == 1) {
+            CosmeticManager.getInstance().reloadCustomCapes();
+         }
+
+         playSound("click");
+      } else if (key.equals("cosmetic_cape_toggle")) {
+         CosmeticManager.getInstance().setCustomCapeEnabled(!CosmeticManager.getInstance().isCustomCapeEnabled());
+         playSound("click");
+      } else if (key.equals("cosmetic_reset_all")) {
+         CosmeticManager.getInstance().clearAllEquipped();
+         playSound("click");
+      } else if (key.equals("cosmetic_open_folder")) {
+         CosmeticManager.getInstance().openCustomCapesFolder();
+         playSound("click");
+      } else if (key.startsWith("cosmetic_item:")) {
+         int idx = Integer.parseInt(key.substring("cosmetic_item:".length()));
+
+         for(CosmeticManager.CosmeticEntry entry : CosmeticManager.getInstance().getEntries()) {
+            if (entry.index == idx) {
+               CosmeticManager.getInstance().toggle(entry);
+               playSound("click");
+               break;
+            }
+         }
+      } else if (key.startsWith("evt_tab:")) {
+         this.eventsFilter = key.substring(8);
+         playSound("click");
+      } else if (key.startsWith("hw_join:")) {
+         String code = key.substring(8);
+         ModernClickGui.HolyWorldJoiner.join(code);
+         playSound("click");
+      } else if (key.startsWith("ch_act:")) {
+         switch (key.substring(7)) {
+            case "clear" -> CustomCrosshairData.clear();
+            case "corners" -> CustomCrosshairData.loadCorners();
+            case "dot" -> CustomCrosshairData.loadDot();
+            case "default" -> CustomCrosshairData.loadDefault();
+         }
+
+         CustomCrosshairData.save();
+         playSound("click");
+      } else if (key.startsWith("apply_preset:")) {
+         String[] parts = key.split(":");
+         if (parts.length >= 3) {
+            int c1 = this.parseHex(parts[1]);
+            int c2 = this.parseHex(parts[2]);
+            float[] hsv1 = new float[3];
+            float[] hsv2 = new float[3];
+            Color.RGBtoHSB(c1 >> 16 & 255, c1 >> 8 & 255, c1 & 255, hsv1);
+            Color.RGBtoHSB(c2 >> 16 & 255, c2 >> 8 & 255, c2 & 255, hsv2);
+            ClientData.colorSettings.put("Theme Color 1", hsv1);
+            ClientData.colorSettings.put("Theme Color 2", hsv2);
+            playSound("click");
+         }
+      } else if (key.startsWith("open_palette:")) {
+         this.activeColorPickerKey = key.substring(13);
+         this.colorPickerX = clickX;
+         this.colorPickerY = clickY;
+         playSound("click");
+      } else if (key.startsWith("toggle:")) {
+         String mod = key.substring(7);
+         boolean current = (Boolean)ClientData.moduleStates.getOrDefault(mod, false);
+         ClientData.moduleStates.put(mod, !current);
+         playModuleToggleSound(!current);
+         ConfigManager.saveConfig();
+      } else if (key.startsWith("fav:")) {
+         String mod = key.substring(4);
+         this.toggleModuleFavorite(mod);
+         this.starAnimations.put(mod, 0.0F);
+         playSound("click");
+      } else if (key.startsWith("bind:")) {
+         String target = key.substring(5);
+         this.bindingTarget = target;
+         playSound("click");
+      } else if (key.startsWith("bool:")) {
+         String sKey = key.substring(5);
+         boolean cur = (Boolean)ClientData.moduleStates.getOrDefault(sKey, false);
+         ClientData.moduleStates.put(sKey, !cur);
+         playSound("click");
+         ConfigManager.saveConfig();
+      } else if (key.startsWith("dropdown:")) {
+         String[] parts = key.substring(9).split(":");
+         String sKey = parts[0];
+         String[] opts = parts.length > 1 ? parts[1].split(",") : new String[0];
+         if (this.activeDropdownKey != null && this.activeDropdownKey.equals(sKey)) {
+            this.activeDropdownKey = null;
+         } else {
+            this.activeDropdownKey = sKey;
+            this.activeDropdownOptions = Arrays.asList(opts);
+            this.dropdownScroll = 0.0F;
+            this.targetDropdownScroll = 0.0F;
+            int[] b = (int[])this.clickBounds.get(key);
+            if (b != null) {
+               this.dropdownX = (float)b[0];
+               this.dropdownY = (float)(b[1] + b[3] + 2);
+               this.dropdownW = (float)b[2];
+            }
+         }
+
+         playSound("click");
+      } else if (key.startsWith("set_mode:")) {
+         String[] parts = key.substring(9).split(":");
+         if (parts.length >= 2) {
+            ClientData.modeSettings.put(parts[0], parts[1]);
+            this.activeDropdownKey = null;
+            playSound("click");
+            ConfigManager.saveConfig();
+         }
+      } else if (key.startsWith("color:")) {
+         this.activeColorPickerKey = key.substring(6);
+         this.colorPickerX = clickX;
+         this.colorPickerY = clickY;
+         playSound("click");
+      } else if (key.equals("party:toggle")) {
+         if (LexoraPartyManager.inParty()) {
+            LexoraPartyClient.leaveParty(this.client);
+         } else {
+            LexoraPartyClient.createParty(this.client);
+         }
+
+         playSound("click");
+      } else if (key.equals("input:party_code")) {
+         this.partyCodeInputFocused = true;
+         this.configInputFocused = false;
+         this.searchFocused = false;
+         playSound("click");
+      } else if (key.equals("party:join")) {
+         if (this.partyCodeInput.length() >= 6) {
+            LexoraPartyClient.requestJoin(this.client, this.partyCodeInput);
+            this.partyCodeInput = "";
+            this.partyCodeInputFocused = false;
+            playSound("click");
+         }
+      } else if (key.startsWith("party:accept:")) {
+         String targetUuid = key.substring("party:accept:".length());
+         LexoraPartyClient.respondToRequest(this.client, targetUuid, true);
+         playSound("click");
+      } else if (key.startsWith("party:decline:")) {
+         String targetUuid = key.substring("party:decline:".length());
+         LexoraPartyClient.respondToRequest(this.client, targetUuid, false);
+         playSound("click");
+      } else if (key.equals("input:config")) {
+         this.configInputFocused = true;
+         this.partyCodeInputFocused = false;
+         this.searchFocused = false;
+         playSound("click");
+      } else if (key.equals("btn:create_config")) {
+         if (!this.configInput.isEmpty()) {
+            ConfigManager.saveConfig(this.configInput);
+            this.selectedConfig = this.configInput;
+            this.configInput = "";
+            this.configInputFocused = false;
+            ConfigManager.updateConfigList();
+            playSound("click");
+         }
+      } else if (key.startsWith("cfg_load:")) {
+         String cfg = key.substring(9);
+         ConfigManager.loadConfig(cfg);
+         this.selectedConfig = cfg;
+         playSound("click");
+      } else if (key.startsWith("cfg_save:")) {
+         String cfg = key.substring(9);
+         ConfigManager.saveConfig(cfg);
+         this.selectedConfig = cfg;
+         playSound("click");
+      } else if (key.startsWith("cfg_del:")) {
+         String cfg = key.substring(8);
+         ConfigManager.deleteConfig(cfg);
+         ConfigManager.updateConfigList();
+         playSound("click");
+      } else if (key.equals("btn:gps_clear_all")) {
+         GPS.clearAll();
+         wpSelected = null;
+         ConfigManager.saveConfig();
+         playSound("click");
+      } else if (key.equals("wp:add_new")) {
+         if (this.client != null && this.client.player != null) {
+            double px = (double)Math.round(this.client.player.getX() * 10.0) / 10.0;
+            double py = (double)Math.round(this.client.player.getY() * 10.0) / 10.0;
+            double pz = (double)Math.round(this.client.player.getZ() * 10.0) / 10.0;
+            int var10000 = GPS.waypoints.size();
+            String wpName = "Точка " + (var10000 + 1);
+            GPS.GpsWaypoint newWp = new GPS.GpsWaypoint(wpName, px, py, pz);
+            GPS.waypoints.add(newWp);
+            this.selectWaypointForEdit(newWp);
+            wpFocusedField = 1;
+            ConfigManager.saveConfig();
+         }
+
+         playSound("click");
+      } else if (key.startsWith("wp_select:")) {
+         int idx = Integer.parseInt(key.substring("wp_select:".length()));
+         List<GPS.GpsWaypoint> waypoints = GPS.getWaypoints();
+         if (idx >= 0 && idx < waypoints.size()) {
+            this.selectWaypointForEdit((GPS.GpsWaypoint)waypoints.get(idx));
+         }
+
+         playSound("click");
+      } else if (!key.startsWith("wp_del_row:") && !key.startsWith("gps_del:")) {
+         if (key.equals("wp_field:name")) {
+            wpFocusedField = 1;
+            this.configInputFocused = false;
+            this.partyCodeInputFocused = false;
+            this.searchFocused = false;
+            playSound("click");
+         } else if (key.equals("wp_field:x")) {
+            wpFocusedField = 2;
+            this.configInputFocused = false;
+            this.partyCodeInputFocused = false;
+            this.searchFocused = false;
+            playSound("click");
+         } else if (key.equals("wp_field:y")) {
+            wpFocusedField = 3;
+            this.configInputFocused = false;
+            this.partyCodeInputFocused = false;
+            this.searchFocused = false;
+            playSound("click");
+         } else if (key.equals("wp_field:z")) {
+            wpFocusedField = 4;
+            this.configInputFocused = false;
+            this.partyCodeInputFocused = false;
+            this.searchFocused = false;
+            playSound("click");
+         } else if (key.equals("wp_fill_current")) {
+            if (this.client != null && this.client.player != null) {
+               wpEditX = String.format(Locale.ROOT, "%.0f", this.client.player.getX());
+               wpEditY = String.format(Locale.ROOT, "%.0f", this.client.player.getY());
+               wpEditZ = String.format(Locale.ROOT, "%.0f", this.client.player.getZ());
+            }
+
+            playSound("click");
+         } else if (key.startsWith("wp_icon:")) {
+            int idx = Integer.parseInt(key.substring("wp_icon:".length()));
+            if (wpSelected != null && idx >= 0 && idx < GPS.MARKER_TEXTURES.length) {
+               wpSelected.iconBackgroundIndex = idx;
+               if (idx < GPS.MARKER_COLORS.length) {
+                  wpSelected.color = GPS.MARKER_COLORS[idx];
+               }
+
+               ConfigManager.saveConfig();
+            }
+
+            playSound("click");
+         } else if (key.equals("wp_apply")) {
+            this.commitWaypointEdits();
+            playSound("click");
+         } else if (key.equals("wp_delete_selected")) {
+            if (wpSelected != null) {
+               GPS.waypoints.remove(wpSelected);
+               wpSelected = GPS.waypoints.isEmpty() ? null : (GPS.GpsWaypoint)GPS.waypoints.get(0);
+               this.selectWaypointForEdit(wpSelected);
+               ConfigManager.saveConfig();
+            }
+
+            playSound("click");
+         }
+      } else {
+         String prefix = key.startsWith("wp_del_row:") ? "wp_del_row:" : "gps_del:";
+         int idx = Integer.parseInt(key.substring(prefix.length()));
+         if (idx >= 0 && idx < GPS.waypoints.size()) {
+            GPS.GpsWaypoint removed = (GPS.GpsWaypoint)GPS.waypoints.remove(idx);
+            if (removed == wpSelected) {
+               wpSelected = GPS.waypoints.isEmpty() ? null : (GPS.GpsWaypoint)GPS.waypoints.get(0);
+               this.selectWaypointForEdit(wpSelected);
+            }
+
+            ConfigManager.saveConfig();
+         }
+
+         playSound("click");
+      }
+
+   }
+
+   private void updateSliderValue(String key, float mouseX, float[] b) {
+      float min = b[4];
+      float max = b[5];
+      float norm = Math.max(0.0F, Math.min(1.0F, (mouseX - b[0]) / b[2]));
+      float val = min + norm * (max - min);
+      ClientData.numSettings.put(key, val);
+   }
+
+   private void updatePadValue(String key, float mouseX, float mouseY, float[] b) {
+      float minX = b[4];
+      float maxX = b[5];
+      float minY = b[6];
+      float maxY = b[7];
+      float tx = Math.max(0.0F, Math.min(1.0F, (mouseX - b[0]) / b[2]));
+      float ty = Math.max(0.0F, Math.min(1.0F, (mouseY - b[1]) / b[3]));
+      ClientData.numSettings.put(key, minX + tx * (maxX - minX));
+      String keyY = (String)this.padKeyYMap.getOrDefault(key, key.endsWith("X") ? key.substring(0, key.length() - 1) + "Y" : key + "Y");
+      ClientData.numSettings.put(keyY, maxY - ty * (maxY - minY));
+   }
+
+   public boolean charTyped(char chr, int modifiers) {
+      if (this.searchFocused && chr >= ' ' && this.searchInput.length() < 30) {
+         this.searchInput = this.searchInput + chr;
+         this.tabSwitchAnim = 0.0F;
+         return true;
+      } else if (this.partyCodeInputFocused && Character.isLetterOrDigit(chr) && this.partyCodeInput.length() < 10) {
+         this.partyCodeInput = this.partyCodeInput + chr;
+         return true;
+      } else if (this.configInputFocused && chr >= ' ' && this.configInput.length() < 24) {
+         this.configInput = this.configInput + chr;
+         return true;
+      } else {
+         if (this.activeTab.equals("Waypoints") && wpSelected != null && wpFocusedField > 0) {
+            if (wpFocusedField == 1 && wpEditName.length() < 24) {
+               wpEditName = wpEditName + chr;
+               return true;
+            }
+
+            if (wpFocusedField == 2 && (Character.isDigit(chr) || chr == '-' || chr == '.') && wpEditX.length() < 12) {
+               wpEditX = wpEditX + chr;
+               return true;
+            }
+
+            if (wpFocusedField == 3 && (Character.isDigit(chr) || chr == '-' || chr == '.') && wpEditY.length() < 12) {
+               wpEditY = wpEditY + chr;
+               return true;
+            }
+
+            if (wpFocusedField == 4 && (Character.isDigit(chr) || chr == '-' || chr == '.') && wpEditZ.length() < 12) {
+               wpEditZ = wpEditZ + chr;
+               return true;
+            }
+         }
+
+         return super.charTyped(chr, modifiers);
+      }
+   }
+
+   public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+      if (button == 0) {
+         if (this.activeColorPickerKey != null) {
+            float hudW = 140.0F;
+            float hudH = 125.0F;
+            float hX = Math.max(10.0F, Math.min(this.colorPickerX, (float)this.width - hudW - 15.0F));
+            float hY = Math.max(10.0F, Math.min(this.colorPickerY, (float)this.height - hudH - 15.0F));
+            float svX = hX + 8.0F;
+            float svY = hY + 8.0F;
+            float svW = hudW - 16.0F;
+            float svH = 62.0F;
+            if (this.draggingSv) {
+               this.updateSvFromMouse(mouseX, mouseY, svX, svY, svW, svH);
+               return true;
+            }
+
+            if (this.draggingHue) {
+               this.updateHueFromMouse(mouseX, svX, svW);
+               return true;
+            }
+         }
+
+         if (this.draggingCrosshair) {
+            float[] chb = (float[])this.crosshairBounds.get("canvas");
+            if (chb != null && this.inside((float)mouseX, (float)mouseY, chb[0], chb[1], chb[2], chb[3])) {
+               float cellSize = chb[4];
+               int cx = (int)((mouseX - (double)chb[0]) / (double)cellSize);
+               int cy = (int)((mouseY - (double)chb[1]) / (double)cellSize);
+               if (cx >= 0 && cx < 21 && cy >= 0 && cy < 21) {
+                  CustomCrosshairData.set(cx, cy, !this.isErasingCrosshair);
+                  return true;
+               }
+            }
+         }
+
+         if (this.draggingSlider != null) {
+            float[] b = (float[])this.sliderBounds.get(this.draggingSlider);
+            if (b != null) {
+               this.updateSliderValue(this.draggingSlider, (float)mouseX, b);
+               return true;
+            }
+         }
+
+         if (this.draggingPad != null) {
+            float[] b = (float[])this.padBounds.get(this.draggingPad);
+            if (b != null) {
+               this.updatePadValue(this.draggingPad, (float)mouseX, (float)mouseY, b);
+               return true;
+            }
+         }
+      }
+
+      return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+   }
+
+   public boolean mouseReleased(double mouseX, double mouseY, int button) {
+      if (button == 0) {
+         this.draggingSlider = null;
+         this.draggingPad = null;
+         this.draggingCrosshair = false;
+         this.draggingSv = false;
+         this.draggingHue = false;
+         ConfigManager.saveConfig();
+      }
+
+      return super.mouseReleased(mouseX, mouseY, button);
+   }
+
+   public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      if (this.activeDropdownKey != null) {
+         this.targetDropdownScroll += (float)(verticalAmount * 18.0);
+         return true;
+      } else if (!this.activeTab.equals("Events") && !this.activeTab.equals("Configs") && !this.activeTab.equals("Themes") && !this.activeTab.equals("Settings") && !this.activeTab.equals("Friends") && !this.activeTab.equals("Waypoints") && !this.activeTab.equals("Cosmetics")) {
+         if (this.activeTab.equals("All") || this.activeTab.equals("HUD") || this.activeTab.equals("Visual") || this.activeTab.equals("Utils") || this.activeTab.equals("Search")) {
+            float guiX = (float)(this.width - 660) / 2.0F;
+            float contentX = guiX + 135.0F;
+            float contentW = 525.0F;
+            float colW = (contentW - 16.0F) / 3.0F;
+
+            for(int i = 0; i < 3; ++i) {
+               float colX = contentX + 8.0F + (float)i * (colW + 8.0F);
+               if (this.inside((float)mouseX, (float)mouseY, colX, (float)(this.height - 360) / 2.0F + 30.0F, colW, 330.0F)) {
+                  float[] var10000 = this.targetColScrolls;
+                  var10000[i] += (float)(verticalAmount * 24.0);
+                  return true;
+               }
+            }
+         }
+
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+      } else {
+         this.targetSecondaryScroll += (float)(verticalAmount * 28.0);
+         return true;
+      }
+   }
+
+   public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+      if (this.bindingTarget != null) {
+         if (keyCode != 256 && keyCode != 261) {
+            BindManager.setStoredBindValue(this.bindingTarget, keyCode);
+            ClientData.moduleBinds.put(this.bindingTarget, keyCode);
+         } else {
+            BindManager.setStoredBindValue(this.bindingTarget, -1);
+            ClientData.moduleBinds.remove(this.bindingTarget);
+         }
+
+         this.bindingTarget = null;
+         playSound("click");
+         ConfigManager.saveConfig();
+         return true;
+      } else {
+         if (this.searchFocused) {
+            if (keyCode == 259 && !this.searchInput.isEmpty()) {
+               this.searchInput = this.searchInput.substring(0, this.searchInput.length() - 1);
+               this.tabSwitchAnim = 0.0F;
+               return true;
+            }
+
+            if (keyCode == 257 || keyCode == 256) {
+               this.searchFocused = false;
+               return true;
+            }
+         }
+
+         if (this.partyCodeInputFocused) {
+            if (keyCode == 259 && !this.partyCodeInput.isEmpty()) {
+               this.partyCodeInput = this.partyCodeInput.substring(0, this.partyCodeInput.length() - 1);
+               return true;
+            }
+
+            if (keyCode == 257) {
+               this.partyCodeInputFocused = false;
+               if (this.partyCodeInput.length() >= 6) {
+                  LexoraPartyClient.requestJoin(this.client, this.partyCodeInput);
+                  this.partyCodeInput = "";
+               }
+
+               return true;
+            }
+
+            if (keyCode == 256) {
+               this.partyCodeInputFocused = false;
+               return true;
+            }
+         }
+
+         if (this.configInputFocused) {
+            if (keyCode == 259 && !this.configInput.isEmpty()) {
+               this.configInput = this.configInput.substring(0, this.configInput.length() - 1);
+               return true;
+            }
+
+            if (keyCode == 257) {
+               this.configInputFocused = false;
+               if (!this.configInput.isEmpty()) {
+                  ConfigManager.saveConfig(this.configInput);
+                  this.selectedConfig = this.configInput;
+                  this.configInput = "";
+                  ConfigManager.updateConfigList();
+               }
+
+               return true;
+            }
+
+            if (keyCode == 256) {
+               this.configInputFocused = false;
+               return true;
+            }
+         }
+
+         if (this.activeTab.equals("Waypoints") && wpSelected != null && wpFocusedField > 0) {
+            if (keyCode == 259) {
+               if (wpFocusedField == 1 && !wpEditName.isEmpty()) {
+                  wpEditName = wpEditName.substring(0, wpEditName.length() - 1);
+                  return true;
+               }
+
+               if (wpFocusedField == 2 && !wpEditX.isEmpty()) {
+                  wpEditX = wpEditX.substring(0, wpEditX.length() - 1);
+                  return true;
+               }
+
+               if (wpFocusedField == 3 && !wpEditY.isEmpty()) {
+                  wpEditY = wpEditY.substring(0, wpEditY.length() - 1);
+                  return true;
+               }
+
+               if (wpFocusedField == 4 && !wpEditZ.isEmpty()) {
+                  wpEditZ = wpEditZ.substring(0, wpEditZ.length() - 1);
+                  return true;
+               }
+            }
+
+            if (keyCode == 257) {
+               this.commitWaypointEdits();
+               wpFocusedField = 0;
+               return true;
+            }
+
+            if (keyCode == 256) {
+               wpFocusedField = 0;
+               return true;
+            }
+         }
+
+         if (keyCode == 256) {
+            this.close();
             return true;
-        }
-        if (partyCodeInputFocused && keyCode == GLFW.GLFW_KEY_BACKSPACE && !partyCodeInput.isEmpty()) {
-            partyCodeInput = partyCodeInput.substring(0, partyCodeInput.length() - 1);
-            return true;
-        }
-        if (partyCodeInputFocused && keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            partyCodeInputFocused = false;
-            return true;
-        }
-        if (focusedGpsInput == 1 && keyCode == GLFW.GLFW_KEY_BACKSPACE && !gpsInputName.isEmpty()) {
-            gpsInputName = gpsInputName.substring(0, gpsInputName.length() - 1);
-            return true;
-        }
-        if (focusedGpsInput == 2 && keyCode == GLFW.GLFW_KEY_BACKSPACE && !gpsInputX.isEmpty()) {
-            gpsInputX = gpsInputX.substring(0, gpsInputX.length() - 1);
-            return true;
-        }
-        if (focusedGpsInput == 3 && keyCode == GLFW.GLFW_KEY_BACKSPACE && !gpsInputZ.isEmpty()) {
-            gpsInputZ = gpsInputZ.substring(0, gpsInputZ.length() - 1);
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            closing = true;
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
+         } else {
+            return super.keyPressed(keyCode, scanCode, modifiers);
+         }
+      }
+   }
+
+   private String getAnimatedText(String key, String targetText) {
+      if (targetText == null) {
+         return "";
+      } else if (this.langSwitchAnim >= 1.0F) {
+         return targetText;
+      } else {
+         int len = targetText.length();
+         int visibleChars = Math.max(1, (int)((float)len * this.langSwitchAnim));
+         return targetText.substring(0, Math.min(len, visibleChars));
+      }
+   }
+
+   private List<String> getFilteredModules() {
+      List<String> list = new ArrayList();
+      if (!this.searchInput.isEmpty()) {
+         list.addAll(HUD_MODULES);
+         list.addAll(VISUAL_MODULES);
+         list.addAll(UTILS_MODULES);
+         list.removeIf((m) -> !m.toLowerCase().contains(this.searchInput.toLowerCase()) && !GuiLocalization.getModuleTitle(m).toLowerCase().contains(this.searchInput.toLowerCase()));
+      } else {
+         switch (this.activeTab) {
+            case "All":
+               list.addAll(HUD_MODULES);
+               list.addAll(VISUAL_MODULES);
+               list.addAll(UTILS_MODULES);
+               break;
+            case "HUD":
+               list.addAll(HUD_MODULES);
+               break;
+            case "Visual":
+               list.addAll(VISUAL_MODULES);
+               break;
+            case "Utils":
+               list.addAll(UTILS_MODULES);
+               break;
+            case "Search":
+               list.addAll(HUD_MODULES);
+               list.addAll(VISUAL_MODULES);
+               list.addAll(UTILS_MODULES);
+         }
+      }
+
+      if (ClientData.onlyFavoritesFilter) {
+         list.removeIf((m) -> !this.isModuleFavorite(m));
+      }
+
+      return list;
+   }
+
+   private boolean isModuleFavorite(String mod) {
+      return ClientData.favorites.contains(mod);
+   }
+
+   private void toggleModuleFavorite(String mod) {
+      if (ClientData.favorites.contains(mod)) {
+         ClientData.favorites.remove(mod);
+      } else {
+         ClientData.favorites.add(mod);
+      }
+
+   }
+
+   private ModernGuiIcons.Icon getModuleIcon(String mod) {
+      if (VISUAL_MODULES.contains(mod)) {
+         return ModernGuiIcons.Icon.WAND;
+      } else if (HUD_MODULES.contains(mod)) {
+         return ModernGuiIcons.Icon.MONITOR;
+      } else {
+         return UTILS_MODULES.contains(mod) ? ModernGuiIcons.Icon.WRENCH : ModernGuiIcons.Icon.WRENCH;
+      }
+   }
+
+   private boolean inside(float mx, float my, float x, float y, float w, float h) {
+      return mx >= x && mx <= x + w && my >= y && my <= y + h;
+   }
+
+   private int withAlpha(int color, float alpha) {
+      int a = Math.max(0, Math.min(255, (int)((float)(color >>> 24 & 255) * alpha)));
+      return a << 24 | color & 16777215;
+   }
+
+   private int interpolateColor(int c1, int c2, float ratio) {
+      ratio = Math.max(0.0F, Math.min(1.0F, ratio));
+      int a1 = c1 >>> 24 & 255;
+      int r1 = c1 >>> 16 & 255;
+      int g1 = c1 >>> 8 & 255;
+      int b1 = c1 & 255;
+      int a2 = c2 >>> 24 & 255;
+      int r2 = c2 >>> 16 & 255;
+      int g2 = c2 >>> 8 & 255;
+      int b2 = c2 & 255;
+      int a = (int)((float)a1 + (float)(a2 - a1) * ratio);
+      int r = (int)((float)r1 + (float)(r2 - r1) * ratio);
+      int g = (int)((float)g1 + (float)(g2 - g1) * ratio);
+      int b = (int)((float)b1 + (float)(b2 - b1) * ratio);
+      return a << 24 | r << 16 | g << 8 | b;
+   }
+
+   @Environment(EnvType.CLIENT)
+   public static class HolyWorldJoiner {
+      private static String targetServer = null;
+      private static int delayTicks = 0;
+
+      public static void join(String serverCode) {
+         targetServer = serverCode;
+         delayTicks = 5;
+      }
+
+      public static void tick() {
+         if (targetServer != null && delayTicks > 0) {
+            --delayTicks;
+            if (delayTicks <= 0) {
+               MinecraftClient mc = MinecraftClient.getInstance();
+               if (mc.player != null && mc.getNetworkHandler() != null) {
+                  mc.getNetworkHandler().sendChatCommand("anarchy " + targetServer);
+               }
+
+               targetServer = null;
+            }
+         }
+
+      }
+   }
 }

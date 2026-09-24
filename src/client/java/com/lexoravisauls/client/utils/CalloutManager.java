@@ -123,7 +123,51 @@ public final class CalloutManager {
     }
 
     // =========================================================================
-    //  Отправить callout (биндится на кнопку)
+    //  Дедупликация и защита от эхо (Recent Marks)
+    // =========================================================================
+    public static final class RecentMark {
+        public final String name;
+        public final int blockX, blockZ;
+        public final long time;
+
+        public RecentMark(String name, double x, double z, long time) {
+            this.name = name != null ? name.toLowerCase(java.util.Locale.ROOT) : "";
+            this.blockX = (int) Math.round(x);
+            this.blockZ = (int) Math.round(z);
+            this.time = time;
+        }
+
+        public boolean matches(String otherName, double ox, double oz, long now) {
+            if (now - time > 12_000L) return false;
+            String on = otherName != null ? otherName.toLowerCase(java.util.Locale.ROOT) : "";
+            if (name.equals(on) || on.contains(name) || name.contains(on)) {
+                int obx = (int) Math.round(ox);
+                int obz = (int) Math.round(oz);
+                return Math.abs(blockX - obx) <= 8 && Math.abs(blockZ - obz) <= 8;
+            }
+            return false;
+        }
+    }
+
+    private static final java.util.List<RecentMark> recentMarks = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public static boolean isRecentPartyMark(String name, double x, double z) {
+        long now = System.currentTimeMillis();
+        recentMarks.removeIf(m -> now - m.time > 15_000L);
+        for (RecentMark m : recentMarks) {
+            if (m.matches(name, x, z, now)) return true;
+        }
+        return false;
+    }
+
+    public static void recordPartyMark(String name, double x, double z) {
+        long now = System.currentTimeMillis();
+        recentMarks.removeIf(m -> now - m.time > 15_000L);
+        recentMarks.add(new RecentMark(name, x, z, now));
+    }
+
+    // =========================================================================
+    //  Отправить callout (вызывается из LexoraPartyClient.sendPartyHelp)
     // =========================================================================
     public static void sendCallout() {
         MinecraftClient mc = MinecraftClient.getInstance();
@@ -136,9 +180,6 @@ public final class CalloutManager {
 
         long now = System.currentTimeMillis();
         if (now - lastSendMs < SEND_CD) {
-            NotifManager.show("Callout", "Подождите " +
-                            ((SEND_CD - (now - lastSendMs)) / 1000 + 1) + " сек",
-                    NotifManager.NotifType.WARNING);
             return;
         }
         lastSendMs = now;
@@ -162,17 +203,13 @@ public final class CalloutManager {
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Lexora/1.0")
                 .header("Accept", "application/json, text/plain, */*")
-                .header("X-Lexora-Secret", "LexoraAdmin2026") // <--- НАШ VIP ПАРОЛЬ
+                .header("X-Lexora-Secret", "LexoraAdmin2026")
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
         HTTP.sendAsync(req, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(resp -> {
-                    if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
-                        mc.execute(() -> NotifManager.show(
-                                "Callout", "Сигнал отправлен пати!",
-                                NotifManager.NotifType.SUCCESS));
-                    } else {
+                    if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
                         System.err.println("[Callout] Сервер вернул ошибку: " + resp.statusCode() + " " + resp.body());
                     }
                 })
@@ -201,7 +238,7 @@ public final class CalloutManager {
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Lexora/1.0")
                 .header("Accept", "application/json, text/plain, */*")
-                .header("X-Lexora-Secret", "LexoraAdmin2026") // <--- НАШ VIP ПАРОЛЬ
+                .header("X-Lexora-Secret", "LexoraAdmin2026")
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
@@ -216,7 +253,6 @@ public final class CalloutManager {
 
                         mc.execute(() -> {
                             // Пока ответ летел по сети, игрок мог выйти из пати
-                            // или сменить его — в этом случае просто игнорируем.
                             if (!LexoraPartyManager.inParty() || !code.equals(LexoraPartyManager.partyCode)) {
                                 return;
                             }
@@ -225,23 +261,39 @@ public final class CalloutManager {
                                 JsonObject obj = arr.get(i).getAsJsonObject();
                                 int    id   = obj.get("id").getAsInt();
                                 String name = obj.get("name").getAsString();
+                                String senderUuid = obj.has("uuid") ? obj.get("uuid").getAsString() : "";
 
                                 if (id > lastSignalId) lastSignalId = id;
+
+                                // 1. Защита от эхо — пропускаем свой собственный сигнал
+                                if (myUuid.equalsIgnoreCase(senderUuid) || (mc.player != null && mc.player.getName().getString().equalsIgnoreCase(name))) {
+                                    continue;
+                                }
 
                                 double x = obj.get("x").getAsDouble();
                                 double y = obj.get("y").getAsDouble();
                                 double z = obj.get("z").getAsDouble();
 
-                                activeNotif = new CalloutNotif(name, obj.get("uuid").getAsString());
+                                // 2. Защита от дублирования меток
+                                if (isRecentPartyMark(name, x, z)) {
+                                    continue;
+                                }
+                                recordPartyMark(name, x, z);
 
-                                String markName = name + " (callout)";
+                                // 3. Активируем Dynamic Island
+                                activeNotif = new CalloutNotif(name, senderUuid);
+
+                                // 4. Ставим ровно одну красивую GPS-метку
+                                String markName = "Хелпа: " + name;
                                 GPS.addCalloutWaypoint(markName, x, y, z);
 
+                                // 5. Ровно один чистый звук колокольчика
                                 if (mc.player != null) {
-                                    mc.player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), 1f, 0.8f);
+                                    mc.player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), 1f, 1.0f);
                                 }
 
-                                NotifManager.show("Позывной", name + " зовёт на мету!", NotifManager.NotifType.WARNING);
+                                // 6. Ровно одно понятное Toast-уведомление
+                                NotifManager.show("Метка в пати", name + " просит о помощи!", NotifManager.NotifType.WARNING);
                             }
                         });
                     } catch (Exception ignored) {}

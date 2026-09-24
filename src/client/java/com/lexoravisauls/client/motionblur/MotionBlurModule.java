@@ -23,7 +23,6 @@ public class MotionBlurModule {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
-        MotionReBlur.LOGGER.info("Motion Blur " + (enabled ? "enabled" : "disabled"));
     }
 
     public float getStrength() {
@@ -33,7 +32,6 @@ public class MotionBlurModule {
     public void setStrength(float strength) {
         this.strength = Math.max(0.0f, Math.min(4.0f, strength));
         shader.updateBlurStrength(this.strength);
-        MotionReBlur.LOGGER.info("Motion Blur strength set to " + this.strength);
     }
 
     public boolean isUseRRC() {
@@ -42,7 +40,6 @@ public class MotionBlurModule {
 
     public void setUseRRC(boolean useRRC) {
         this.useRRC = useRRC;
-        MotionReBlur.LOGGER.info("Refresh Rate Scaling " + (useRRC ? "enabled" : "disabled"));
     }
 
     public int getQuality() {
@@ -51,7 +48,6 @@ public class MotionBlurModule {
 
     public void setQuality(int quality) {
         this.quality = Math.max(0, Math.min(3, quality));
-        MotionReBlur.LOGGER.info("Motion Blur quality set to " + getQualityName());
     }
 
     public String getQualityName() {

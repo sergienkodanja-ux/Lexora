@@ -22,10 +22,8 @@ public class AnimationLoader {
 
         // Сторонние (Emotecraft / Bedrock)
         loadAnimation("clap", "clap.json");
-        loadAnimation("club_penguin_dance", "club_penguin_dance.json");
         loadAnimation("crying", "crying.json");
         loadAnimation("here", "here.json");
-        loadAnimation("kazotsky_kick", "kazotsky_kick.json");
         loadAnimation("palm", "palm.json");
         loadAnimation("point", "point.json");
         loadAnimation("roblox_potion_dance", "roblox_potion_dance.json");
@@ -73,6 +71,7 @@ public class AnimationLoader {
         JsonObject animData = animationsNode.getAsJsonObject(animKey);
 
         LexoraAnimation lexAnim = new LexoraAnimation();
+        lexAnim.isEmotecraft = false;
         lexAnim.length = animData.get("animation_length").getAsFloat();
 
         if (animData.has("loop")) {
@@ -117,15 +116,13 @@ public class AnimationLoader {
                 float z = vector.get(2).getAsFloat();
 
                 if (isPos) {
-                    sortedFrames.put(time, new LexoraAnimation.Keyframe(time, -x, -y, z));
+                    sortedFrames.put(time, new LexoraAnimation.Keyframe(time, -x, -y, z, "LINEAR"));
                 } else {
                     boolean isLeg = boneName.equalsIgnoreCase("right_leg") || boneName.equalsIgnoreCase("left_leg");
                     if (isLeg) {
-                        // Инверсия осей Y и Z применяются ИСКЛЮЧИТЕЛЬНО для ног
-                        sortedFrames.put(time, new LexoraAnimation.Keyframe(time, x, -y, -z));
+                        sortedFrames.put(time, new LexoraAnimation.Keyframe(time, x, -y, -z, "LINEAR"));
                     } else {
-                        // Для тела, головы и рук сохраняются стандартные чистые углы Bedrock
-                        sortedFrames.put(time, new LexoraAnimation.Keyframe(time, x, y, z));
+                        sortedFrames.put(time, new LexoraAnimation.Keyframe(time, x, y, z, "LINEAR"));
                     }
                 }
             }
@@ -142,13 +139,23 @@ public class AnimationLoader {
         return null;
     }
 
+    private static class ChannelEntry {
+        float val;
+        String easing;
+
+        ChannelEntry(float val, String easing) {
+            this.val = val;
+            this.easing = easing;
+        }
+    }
+
     private static class BoneChannelTimeline {
-        TreeMap<Float, Float> pitch = new TreeMap<>();
-        TreeMap<Float, Float> yaw   = new TreeMap<>();
-        TreeMap<Float, Float> roll  = new TreeMap<>();
-        TreeMap<Float, Float> x     = new TreeMap<>();
-        TreeMap<Float, Float> y     = new TreeMap<>();
-        TreeMap<Float, Float> z     = new TreeMap<>();
+        TreeMap<Float, ChannelEntry> pitch = new TreeMap<>();
+        TreeMap<Float, ChannelEntry> yaw   = new TreeMap<>();
+        TreeMap<Float, ChannelEntry> roll  = new TreeMap<>();
+        TreeMap<Float, ChannelEntry> x     = new TreeMap<>();
+        TreeMap<Float, ChannelEntry> y     = new TreeMap<>();
+        TreeMap<Float, ChannelEntry> z     = new TreeMap<>();
     }
 
     private static void parseEmotecraftFormat(String id, JsonObject root) {
@@ -176,6 +183,7 @@ public class AnimationLoader {
         }
 
         LexoraAnimation lexAnim = new LexoraAnimation();
+        lexAnim.isEmotecraft = true;
         lexAnim.length = lengthInSeconds;
         lexAnim.isLoop = isLoop;
         lexAnim.returnTime = returnTime;
@@ -190,9 +198,19 @@ public class AnimationLoader {
                 if (!move.has("tick")) continue;
 
                 float time = move.get("tick").getAsFloat() * 0.05f;
+                String easing = move.has("easing") ? move.get("easing").getAsString() : "LINEAR";
+
+                float rootYaw = 0f;
+                if (move.has("body") && move.get("body").isJsonObject()) {
+                    JsonObject bObj = move.getAsJsonObject("body");
+                    if (bObj.has("yaw")) {
+                        rootYaw = bObj.get("yaw").getAsFloat();
+                        if (!isDegrees) rootYaw = (float) Math.toDegrees(rootYaw);
+                    }
+                }
 
                 for (String key : move.keySet()) {
-                    if (key.equals("tick") || key.equals("easing") || key.equals("turn")) continue;
+                    if (key.equals("tick") || key.equals("easing") || key.equals("turn") || key.equals("body")) continue;
                     JsonElement boneElem = move.get(key);
                     if (!boneElem.isJsonObject()) continue;
 
@@ -205,34 +223,37 @@ public class AnimationLoader {
                     if (boneObj.has("pitch")) {
                         float val = boneObj.get("pitch").getAsFloat();
                         if (!isDegrees) val = (float) Math.toDegrees(val);
-                        timeline.pitch.put(time, val);
+                        timeline.pitch.put(time, new ChannelEntry(val, easing));
                     }
                     if (boneObj.has("yaw")) {
                         float val = boneObj.get("yaw").getAsFloat();
                         if (!isDegrees) val = (float) Math.toDegrees(val);
-                        timeline.yaw.put(time, val);
+                        if (targetBone.equals("body")) val += rootYaw;
+                        timeline.yaw.put(time, new ChannelEntry(val, easing));
+                    } else if (targetBone.equals("body") && rootYaw != 0f) {
+                        timeline.yaw.put(time, new ChannelEntry(rootYaw, easing));
                     }
+
                     if (boneObj.has("roll")) {
                         float val = boneObj.get("roll").getAsFloat();
                         if (!isDegrees) val = (float) Math.toDegrees(val);
-                        timeline.roll.put(time, val);
+                        timeline.roll.put(time, new ChannelEntry(val, easing));
                     }
 
                     float defX = getEmotecraftDefaultX(targetBone);
                     float defY = getEmotecraftDefaultY(targetBone);
-                    float defZ = getEmotecraftDefaultZ(targetBone);
 
                     if (boneObj.has("x")) {
                         float val = boneObj.get("x").getAsFloat();
-                        timeline.x.put(time, val - defX);
+                        timeline.x.put(time, new ChannelEntry(val - defX, easing));
                     }
                     if (boneObj.has("y")) {
                         float val = boneObj.get("y").getAsFloat();
-                        timeline.y.put(time, val - defY);
+                        timeline.y.put(time, new ChannelEntry(-(val - defY), easing));
                     }
                     if (boneObj.has("z")) {
                         float val = boneObj.get("z").getAsFloat();
-                        timeline.z.put(time, val - defZ);
+                        timeline.z.put(time, new ChannelEntry(val, easing));
                     }
                 }
             }
@@ -255,16 +276,16 @@ public class AnimationLoader {
             LexoraAnimation.BoneAnimation boneAnim = new LexoraAnimation.BoneAnimation();
 
             for (float t : allTimes) {
-                float p  = sampleChannel(timeline.pitch, t, 0f);
-                float yw = sampleChannel(timeline.yaw,   t, 0f);
-                float r  = sampleChannel(timeline.roll,  t, 0f);
+                ChannelEntry p  = sampleChannel(timeline.pitch, t, 0f);
+                ChannelEntry yw = sampleChannel(timeline.yaw,   t, 0f);
+                ChannelEntry r  = sampleChannel(timeline.roll,  t, 0f);
 
-                float px = sampleChannel(timeline.x, t, 0f);
-                float py = sampleChannel(timeline.y, t, 0f);
-                float pz = sampleChannel(timeline.z, t, 0f);
+                ChannelEntry px = sampleChannel(timeline.x, t, 0f);
+                ChannelEntry py = sampleChannel(timeline.y, t, 0f);
+                ChannelEntry pz = sampleChannel(timeline.z, t, 0f);
 
-                boneAnim.rotationKeyframes.add(new LexoraAnimation.Keyframe(t, p, yw, r));
-                boneAnim.positionKeyframes.add(new LexoraAnimation.Keyframe(t, px, py, pz));
+                boneAnim.rotationKeyframes.add(new LexoraAnimation.Keyframe(t, p.val, yw.val, r.val, p.easing));
+                boneAnim.positionKeyframes.add(new LexoraAnimation.Keyframe(t, px.val, py.val, pz.val, px.easing));
             }
 
             lexAnim.bones.put(boneName, boneAnim);
@@ -273,24 +294,23 @@ public class AnimationLoader {
         ANIMATIONS.put(id, lexAnim);
     }
 
-    private static float sampleChannel(TreeMap<Float, Float> channel, float t, float defaultVal) {
-        if (channel.isEmpty()) return defaultVal;
+    private static ChannelEntry sampleChannel(TreeMap<Float, ChannelEntry> channel, float t, float defaultVal) {
+        if (channel.isEmpty()) return new ChannelEntry(defaultVal, "LINEAR");
         if (channel.containsKey(t)) return channel.get(t);
         Float floorKey = channel.floorKey(t);
         Float ceilKey  = channel.ceilingKey(t);
 
-        if (floorKey == null) {
-            return channel.get(ceilKey);
-        }
-        if (ceilKey == null) {
-            return channel.get(floorKey);
-        }
+        if (floorKey == null) return channel.get(ceilKey);
+        if (ceilKey == null)  return channel.get(floorKey);
 
-        float fVal = channel.get(floorKey);
-        float cVal = channel.get(ceilKey);
+        ChannelEntry fVal = channel.get(floorKey);
+        ChannelEntry cVal = channel.get(ceilKey);
         float delta = (t - floorKey) / (ceilKey - floorKey);
 
-        return fVal + (cVal - fVal) * delta;
+        float easedDelta = LexoraAnimation.applyEasing(fVal.easing, delta);
+        float interpolated = fVal.val + (cVal.val - fVal.val) * easedDelta;
+
+        return new ChannelEntry(interpolated, fVal.easing);
     }
 
     private static String mapBoneName(String name) {
@@ -321,9 +341,5 @@ public class AnimationLoader {
             case "right_leg", "left_leg" -> 12.0f;
             default -> 0.0f;
         };
-    }
-
-    private static float getEmotecraftDefaultZ(String bone) {
-        return 0.0f;
     }
 }

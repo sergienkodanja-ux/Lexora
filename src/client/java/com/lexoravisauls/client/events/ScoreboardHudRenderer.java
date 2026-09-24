@@ -1,5 +1,6 @@
 package com.lexoravisauls.client.events;
 
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.HudManager;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.gui.MsdfFont;
@@ -207,26 +208,11 @@ public class ScoreboardHudRenderer {
     }
 
     private static void drawPanel(DrawContext ctx, int x, int y, int w, int h, int alpha) {
-        boolean blur = LexoraGui.moduleStates.getOrDefault("Scoreboard HUD Blur", false);
+    boolean blur = ClientData.moduleStates.containsKey("Scoreboard HUD Blur") ? ClientData.moduleStates.get("Scoreboard HUD Blur") : LexoraGui.moduleStates.getOrDefault("Scoreboard HUD Blur", false);
+    HudThemeHelper.drawHudPanel(ctx, x, y, w, h, RADIUS, alpha, blur);
+}
 
-        if (blur) {
-            int bgColor = (clampAlpha(alpha * 0.70f) << 24) | 0x141416;
-            try {
-                com.lexoravisauls.client.gui.modern.ModernGuiRender
-                        .drawLiquidGlass(ctx, x, y, w, h, RADIUS, 15f, bgColor);
-            } catch (Throwable ignored) {
-                rr(ctx, x, y, w, h, RADIUS, bgColor);
-            }
-        } else {
-            int outlineAlpha = Math.min(220, Math.max(35, alpha));
-            rr(ctx, x, y, w, h, RADIUS, (outlineAlpha << 24) | OUTLINE_RGB);
-            int bgAlpha = Math.min(220, (int)(alpha * 0.78f));
-            rr(ctx, x + 0.7f, y + 0.7f, w - 1.4f, h - 1.4f, RADIUS - 0.7f,
-                    (bgAlpha << 24) | BG_RGB);
-        }
-    }
-
-    private static void drawHeader(DrawContext ctx, int x, int y, int w,
+private static void drawHeader(DrawContext ctx, int x, int y, int w,
                                    String title, int alpha) {
         long time = System.currentTimeMillis();
         float wave = (float)(Math.sin(time / 500.0) * 0.5 + 0.5);
@@ -240,7 +226,7 @@ public class ScoreboardHudRenderer {
         int lineAlpha = Math.min(alpha, 75);
         RoundedRectShader.draw(ctx,
                 x + 6, y + HEADER_H - 2, w - 12, 1.2f, 0.6f,
-                (lineAlpha << 24) | 0xFFFFFF);
+                HudThemeHelper.getSeparatorColor(lineAlpha));
     }
 
     private static void drawRows(DrawContext ctx, MinecraftClient mc,
@@ -261,7 +247,7 @@ public class ScoreboardHudRenderer {
             Text finalName = Text.literal(cleanedStr).setStyle(filteredName.getStyle());
 
             drawMixedText(ctx, finalName, x + PAD_X, rowY, ROW_FONT_SIZE,
-                    (alpha << 24) | TEXT_WHITE, false);
+                    HudThemeHelper.getTextColor(alpha), false);
 
             rowY += ROW_H;
         }

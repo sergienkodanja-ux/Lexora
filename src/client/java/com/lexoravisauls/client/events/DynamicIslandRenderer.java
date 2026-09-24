@@ -7,6 +7,7 @@ import com.lexoravisauls.client.gui.MsdfFont;
 import com.lexoravisauls.client.mixin.BossBarHudAccessor;
 import com.lexoravisauls.client.utils.DynamicIslandManager;
 import com.lexoravisauls.client.utils.LexoraMediaUtils;
+import com.lexoravisauls.client.utils.LyricsManager;
 import com.lexoravisauls.client.utils.NotifManager;
 import com.lexoravisauls.client.utils.TabAnimState;
 import net.minecraft.client.MinecraftClient;
@@ -85,6 +86,15 @@ public class DynamicIslandRenderer {
     // Плавность "точки-индикатора", уезжающей от LexoraVisuals к активной категории (0 = дома, 1 = уехала)
     private static float animCatDotAway = 0f;
 
+    // Плавная анимация перехода между строками караоке и названием трека
+    private static String lastRenderedLyricLine = "";
+    private static String prevRenderedLyricLine = "";
+    private static boolean lastWasKaraoke = false;
+    private static boolean prevWasKaraoke = false;
+    private static float lyricTransitionProgress = 1.0f;
+    private static long lastRenderFrameTime = 0L;
+    private static float smoothKaraokeScrollOffset = 0f;
+
     private static String catDisplayName(String id) {
         return switch (id) {
             case "Party" -> "Пати";
@@ -131,36 +141,19 @@ public class DynamicIslandRenderer {
     private static float animPillX = -1000f, animPillY = 0f, animPillW = 7f, animPillH = 7f;
 
     private static void updateAndDrawPill(DrawContext context, float baseAlpha, int currentColor) {
-        boolean pvpActive = PvpBossBarTracker.isInPvp();
-        String activePanel = com.lexoravisauls.client.gui.modern.ModernClickGui.activeIslandPanel;
-        boolean categoryActive = !pvpActive && activePanel != null && animGuiOpen > 0.4f;
-
         float homeX = islandX + 12f, homeY = islandY + (20f - 7f) / 2f, homeW = 7f, homeH = 7f;
-        float targetX = homeX, targetY = homeY, targetW = homeW, targetH = homeH;
-
-        if (categoryActive) {
-            float[] pos = computeLabelPositions();
-            int idx = indexOfCategory(activePanel);
-            if (idx >= 0) {
-                targetX = pos[idx * 2] - 6f;
-                targetW = pos[idx * 2 + 1] + 12f;
-                targetY = islandY + 2f;
-                targetH = 16f;
-            }
-        }
-
         if (animPillX < -999f) {
-            animPillX = targetX;
-            animPillY = targetY;
-            animPillW = targetW;
-            animPillH = targetH;
+            animPillX = homeX;
+            animPillY = homeY;
+            animPillW = homeW;
+            animPillH = homeH;
         }
 
         float speed = 0.16f;
-        animPillX += (targetX - animPillX) * speed;
-        animPillY += (targetY - animPillY) * speed;
-        animPillW += (targetW - animPillW) * speed;
-        animPillH += (targetH - animPillH) * speed;
+        animPillX += (homeX - animPillX) * speed;
+        animPillY += (homeY - animPillY) * speed;
+        animPillW += (homeW - animPillW) * speed;
+        animPillH += (homeH - animPillH) * speed;
 
         float pillAlphaF = baseAlpha * (1f - MathHelper.clamp(animPvpAlpha, 0f, 1f));
         if (pillAlphaF <= 0.02f) return;
@@ -168,9 +161,7 @@ public class DynamicIslandRenderer {
         drawSmoothRectF(context, animPillX, animPillY, animPillW, animPillH, animPillH / 2f, pillColor);
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
-
-    private static MsdfFont getFont() {
+private static MsdfFont getFont() {
         if (msdfFont == null) msdfFont = new MsdfFont(FONT_TEX, FONT_JSON);
         return msdfFont;
     }
@@ -194,10 +185,6 @@ public class DynamicIslandRenderer {
         if (mc.player == null || mc.options.hudHidden) return;
 
         boolean blurEnabled = LexoraGui.moduleStates.getOrDefault("Watermark Blur", true);
-        if (blurEnabled) {
-            context.draw();
-            try { com.lexoravisauls.client.gui.modern.ScreenCaptureManager.captureScreen(); } catch (Throwable ignored) {}
-        }
 
         float fadeFactor = 1.0f;
         if (isModuleEnabled("Animations", true) && isModuleEnabled("Anim Tab", true)) {
@@ -220,7 +207,13 @@ public class DynamicIslandRenderer {
         String pingStr = ping + " ms";
 
         boolean hasMedia  = LexoraMediaUtils.hasMedia();
-        animMedia += ((hasMedia ? 1f : 0f) - animMedia) * 0.35f;
+        // Пункт 2: пока идёт PVP, музыкальный островок должен плавно уступить место PVP-виду,
+        // даже если трек всё ещё играет (hasMedia остаётся true — плеер сам не встаёт на паузу).
+        // Поэтому цель для animMedia форсируем в 0, когда PvpBossBarTracker.isInPvp() — лерп тот
+        // же (0.35f), так что "плавно замена" получается сама собой, без отдельного таймера.
+        boolean pvpActiveNow = PvpBossBarTracker.isInPvp();
+        float   mediaTarget  = (hasMedia && !pvpActiveNow) ? 1f : 0f;
+        animMedia += (mediaTarget - animMedia) * 0.35f;
 
         boolean isFreeMouse = mc.currentScreen != null;
         double  mx = isFreeMouse ? mc.mouse.getX() * screenWidth  / (double) mc.getWindow().getWidth()  : -1;
@@ -236,6 +229,9 @@ public class DynamicIslandRenderer {
         // Открыт ли наш новый ClickGui (3 башни) — по нему островок раздвигается и
         // показывает быстрый доступ к Party/Events/GUI/Configs.
         boolean isGuiOpen = mc.currentScreen instanceof com.lexoravisauls.client.gui.modern.ModernClickGui;
+        if (!isGuiOpen) {
+            com.lexoravisauls.client.gui.modern.ModernClickGui.activeIslandPanel = null;
+        }
         animGuiOpen += ((isGuiOpen ? 1f : 0f) - animGuiOpen) * 0.30f;
         if (!isGuiOpen && animGuiOpen < 0.02f) {
             animGuiOpen = 0f;
@@ -260,7 +256,7 @@ public class DynamicIslandRenderer {
 
         float defaultW     = 12 + effectiveBoxW + 4 + width(midForWidth, FONT_SIZE) + 12;
         float mediaW       = 130f + (180f - 130f) * animExpand;
-        float targetTotalW = defaultW + (mediaW - defaultW) * animMedia + guiIconsBlockW() * animGuiOpen;
+        float targetTotalW = defaultW + (mediaW - defaultW) * animMedia;
         float targetH      = 20f + (64f - 20f) * animExpand * animMedia;
 
         long time              = System.currentTimeMillis();
@@ -298,115 +294,66 @@ public class DynamicIslandRenderer {
         ms.scale(scale, scale, 1.0f);
         ms.translate(-screenWidth / 2f, -islandY, 0);
 
-        boolean isSolid    = isModuleEnabled("Watermark Solid", false);
-        int  baseBgAlpha   = isSolid ? 255 : 230;
-        int  bgAlpha       = (int)(baseBgAlpha * fadeFactor);
-        int  bgColor       = (bgAlpha << 24) | 0x1A1A20;
+            float radius = Math.min(islandH / 2.0f, 15f);
+    int islandAlpha = (int)(255 * fadeFactor);
+    HudThemeHelper.drawHudPanel(context, islandX, islandY, islandW, islandH, radius, islandAlpha, blurEnabled);
+    int bgColor = HudThemeHelper.getSlotBgColor(islandAlpha);
 
-        float radius = Math.min(islandH / 2.0f, 15f);
-        if (blurEnabled) {
-            com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(
-                    context, islandX, islandY, islandW, islandH, radius, 15f, bgColor);
-        } else {
-            drawSmoothRect(context, islandX, islandY, islandW, islandH, radius, bgColor);
-        }
+    // Ping / Time
+    float outTextSize  = FONT_SIZE * 0.8f;
+    float smallIconSize = 9.0f;
+    int   timeTextW    = (int) width(timeStr, outTextSize);
+    int   timeFullW    = (int)(smallIconSize + 3 + timeTextW);
+    int   timeStartX   = islandX - 5 - timeFullW;
+    int   pingStartX   = islandX + islandW + 5;
+    float outY         = islandY + (20f - smallIconSize) / 2f;
+    float textY        = islandY + (20f - outTextSize)   / 2f - 0.5f;
 
-        // Ping / Time
-        float outTextSize  = FONT_SIZE * 0.8f;
-        float smallIconSize = 9.0f;
-        int   timeTextW    = (int) width(timeStr, outTextSize);
-        int   timeFullW    = (int)(smallIconSize + 3 + timeTextW);
-        int   timeStartX   = islandX - 5 - timeFullW;
-        int   pingStartX   = islandX + islandW + 5;
-        float outY         = islandY + (20f - smallIconSize) / 2f;
-        float textY        = islandY + (20f - outTextSize)   / 2f - 0.5f;
-
-        float timePingCycle = (time % 5000L) / 5000.0f;
-        float tpFactor = timePingCycle < 0.4f
-                ? timePingCycle / 0.4f
-                : (timePingCycle > 0.9f ? 1f - (timePingCycle - 0.9f) / 0.1f : 1f);
-        int tpColorVal = (int)(40 + 215 * tpFactor);
-        int tpColor    = ((int)(255 * fadeFactor) << 24)
-                | (tpColorVal << 16) | (tpColorVal << 8) | tpColorVal;
-
-        LexoraIcons.draw(context, LexoraIcons.Icon.AIRPLANE, timeStartX, outY, smallIconSize, tpColor);
-        drawString(context, timeStr,  timeStartX + smallIconSize + 3, textY, outTextSize, tpColor);
-        LexoraIcons.draw(context, getWifiIcon(ping), pingStartX, outY, smallIconSize, tpColor);
-        drawString(context, pingStr,  pingStartX + smallIconSize + 3, textY, outTextSize, tpColor);
-
-        updateAndDrawPill(context, fadeFactor * (1f - animMedia), currentColor);
-        if (animMedia < 0.99f) renderDefaultIsland(context, ms, time, fadeFactor, currentColor, 1f - animMedia);
-        if (animMedia > 0.01f) renderMusicIsland(context, ms, time, fadeFactor, opacity, screenWidth);
-        if (animGuiOpen > 0.01f) renderGuiQuickAccess(context, fadeFactor * animGuiOpen, mx, my, isFreeMouse);
-
-        renderNotifications(context, screenWidth, blurEnabled, bgColor);
-        renderPartyInviteIsland(context, screenWidth, blurEnabled, bgColor, mx, my, isFreeMouse);
-        renderCalloutIsland(context, screenWidth, blurEnabled, bgColor, mx, my, isFreeMouse);
-
-        ms.pop();
+    float timePingCycle = (time % 5000L) / 5000.0f;
+    float tpFactor = timePingCycle < 0.4f
+            ? timePingCycle / 0.4f
+            : (timePingCycle > 0.9f ? 1f - (timePingCycle - 0.9f) / 0.1f : 1f);
+    int tpColorVal;
+    if (HudThemeHelper.isDark()) {
+        tpColorVal = (int)(40 + 215 * tpFactor);
+    } else {
+        tpColorVal = (int)(220 - 200 * tpFactor);
     }
+    int tpColor = ((int)(255 * fadeFactor) << 24)
+            | (tpColorVal << 16) | (tpColorVal << 8) | tpColorVal;
 
-    // =========================================================================
-    //  БЫСТРЫЙ ДОСТУП ПРИ ОТКРЫТОМ ГУИ: Party / Events / GUI / Configs (текстом)
-    // =========================================================================
-    private static void renderGuiQuickAccess(DrawContext context, float alphaF, double mx, double my, boolean isFreeMouse) {
-        int alpha = (int) (255 * MathHelper.clamp(alphaF, 0f, 1f));
-        if (alpha <= 5) return;
+    LexoraIcons.draw(context, LexoraIcons.Icon.AIRPLANE, timeStartX, outY, smallIconSize, tpColor);
+    drawString(context, timeStr,  timeStartX + smallIconSize + 3, textY, outTextSize, tpColor);
+    LexoraIcons.draw(context, getWifiIcon(ping), pingStartX, outY, smallIconSize, tpColor);
+    drawString(context, pingStr,  pingStartX + smallIconSize + 3, textY, outTextSize, tpColor);
 
-        float blockW = guiIconsBlockW() * MathHelper.clamp(animGuiOpen, 0f, 1f);
-        float startX = islandX + islandW - blockW + 9f;
+updateAndDrawPill(context, fadeFactor * (1f - animMedia), currentColor);
+    if (animMedia < 0.99f) renderDefaultIsland(context, ms, time, fadeFactor, currentColor, 1f - animMedia);
+    if (animMedia > 0.01f) renderMusicIsland(context, ms, time, fadeFactor, opacity, screenWidth);
+    // quick access categories removed
 
-        // Тонкий разделитель между текстом островка и названиями категорий
-        float dividerX = startX - 8f;
-        drawSmoothRect(context, (int) dividerX, (int) (islandY + 5), 1, (int) (islandH - 10), 0f, withAlphaLocal(0xFFFFFFFF, (int) (alpha * 0.25f)));
+    renderNotifications(context, screenWidth, blurEnabled, bgColor);
+    renderPartyInviteIsland(context, screenWidth, blurEnabled, bgColor, mx, my, isFreeMouse, scale);
+    renderCalloutIsland(context, screenWidth, blurEnabled, bgColor, mx, my, isFreeMouse);
 
-        // Наведение проверяем по координатам ModernClickGui (те же, что реально ловит его
-        // mouseClicked) — а не по отдельно пересчитанным тут, иначе подсветка и клик расходятся.
-        int gmx = com.lexoravisauls.client.gui.modern.ModernClickGui.lastMouseX;
-        int gmy = com.lexoravisauls.client.gui.modern.ModernClickGui.lastMouseY;
+    ms.pop();
+}
 
-        String activePanel = com.lexoravisauls.client.gui.modern.ModernClickGui.activeIslandPanel;
-        float labelY = islandY + (20f - GUI_LABEL_SIZE) / 2f - 0.5f;
-        float[] pos = computeLabelPositions();
-
-        for (int i = 0; i < GUI_ICON_IDS.length; i++) {
-            String iconId = GUI_ICON_IDS[i];
-            String label = catDisplayName(iconId);
-            float ix = pos[i * 2];
-            float labelW = pos[i * 2 + 1];
-            boolean isActive = iconId.equals(activePanel);
-
-            // Переводим границы метки из "локальных" координат острова (до применения масштаба
-            // худа) в реальные экранные — иначе при Watermark Scale ≠ 1 наведение/клик и картинка
-            // расходятся именно так, как ты описал (то слева ещё видит, то справа уже не видит).
-            float rawBX = ix - 3f, rawBW = labelW + 6f;
-            float scrBX = lastScreenWidth / 2f + (rawBX - lastScreenWidth / 2f) * lastHudScale;
-            float scrBW = rawBW * lastHudScale;
-            float scrBY = islandY; // Y-пивот трансформации — это и есть islandY, верх бокса с ним совпадает
-            float scrBH = islandH * lastHudScale;
-
-            boolean isHovered = gmx >= scrBX && gmx <= scrBX + scrBW && gmy >= scrBY && gmy <= scrBY + scrBH;
-            float hoverT = guiLabelHover.getOrDefault(iconId, 0f);
-            hoverT += ((isHovered ? 1f : 0f) - hoverT) * 0.3f;
-            guiLabelHover.put(iconId, hoverT);
-
-            int txtColor = withAlphaLocal(0xFFFFFFFF, isActive ? alpha : (int) (alpha * (0.42f + hoverT * 0.4f)));
-            drawString(context, label, ix, labelY, GUI_LABEL_SIZE, txtColor);
-
-            if (animGuiOpen > 0.85f) {
-                // ФИКС: тут раньше сохранялись сырые (немасштабированные) ix/labelW — ровно та же
-                // болезнь, что и с хитбоксом самого острова: чем дальше иконка от пивота
-                // (Configs — самая правая, дальше всех от центра экрана), тем больше расхождение
-                // между картинкой и кликабельной зоной. Кладём уже посчитанные выше scrBX/Y/W/H.
-                GUI_ICON_BOUNDS.put(iconId, new float[]{scrBX, scrBY, scrBW, scrBH});
-            }
-        }
-        if (animGuiOpen <= 0.85f) GUI_ICON_BOUNDS.clear();
-    }
-
-    private static int withAlphaLocal(int argb, int alpha255) {
+// =========================================================================
+private static int withAlphaLocal(int argb, int alpha255) {
         alpha255 = Math.max(0, Math.min(255, alpha255));
         return (alpha255 << 24) | (argb & 0x00FFFFFF);
+    }
+
+    public static boolean isMusicExpanded() {
+        return animExpand > 0.05f && LexoraMediaUtils.hasMedia();
+    }
+
+    private static String formatTime(long ms) {
+        long totalSec = Math.max(0L, ms / 1000L);
+        long min = totalSec / 60L;
+        long sec = totalSec % 60L;
+        return min + ":" + (sec < 10 ? "0" + sec : sec);
     }
 
     // =========================================================================
@@ -421,107 +368,241 @@ public class DynamicIslandRenderer {
 
         float effE   = Math.max(0, (islandH - 20f) / 44f);
         float tSize  = 14f + 34f * effE;
-        float tX     = islandX + 4f + 4f * effE;
+        float tX     = islandX + 4f + 3f * effE;
         float tY     = islandY + 3f + 5f * effE;
         float tRadius = 7f - 1f * effE;
-        float titleX  = islandX + 22f + 42f * effE;
-        float titleY  = islandY + 5.5f + 6.5f * effE;
-        float maxTextW = 88f + 20f * effE;
 
         String title = LexoraMediaUtils.getTitle();
         if (title == null || title.isEmpty()) title = "Unknown Track";
-        float textW     = width(title, FONT_SIZE);
-        float maxScroll = Math.max(0, textW - maxTextW);
-        float scrollOffset = 0;
-        if (maxScroll > 0) {
-            float cycle = (time % 10000L) / 10000.0f;
-            float wave  = MathHelper.clamp((float)Math.sin(cycle * Math.PI * 2) * 1.3f, -1f, 1f);
-            scrollOffset = -maxScroll * (wave + 1f) / 2f;
+        String artist = LexoraMediaUtils.getAuthor();
+        if (artist == null || artist.isEmpty()) artist = "Unknown Artist";
+        long progress = LexoraMediaUtils.getProgress();
+        long duration = LexoraMediaUtils.getDuration();
+
+        // Обновляем LyricsManager каждый кадр
+        LyricsManager.update(title, artist, duration);
+
+        // ── СВЁРНУТЫЙ РЕЖИМ (КАРАОКЕ / НАЗВАНИЕ ПЕСНИ) ─────────────────────────
+        if (invE > 0.1f) {
+            float quickAccessW = guiIconsBlockW() * animGuiOpen;
+            float titleX  = islandX + 23.5f;
+            float titleY  = islandY + 5.5f;
+            float maxTextW = Math.max(20f, islandW - 41f - quickAccessW);
+            float scissorLeft = islandX + 22.5f;
+            float scissorRight = islandX + islandW - 17.5f;
+            float scissorTop = islandY + 1f;
+            float scissorBottom = islandY + 19f;
+
+            if (scissorRight > scissorLeft + 5f) {
+                context.enableScissor((int)scissorLeft, (int)scissorTop, (int)scissorRight, (int)scissorBottom);
+
+                int curAlpha = (int)(alpha * invE);
+                String displayLine;
+                float karaokeProgress = 0f;
+                boolean isKaraoke = false;
+
+                // При открытом GUI показываем ТОЛЬКО чистое название песни без караоке и без сдвигов
+                boolean isSinging = LyricsManager.hasLyrics() && LyricsManager.isSinging(progress) && animGuiOpen < 0.15f;
+
+                if (animGuiOpen >= 0.15f) {
+                    displayLine = title;
+                    isKaraoke = false;
+                } else if (isSinging) {
+                    String lyric = LyricsManager.getCurrentLine(progress);
+                    karaokeProgress = LyricsManager.getLineProgress(progress);
+                    displayLine = (lyric != null && !lyric.trim().isEmpty()) ? lyric : title;
+                    isKaraoke = (lyric != null && !lyric.trim().isEmpty());
+                } else if (LyricsManager.isFetching()) {
+                    displayLine = "♪ Загрузка текста...";
+                    isKaraoke = false;
+                } else {
+                    displayLine = title;
+                    isKaraoke = false;
+                }
+
+                if (lastRenderFrameTime == 0L) lastRenderFrameTime = time;
+                float dt = Math.min(0.05f, (time - lastRenderFrameTime) / 1000f);
+                lastRenderFrameTime = time;
+
+                if (!displayLine.equals(lastRenderedLyricLine)) {
+                    prevRenderedLyricLine = lastRenderedLyricLine;
+                    prevWasKaraoke = lastWasKaraoke;
+                    lastRenderedLyricLine = displayLine;
+                    lastWasKaraoke = isKaraoke;
+                    lyricTransitionProgress = 0f;
+                }
+
+                if (lyricTransitionProgress < 1.0f) {
+                    lyricTransitionProgress = Math.min(1.0f, lyricTransitionProgress + dt * 6.0f);
+                }
+
+                float textW = width(displayLine, FONT_SIZE);
+                float scrollOffset = 0;
+
+                if (textW > maxTextW) {
+                    if (isKaraoke) {
+                        float activeX = textW * karaokeProgress;
+                        float center = maxTextW / 2f;
+                        scrollOffset = -(activeX - center);
+                        scrollOffset = Math.min(0, scrollOffset);
+                        scrollOffset = Math.max(-(textW - maxTextW), scrollOffset);
+                    } else {
+                        float maxScroll = textW - maxTextW;
+                        float cycle = (time % 8000L) / 8000f;
+                        float t = (float)(Math.sin(cycle * Math.PI * 2.0) * 0.5 + 0.5);
+                        scrollOffset = -maxScroll * t;
+                    }
+                }
+
+                int colorDone    = (curAlpha << 24) | (HudThemeHelper.isDark() ? 0xF1F1F6 : 0x0C0C10);
+                int colorPending = (curAlpha << 24) | (HudThemeHelper.isDark() ? 0x777788 : 0x888899);
+
+                if (lyricTransitionProgress < 1.0f && !prevRenderedLyricLine.isEmpty()) {
+                    // 🪜 ЛЕСЕНКА: Ступенчатый уход старой строки (слова улетают вверх по очереди)
+                    drawLadderExit(context, prevRenderedLyricLine, titleX + smoothKaraokeScrollOffset, titleY, FONT_SIZE, curAlpha, lyricTransitionProgress, prevWasKaraoke);
+
+                    // Плавное появление новой строки снизу
+                    float newAlphaFactor = lyricTransitionProgress;
+                    int nCurAlpha = (int)(curAlpha * newAlphaFactor);
+                    float nY = titleY + (6f * (1f - lyricTransitionProgress));
+                    int nDone = (nCurAlpha << 24) | (HudThemeHelper.isDark() ? 0xF1F1F6 : 0x0C0C10);
+                    int nPending = (nCurAlpha << 24) | (HudThemeHelper.isDark() ? 0x777788 : 0x888899);
+
+                    if (isKaraoke) {
+                        drawDynamicKaraokeLine(context, displayLine, titleX, nY, FONT_SIZE, nDone, nPending, karaokeProgress, maxTextW, dt);
+                    } else {
+                        getFont().draw(context, displayLine, titleX + scrollOffset, nY, FONT_SIZE, nDone);
+                    }
+                } else {
+                    if (isKaraoke) {
+                        drawDynamicKaraokeLine(context, displayLine, titleX, titleY, FONT_SIZE, colorDone, colorPending, karaokeProgress, maxTextW, dt);
+                    } else {
+                        getFont().draw(context, displayLine, titleX + scrollOffset, titleY, FONT_SIZE, colorDone);
+                    }
+                }
+
+                context.disableScissor();
+            }
         }
 
-        float scissorBottom = islandY + 34f;
-        context.enableScissor((int)titleX, (int)islandY, (int)(titleX + maxTextW), (int)scissorBottom);
-        drawString(context, title, titleX + scrollOffset, titleY, FONT_SIZE, (alpha << 24) | 0xFFFFFF);
-        if (e > 0.05f) {
-            String artist = LexoraMediaUtils.getAuthor();
-            if (artist == null || artist.isEmpty()) artist = "Unknown Artist";
-            int artistAlpha = (int)(alpha * e);
-            drawString(context, artist, titleX + scrollOffset, titleY + 10f, 7.5f, (artistAlpha << 24) | 0xAAAAAA);
-        }
-        context.disableScissor();
-
+        // ── ОБЛОЖКА ТРЕКА ──────────────────────────────────────────────────────
         Identifier thumb = LexoraMediaUtils.getThumbnail();
         if (thumb != null) {
             RoundedRectShader.drawTextured(context, thumb, tX, tY, tSize, tSize, tRadius, 0, 0, 1, 1, (alpha << 24) | 0xFFFFFF);
         } else {
-            drawSmoothRect(context, (int)tX, (int)tY, (int)tSize, (int)tSize, tRadius, (alpha << 24) | 0x333333);
+            drawSmoothRectF(context, tX, tY, tSize, tSize, tRadius, (alpha << 24) | 0x282830);
+            LexoraIcons.draw(context, LexoraIcons.Icon.MONITOR, tX + (tSize - 10f)/2f, tY + (tSize - 10f)/2f, 10f, (alpha << 24) | 0x666670);
         }
 
-        if (invE > 0.05f) {
-            int   visAlpha = (int)(alpha * invE);
-            float visX     = islandX + islandW - 14f;
-            boolean playing = LexoraMediaUtils.isPlaying();
-            float h1 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.015) * 3f : 2f;
-            float h2 = playing ? 4f + (float)Math.cos((time % 10000L) * 0.012 + 1.0) * 3f : 2f;
-            float h3 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.018 + 2.0) * 3f : 2f;
-            int   visColor = (visAlpha << 24) | 0xFFFFFF;
-            float centerY  = islandY + 10f;
-            drawSmoothRect(context, (int)visX,     (int)(centerY - h1/2f), 2, (int)h1, 1f, visColor);
-            drawSmoothRect(context, (int)visX + 3, (int)(centerY - h2/2f), 2, (int)h2, 1f, visColor);
-            drawSmoothRect(context, (int)visX + 6, (int)(centerY - h3/2f), 2, (int)h3, 1f, visColor);
+        // ── ЗВУКОВОЙ ВИЗУАЛИЗАТОР (СПРАВА В СВЁРНУТОМ ВИДЕ, только если GUI закрыт) ────
+        if (invE > 0.05f && animGuiOpen < 0.1f) {
+            int   visAlpha = (int)(alpha * invE * (1f - animGuiOpen * 10f));
+            if (visAlpha > 5) {
+                float visX     = islandX + islandW - 14f;
+                boolean playing = LexoraMediaUtils.isPlaying();
+                float h1 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.015) * 3f : 2f;
+                float h2 = playing ? 4f + (float)Math.cos((time % 10000L) * 0.012 + 1.0) * 3f : 2f;
+                float h3 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.018 + 2.0) * 3f : 2f;
+                int   visColor = (visAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10);
+                float centerY  = islandY + 10f;
+                drawSmoothRect(context, (int)visX,     (int)(centerY - h1/2f), 2, (int)h1, 1f, visColor);
+                drawSmoothRect(context, (int)visX + 3, (int)(centerY - h2/2f), 2, (int)h2, 1f, visColor);
+                drawSmoothRect(context, (int)visX + 6, (int)(centerY - h3/2f), 2, (int)h3, 1f, visColor);
+            }
         }
 
+        // ── РАСШИРЕННЫЙ РЕЖИМ (ПЛЕЕР ПРИ НАВЕДЕНИИ) ──────────────────────────
         float controlsTarget = e > 0.85f ? 1f : 0f;
         float controlsSpeed  = controlsTarget > animControls ? 0.25f : 0.85f;
         animControls += (controlsTarget - animControls) * controlsSpeed;
 
         if (animControls > 0.01f) {
-            float t      = animControls;
-            float eased  = 1f - (float)Math.pow(1f - t, 3f);
-            float rise   = (1f - eased) * 6f;
-            float scAnim = 0.85f + 0.15f * eased;
+            float t        = animControls;
+            float eased    = 1f - (float)Math.pow(1f - t, 3f);
+            float rise     = (1f - eased) * 4f;
             int   expAlpha = (int)(alpha * eased);
-            if (expAlpha > 3) {
-                float afterArt      = islandX + 4f + 4f * effE + (14f + 34f * effE) + 4f;
-                long  prog = LexoraMediaUtils.getProgress();
-                long  dur  = LexoraMediaUtils.getDuration();
-                float p    = dur > 0 ? MathHelper.clamp((float)prog / dur, 0f, 1f) : 0f;
 
+            if (expAlpha > 3) {
+                float afterArt = tX + tSize + 8f;
+                float contentW = islandX + islandW - 8f - afterArt;
+
+                // Название трека и артист
+                float titleY  = islandY + 6.5f - rise;
+                float artistY = islandY + 17f - rise;
+
+                context.enableScissor((int)afterArt, (int)islandY, (int)(afterArt + contentW), (int)(islandY + 64));
+
+                float titleW = width(title, 8.5f);
+                float maxTitleScroll = Math.max(0, titleW - contentW);
+                float titleScroll = 0;
+                if (maxTitleScroll > 0) {
+                    float cycle = (time % 10000L) / 10000.0f;
+                    float wave  = MathHelper.clamp((float)Math.sin(cycle * Math.PI * 2) * 1.3f, -1f, 1f);
+                    titleScroll = -maxTitleScroll * (wave + 1f) / 2f;
+                }
+                drawString(context, title, afterArt + titleScroll, titleY, 8.5f, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10));
+
+                float artistW = width(artist, 7.0f);
+                float maxArtistScroll = Math.max(0, artistW - contentW);
+                float artistScroll = 0;
+                if (maxArtistScroll > 0) {
+                    float cycle = (time % 10000L) / 10000.0f;
+                    float wave  = MathHelper.clamp((float)Math.sin(cycle * Math.PI * 2) * 1.3f, -1f, 1f);
+                    artistScroll = -maxArtistScroll * (wave + 1f) / 2f;
+                }
+                drawString(context, artist, afterArt + artistScroll, artistY, 7.0f, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0x9E9EA6 : 0x444455));
+
+                context.disableScissor();
+
+                // ── Полоса времени ──
+                float p = duration > 0 ? MathHelper.clamp((float)progress / duration, 0f, 1f) : 0f;
                 float barX = afterArt;
-                float barW = islandX + islandW - 8f - barX;
-                float barH = 3f;
-                float barY = islandY + 37f - rise;
+                float barW = contentW;
+                float barH = 3.0f;
+                float barY = islandY + 29.5f - rise;
                 float barR = barH / 2f;
+
                 if (barW > 4f) {
-                    drawSmoothRect(context, (int)barX, (int)barY, (int)barW, (int)barH, barR, (expAlpha << 24) | 0x2A2A2A);
+                    // Тёмная подложка полоски
+                    drawSmoothRectF(context, barX, barY, barW, barH, barR, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0x2C2C35 : 0xD5D9E2));
+
+                    // Белое заполнение
                     if (p > 0.001f) {
                         float fillW = Math.max(barH, barW * p);
-                        drawSmoothRect(context, (int)barX, (int)barY, (int)fillW, (int)barH, barR, (expAlpha << 24) | 0xFFFFFF);
-                        float dotR = 3f;
-                        drawSmoothRect(context, (int)(barX + fillW - dotR), (int)(barY + barH/2f - dotR),
-                                (int)(dotR*2), (int)(dotR*2), dotR, (expAlpha << 24) | 0xFFFFFF);
+                        drawSmoothRectF(context, barX, barY, fillW, barH, barR, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10));
+
+                        // Аккуратная светящаяся точка на конце
+                        float dotR = 2.5f;
+                        drawSmoothRectF(context, barX + fillW - dotR, barY + barH/2f - dotR, dotR*2, dotR*2, dotR, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10));
                     }
+
+                    // Текст времени: 1:23 / 3:45
+                    String curTimeStr = formatTime(progress);
+                    String durTimeStr = formatTime(duration);
+                    float timeTextY   = barY + barH + 2.0f;
+                    int timeColor     = (expAlpha << 24) | (HudThemeHelper.isDark() ? 0x6E6E78 : 0x444455);
+                    drawString(context, curTimeStr, barX, timeTextY, 5.5f, timeColor);
+                    float durW = width(durTimeStr, 5.5f);
+                    drawString(context, durTimeStr, barX + barW - durW, timeTextY, 5.5f, timeColor);
                 }
 
-                LexoraIcons.Icon playIcon    = LexoraMediaUtils.isPlaying() ? LexoraIcons.Icon.PAUSE : LexoraIcons.Icon.PLAY;
-                float btnSide       = 13f;
-                float btnPlay       = 16f;
+                // ── Кнопки управления (белые, чистые, без фоновых плашек) ──
+                LexoraIcons.Icon playIcon = LexoraMediaUtils.isPlaying() ? LexoraIcons.Icon.PAUSE : LexoraIcons.Icon.PLAY;
+                float btnSide       = 11f;
+                float btnPlay       = 14f;
                 float btnGap        = 22f;
-                float btnZoneCenter = (afterArt + islandX + islandW - 8f) / 2f;
+                float btnZoneCenter = afterArt + contentW / 2f;
                 float btnY          = islandY + 47f - rise;
                 float playX         = btnZoneCenter - btnPlay / 2f;
                 float prevX         = btnZoneCenter - btnGap - btnSide;
                 float nextX         = btnZoneCenter + btnGap;
-                int   btnColor      = (expAlpha << 24) | 0xFFFFFF;
 
-                ms.push();
-                ms.translate(btnZoneCenter, btnY + btnPlay / 2f, 0);
-                ms.scale(scAnim, scAnim, 1f);
-                ms.translate(-btnZoneCenter, -(btnY + btnPlay / 2f), 0);
-                LexoraIcons.draw(context, LexoraIcons.Icon.SKIP_PREV, prevX, btnY + (btnPlay-btnSide)/2f, btnSide, btnColor);
-                LexoraIcons.draw(context, playIcon, playX, btnY, btnPlay, btnColor);
-                LexoraIcons.draw(context, LexoraIcons.Icon.SKIP_NEXT, nextX, btnY + (btnPlay-btnSide)/2f, btnSide, btnColor);
-                ms.pop();
+                int mainBtnColor = (expAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10);
+                int sideBtnColor = (expAlpha << 24) | (HudThemeHelper.isDark() ? 0xD8D8E0 : 0x444455);
+
+                LexoraIcons.draw(context, LexoraIcons.Icon.SKIP_PREV, prevX, btnY + (btnPlay - btnSide)/2f, btnSide, sideBtnColor);
+                LexoraIcons.draw(context, playIcon, playX, btnY, btnPlay, mainBtnColor);
+                LexoraIcons.draw(context, LexoraIcons.Icon.SKIP_NEXT, nextX, btnY + (btnPlay - btnSide)/2f, btnSide, sideBtnColor);
             }
         }
     }
@@ -548,18 +629,20 @@ public class DynamicIslandRenderer {
     }
 
     public static boolean mouseClicked(double mx, double my, int button) {
+        if (handlePartyNotifClick(mx, my, button)) return true;
         if (!LexoraMediaUtils.hasMedia() || animExpand < 0.5f) return false;
         float effE          = Math.max(0, (islandH - 20f) / 44f);
-        float afterArt      = islandX + 4f + 4f * effE + (14f + 34f * effE) + 4f;
-        float btnZoneCenter = (afterArt + islandX + islandW - 8f) / 2f;
-        float btnY = islandY + 47f;
-        float btnSide = 13f, btnPlay = 16f, btnGap = 22f, hitPad = 5f;
-        float prevX = btnZoneCenter - btnGap - btnSide;
-        float playX = btnZoneCenter - btnPlay / 2f;
-        float nextX = btnZoneCenter + btnGap;
+        float tSize         = 14f + 34f * effE;
+        float tX            = islandX + 4f + 3f * effE;
+        float afterArt      = tX + tSize + 8f;
+        float contentW      = islandX + islandW - 8f - afterArt;
+        float btnZoneCenter = afterArt + contentW / 2f;
+        float btnY          = islandY + 47f;
+        float btnSide       = 11f, btnPlay = 14f, btnGap = 22f, hitPad = 6f;
+        float prevX         = btnZoneCenter - btnGap - btnSide;
+        float playX         = btnZoneCenter - btnPlay / 2f;
+        float nextX         = btnZoneCenter + btnGap;
 
-        // Те же прямоугольники, что и раньше, но переведённые в экранные координаты через
-        // scale/pivot — иначе при уменьшенном острове по Prev/Play/Next не попасть мышью.
         float sw = lastScreenWidth, sc = lastHudScale;
         float prevL = toScreenX(prevX - hitPad, sw, sc), prevR = toScreenX(prevX + btnSide + hitPad, sw, sc);
         float playL = toScreenX(playX - hitPad, sw, sc), playR = toScreenX(playX + btnPlay + hitPad, sw, sc);
@@ -569,6 +652,19 @@ public class DynamicIslandRenderer {
         if (mx >= prevL && mx <= prevR && my >= btnT && my <= btnB) { LexoraMediaUtils.prev(); return true; }
         if (mx >= playL && mx <= playR && my >= btnT && my <= btnB) { LexoraMediaUtils.togglePlay(); return true; }
         if (mx >= nextL && mx <= nextR && my >= btnT && my <= btnB) { LexoraMediaUtils.next(); return true; }
+
+        // Клик по полосе времени для перемотки
+        float barX = afterArt;
+        float barW = contentW;
+        float barY = islandY + 29.5f;
+        float barL = toScreenX(barX, sw, sc), barR = toScreenX(barX + barW, sw, sc);
+        float barT = toScreenY(barY - 4f, sc), barB = toScreenY(barY + 10f, sc);
+        if (mx >= barL && mx <= barR && my >= barT && my <= barB) {
+            float seekProgress = MathHelper.clamp((float)(mx - barL) / (barR - barL), 0f, 1f);
+            LexoraMediaUtils.seek(seekProgress);
+            return true;
+        }
+
         return false;
     }
 
@@ -592,8 +688,15 @@ public class DynamicIslandRenderer {
         animCatDotAway += ((categoryActive ? 1f : 0f) - animCatDotAway) * 0.18f;
 
         // ── Текст островка ────────────────────────────────────────────────────
+        // Пункт 3: если модуль только что переключили по бинду — на короткий миг (см.
+        // DynamicIslandManager.RECENT_WINDOW_TICKS) его текст перебивает даже "Вы в ПВП режиме!",
+        // чтобы игрок увидел подтверждение своего действия. Категории (Party/Events/GUI/Configs)
+        // этим не перебиваются — про них в задаче речи не было, трогаем только пару PVP vs тоггл.
+        boolean moduleJustTriggered = DynamicIslandManager.isRecentlyTriggered();
         String targetTextStr;
-        if (pvpActive) {
+        if (moduleJustTriggered) {
+            targetTextStr = DynamicIslandManager.getTargetText();
+        } else if (pvpActive) {
             targetTextStr = "Вы в ПВП режиме!";
         } else if (categoryActive) {
             targetTextStr = catDisplayName(activeCategoryPanel);
@@ -613,11 +716,17 @@ public class DynamicIslandRenderer {
         float midContentX = islandX + 12f;
         float textY       = islandY + (20f - FONT_SIZE) / 2f - 0.5f;
 
-        float wave     = (float)(Math.sin(time / 400.0) * 0.5 + 0.5);
-        int   colorVal = (int)(150 + 80 * wave);
-        int   shimmerRGB = (colorVal << 16) | (colorVal << 8) | colorVal;
+        float wave     = (float)(Math.sin(time / 350.0) * 0.5 + 0.5);
+        int shimmerRGB;
+        if (HudThemeHelper.isDark()) {
+            int colorVal = (int)(130 + 125 * wave);
+            shimmerRGB = (colorVal << 16) | (colorVal << 8) | colorVal;
+        } else {
+            int colorVal = (int)(15 + 85 * (1f - wave));
+            shimmerRGB = (colorVal << 16) | (colorVal << 8) | colorVal;
+        }
 
-        // ── PVP: таймер и ширина бокса ────────────────────────────────────────
+// ── PVP: таймер и ширина бокса ────────────────────────────────────────
         float pvpSecondsSmooth = PvpBossBarTracker.getSecondsSmooth();
         String secStr       = (int) Math.ceil(pvpSecondsSmooth) + "с";
         // Шрифт чуть крупнее чем раньше — FONT_SIZE без уменьшения
@@ -791,7 +900,7 @@ public class DynamicIslandRenderer {
     // =========================================================================
     private static void renderPartyInviteIsland(DrawContext context, int screenWidth,
                                                 boolean blurEnabled, int bgColor,
-                                                double mx, double my, boolean isFreeMouse) {
+                                                double mx, double my, boolean isFreeMouse, float scale) {
 
         com.lexoravisauls.client.party.LexoraPartyManager.PartyInviteNotif notif =
                 com.lexoravisauls.client.party.LexoraPartyManager.activeInviteNotif;
@@ -808,134 +917,135 @@ public class DynamicIslandRenderer {
         float alpha  = animPartyNotif;
         int   alphaI = Math.max(0, Math.min(255, (int)(alpha * 255)));
 
-        float nh        = 22f;
-        String titlePart   = "★ Запрос в пати";
-        String contentPart = notif != null ? notif.requesterName + " хочет вступить" : "";
-        float  titleW      = width(titlePart,   8.0f);
-        float  sepW        = width(" — ",        7.5f);
-        float  contentW    = width(contentPart, 7.5f);
-        float  pillW       = 24f + titleW + sepW + contentW + 12f;
+        float cardW = 210f;
+        float cardH = 50f;
+        float cardX = (screenWidth - cardW) / 2f;
+        float cardY = islandY + islandH + 6f;
 
-        float btnW         = 60f;
-        float btnH         = 20f;
-        float btnGap       = 8f;
-        float expandedW    = Math.max(pillW, btnW * 2 + btnGap + 24f);
-        float expandedH    = nh + 10f + btnH + 8f;
+        float sc = 0.90f + 0.10f * animPartyNotif;
+        float cx = screenWidth / 2f;
+        float pivotY = cardY + cardH / 2f;
 
-        float notifY   = islandY + islandH + 6f;
-        float curH = nh + animPartyHover * (expandedH - nh);
-        float curW = pillW + animPartyHover * (expandedW - pillW);
-        float curX = (screenWidth - curW) / 2f;
-        float sc = 0.88f + 0.12f * animPartyNotif;
+        float btnW = 98f;
+        float btnH = 16f;
+        float gap  = 6f;
+        float btnsY = cardY + 28f;
+        float acceptX = cardX + 4f;
+        float declineX = acceptX + btnW + gap;
 
-        float pivotX = screenWidth / 2f;
-        float pivotY = notifY + curH / 2f;
+        // Точные экранные координаты для мыши с учётом обеих матриц
+        float acceptScreenX = cx + (acceptX - cx) * sc * scale;
+        float acceptScreenY = islandY + (pivotY + (btnsY - pivotY) * sc - islandY) * scale;
+        float acceptScreenW = btnW * sc * scale;
+        float acceptScreenH = btnH * sc * scale;
 
-        float btnsY_local    = notifY + nh + 5f;
-        float centerX_local  = curX + curW / 2f;
-        float acceptX_local  = centerX_local - btnW - btnGap / 2f;
-        float declineX_local = centerX_local + btnGap / 2f;
+        float declineScreenX = cx + (declineX - cx) * sc * scale;
+        float declineScreenY = islandY + (pivotY + (btnsY - pivotY) * sc - islandY) * scale;
+        float declineScreenW = btnW * sc * scale;
+        float declineScreenH = btnH * sc * scale;
 
-        float acceptX_screen  = pivotX + (acceptX_local  - pivotX) * sc;
-        float declineX_screen = pivotX + (declineX_local - pivotX) * sc;
-        float btnsY_screen    = pivotY + (btnsY_local     - pivotY) * sc;
-        float btnW_screen     = btnW  * sc;
-        float btnH_screen     = btnH  * sc;
+        PARTY_ACCEPT_BOUNDS  = new float[]{ acceptScreenX,  acceptScreenY,  acceptScreenW,  acceptScreenH };
+        PARTY_DECLINE_BOUNDS = new float[]{ declineScreenX, declineScreenY, declineScreenW, declineScreenH };
 
-        float blockX_screen = pivotX + (curX    - pivotX) * sc;
-        float blockY_screen = pivotY + (notifY  - pivotY) * sc;
-        float blockW_screen = curW * sc;
-        float blockH_screen = curH * sc;
-
-        boolean overBlock = isFreeMouse
-                && mx >= blockX_screen && mx <= blockX_screen + blockW_screen
-                && my >= blockY_screen && my <= blockY_screen + blockH_screen;
-        animPartyHover += ((overBlock ? 1f : 0f) - animPartyHover) * 0.25f;
-
-        curH = nh + animPartyHover * (expandedH - nh);
-        curW = pillW + animPartyHover * (expandedW - pillW);
-        curX = (screenWidth - curW) / 2f;
-        pivotY = notifY + curH / 2f;
-
-        centerX_local  = curX + curW / 2f;
-        acceptX_local  = centerX_local - btnW - btnGap / 2f;
-        declineX_local = centerX_local + btnGap / 2f;
-        btnsY_local    = notifY + nh + 5f;
-
-        acceptX_screen  = pivotX + (acceptX_local  - pivotX) * sc;
-        declineX_screen = pivotX + (declineX_local - pivotX) * sc;
-        btnsY_screen    = pivotY + (btnsY_local     - pivotY) * sc;
-        btnW_screen     = btnW * sc;
-        btnH_screen     = btnH * sc;
-
-        boolean overAccept  = isFreeMouse
-                && mx >= acceptX_screen  && mx <= acceptX_screen  + btnW_screen
-                && my >= btnsY_screen    && my <= btnsY_screen    + btnH_screen;
+        boolean overAccept = isFreeMouse
+                && mx >= acceptScreenX && mx <= acceptScreenX + acceptScreenW
+                && my >= acceptScreenY && my <= acceptScreenY + acceptScreenH;
         boolean overDecline = isFreeMouse
-                && mx >= declineX_screen && mx <= declineX_screen + btnW_screen
-                && my >= btnsY_screen    && my <= btnsY_screen    + btnH_screen;
+                && mx >= declineScreenX && mx <= declineScreenX + declineScreenW
+                && my >= declineScreenY && my <= declineScreenY + declineScreenH;
 
         animPartyBtnHoverAccept  += ((overAccept  ? 1f : 0f) - animPartyBtnHoverAccept)  * 0.35f;
         animPartyBtnHoverDecline += ((overDecline ? 1f : 0f) - animPartyBtnHoverDecline) * 0.35f;
 
-        partyVisualHeight = blockH_screen + 4f;
+        partyVisualHeight = (cardH + 6f) * sc * scale;
 
         MatrixStack ms = context.getMatrices();
         ms.push();
-        ms.translate(pivotX, pivotY, 0);
+        ms.translate(cx, pivotY, 0);
         ms.scale(sc, sc, 1f);
-        ms.translate(-pivotX, -pivotY, 0);
+        ms.translate(-cx, -pivotY, 0);
 
-        int bgA     = (int)(alpha * 210);
-        int notifBg = (bgA << 24) | (bgColor & 0xFFFFFF);
+        int bgA = (int)(alpha * 230);
+        int cardBg = (bgA << 24) | 0x0E0E14;
 
         if (blurEnabled) {
             com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(
-                    context, curX, notifY, curW, curH, nh / 2f, 15f, notifBg);
+                    context, cardX, cardY, cardW, cardH, 7.5f, 16f, cardBg);
         } else {
-            drawSmoothRect(context, (int)curX, (int)notifY, (int)curW, (int)curH, nh / 2f, notifBg);
+            drawSmoothRect(context, (int)cardX, (int)cardY, (int)cardW, (int)cardH, 7.5f, cardBg);
+        }
+        // Тонкая стильная рамка
+        drawSmoothRect(context, (int)cardX, (int)cardY, (int)cardW, 1, 0f, (Math.min(60, alphaI) << 24) | 0xFFFFFF);
+
+        // Индикатор (зеленая точка)
+        drawSmoothRect(context, (int)(cardX + 7), (int)(cardY + 8), 6, 6, 3f, (alphaI << 24) | 0x10B981);
+
+        // Заголовок
+        String title = "Запрос в пати";
+        drawString(context, title, cardX + 17f, cardY + 7f, 7.5f, (alphaI << 24) | 0xFFFFFF);
+
+        // Таймер обратного отсчета
+        if (notif != null) {
+            String secStr = Math.max(1, (int)Math.ceil(notif.secondsLeft())) + "с";
+            float secW = width(secStr, 6.5f);
+            float tagW = secW + 8f;
+            float tagX = cardX + cardW - tagW - 6f;
+            drawSmoothRect(context, (int)tagX, (int)(cardY + 6), (int)tagW, 11, 3.5f, (Math.min(45, alphaI) << 24) | 0xFFFFFF);
+            drawString(context, secStr, tagX + 4f, cardY + 7.5f, 6.5f, (alphaI << 24) | 0xA0A0B0);
         }
 
-        drawSmoothRect(context, (int)(curX + 8), (int)(notifY + 7), 8, 8, 4f, (alphaI << 24) | 0x22C55E);
-        float tx = curX + 22f;
-        float ty = notifY + 5.5f;
-        drawString(context, titlePart,   tx, ty, 8.0f, (alphaI << 24) | 0xFFFFFF);  tx += titleW;
-        drawString(context, " — ",       tx, ty + 0.5f, 7.5f, (alphaI << 24) | 0x555555); tx += sepW;
-        drawString(context, contentPart, tx, ty + 0.5f, 7.5f, (alphaI << 24) | 0xAAAAAA);
+        // Никнейм заявителя
+        String reqName = notif != null ? notif.requesterName : "Игрок";
+        float nameW = width(reqName, 8.0f);
+        drawString(context, reqName, cardX + 7f, cardY + 18f, 8.0f, (alphaI << 24) | 0xFFFFFF);
+        drawString(context, "хочет вступить в пати", cardX + 7f + nameW + 4f, cardY + 18.5f, 7.0f, (alphaI << 24) | 0x888899);
 
-        if (animPartyHover > 0.01f) {
-            int btnAlpha = Math.max(0, Math.min(255, (int)(animPartyHover * alphaI)));
+        // Кнопка [✓ Принять]
+        int aR = (int)(0x10 + (0x34 - 0x10) * animPartyBtnHoverAccept);
+        int aG = (int)(0xB9 + (0xD3 - 0xB9) * animPartyBtnHoverAccept);
+        int aB = (int)(0x81 + (0x99 - 0x81) * animPartyBtnHoverAccept);
+        int acceptCol = (alphaI << 24) | (aR << 16) | (aG << 8) | aB;
+        drawSmoothRect(context, (int)acceptX, (int)btnsY, (int)btnW, (int)btnH, 4.0f, acceptCol);
+        String acceptLabel = "✓ Принять";
+        float acW = width(acceptLabel, 7.0f);
+        drawString(context, acceptLabel, acceptX + (btnW - acW) / 2f, btnsY + (btnH - 7.0f) / 2f, 7.0f, (alphaI << 24) | 0xFFFFFF);
 
-            int aR = (int)(0x1A + (0x22 - 0x1A) * animPartyBtnHoverAccept);
-            int aG = (int)(0x2A + (0xC5 - 0x2A) * animPartyBtnHoverAccept);
-            int aB = (int)(0x1A + (0x5E - 0x1A) * animPartyBtnHoverAccept);
-            drawSmoothRect(context, (int)acceptX_local, (int)btnsY_local, (int)btnW, (int)btnH, 6f,
-                    (btnAlpha << 24) | (aR << 16) | (aG << 8) | aB);
-            String acceptLabel = "✓ Принять";
-            float  acW = width(acceptLabel, 7.5f);
-            drawString(context, acceptLabel,
-                    acceptX_local + btnW / 2f - acW / 2f, btnsY_local + (btnH - 7.5f) / 2f, 7.5f,
-                    (btnAlpha << 24) | 0xFFFFFF);
-
-            int dR = (int)(0x2A + (0xEF - 0x2A) * animPartyBtnHoverDecline);
-            int dG = (int)(0x1A + (0x44 - 0x1A) * animPartyBtnHoverDecline);
-            int dB = (int)(0x1A + (0x44 - 0x1A) * animPartyBtnHoverDecline);
-            drawSmoothRect(context, (int)declineX_local, (int)btnsY_local, (int)btnW, (int)btnH, 6f,
-                    (btnAlpha << 24) | (dR << 16) | (dG << 8) | dB);
-            String declineLabel = "✗ Отклонить";
-            float  dcW = width(declineLabel, 7.5f);
-            drawString(context, declineLabel,
-                    declineX_local + btnW / 2f - dcW / 2f, btnsY_local + (btnH - 7.5f) / 2f, 7.5f,
-                    (btnAlpha << 24) | 0xFFFFFF);
-
-            PARTY_ACCEPT_BOUNDS  = new float[]{ acceptX_screen,  btnsY_screen, btnW_screen, btnH_screen };
-            PARTY_DECLINE_BOUNDS = new float[]{ declineX_screen, btnsY_screen, btnW_screen, btnH_screen };
-        } else {
-            PARTY_ACCEPT_BOUNDS  = null;
-            PARTY_DECLINE_BOUNDS = null;
-        }
+        // Кнопка [✗ Отклонить]
+        int dR = (int)(0xEF + (0xF8 - 0xEF) * animPartyBtnHoverDecline);
+        int dG = (int)(0x44 + (0x71 - 0x44) * animPartyBtnHoverDecline);
+        int dB = (int)(0x44 + (0x71 - 0x44) * animPartyBtnHoverDecline);
+        int declineCol = (alphaI << 24) | (dR << 16) | (dG << 8) | dB;
+        drawSmoothRect(context, (int)declineX, (int)btnsY, (int)btnW, (int)btnH, 4.0f, declineCol);
+        String declineLabel = "✗ Отклонить";
+        float dcW = width(declineLabel, 7.0f);
+        drawString(context, declineLabel, declineX + (btnW - dcW) / 2f, btnsY + (btnH - 7.0f) / 2f, 7.0f, (alphaI << 24) | 0xFFFFFF);
 
         ms.pop();
+    }
+
+    public static boolean handlePartyNotifClick(double mx, double my, int button) {
+        if (button != 0) return false;
+        var notif = com.lexoravisauls.client.party.LexoraPartyManager.activeInviteNotif;
+        if (notif == null) return false;
+
+        float[] ab = PARTY_ACCEPT_BOUNDS;
+        float[] db = PARTY_DECLINE_BOUNDS;
+
+        if (ab != null && mx >= ab[0] && mx <= ab[0] + ab[2] && my >= ab[1] && my <= ab[1] + ab[3]) {
+            if (notif.onAccept != null) notif.onAccept.run();
+            com.lexoravisauls.client.party.LexoraPartyManager.activeInviteNotif = null;
+            PARTY_ACCEPT_BOUNDS = null;
+            PARTY_DECLINE_BOUNDS = null;
+            return true;
+        }
+        if (db != null && mx >= db[0] && mx <= db[0] + db[2] && my >= db[1] && my <= db[1] + db[3]) {
+            if (notif.onDecline != null) notif.onDecline.run();
+            com.lexoravisauls.client.party.LexoraPartyManager.activeInviteNotif = null;
+            PARTY_ACCEPT_BOUNDS = null;
+            PARTY_DECLINE_BOUNDS = null;
+            return true;
+        }
+        return false;
     }
 
     // =========================================================================
@@ -1116,5 +1226,134 @@ public class DynamicIslandRenderer {
     private static void drawSmoothRect(DrawContext context, int x, int y, int width, int height, float radius, int color) {
         if (width <= 0 || height <= 0) return;
         RoundedRectShader.draw(context, x, y, width, height, radius, color);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  APPLE MUSIC STYLE: ВЫДЕЛЕНИЕ АКТИВНОГО СЛОВА С ЦЕНТРИРОВАНИЕМ
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private static void drawDynamicKaraokeLine(DrawContext context, String line, float baseX, float baseY, float fontSize,
+                                               int colorDone, int colorPending, float progress, float maxViewW, float dt) {
+        if (line == null || line.trim().isEmpty()) return;
+        MsdfFont font = getFont();
+        String[] words = line.split("\\s+");
+        if (words.length == 0) return;
+
+        float spaceW = 0.25f * fontSize;
+        float[] wordWidths = new float[words.length];
+        float totalW = 0f;
+        for (int i = 0; i < words.length; i++) {
+            wordWidths[i] = font.getWidth(words[i], fontSize);
+            totalW += wordWidths[i] + (i > 0 ? spaceW : 0f);
+        }
+
+        float progressX = font.computeNaturalProgressX(line, fontSize, progress);
+
+        // Находим активное слово, которое поётся прямо сейчас
+        int activeIdx = -1;
+        float curWordX = 0f;
+        float activeFactor = 0f;
+
+        for (int i = 0; i < words.length; i++) {
+            float wStart = curWordX;
+            float wEnd = curWordX + wordWidths[i];
+            if (progressX >= wStart && progressX <= wEnd) {
+                activeIdx = i;
+                float inWord = (wEnd > wStart) ? ((progressX - wStart) / (wEnd - wStart)) : 0.5f;
+                activeFactor = (float) Math.sin(inWord * Math.PI);
+                break;
+            } else if (progressX > wEnd && (i == words.length - 1 || progressX < wEnd + spaceW)) {
+                activeIdx = i;
+                activeFactor = 0.3f;
+            }
+            curWordX += wordWidths[i] + spaceW;
+        }
+
+        // Плавное следование камеры (непрерывное скольжение без рывков по словам)
+        float targetScrollOffset = 0f;
+        if (totalW > maxViewW) {
+            targetScrollOffset = -(progressX - (maxViewW * 0.35f));
+            targetScrollOffset = Math.min(0f, Math.max(-(totalW - maxViewW), targetScrollOffset));
+        }
+
+        if (Math.abs(smoothKaraokeScrollOffset - targetScrollOffset) > 60f) {
+            smoothKaraokeScrollOffset = targetScrollOffset;
+        } else {
+            smoothKaraokeScrollOffset = MathHelper.lerp(dt * 8.0f, smoothKaraokeScrollOffset, targetScrollOffset);
+        }
+
+        curWordX = 0f;
+        MatrixStack matrices = context.getMatrices();
+
+        for (int i = 0; i < words.length; i++) {
+            float wStart = curWordX;
+            float wEnd = curWordX + wordWidths[i];
+            float drawX = baseX + smoothKaraokeScrollOffset + curWordX;
+            float drawY = baseY;
+
+            boolean isActive = (i == activeIdx);
+            float scale = isActive ? (1.0f + 0.08f * activeFactor) : 1.0f;
+
+            float wordProgress;
+            if (progressX >= wEnd) {
+                wordProgress = 1.0f;
+            } else if (progressX <= wStart) {
+                wordProgress = 0.0f;
+            } else {
+                wordProgress = (wEnd > wStart) ? ((progressX - wStart) / (wEnd - wStart)) : 0.5f;
+            }
+
+            if (scale > 1.001f) {
+                matrices.push();
+                float pivotX = drawX + wordWidths[i] / 2f;
+                float pivotY = drawY + 3.5f;
+                matrices.translate(pivotX, pivotY, 0);
+                matrices.scale(scale, scale, 1.0f);
+                matrices.translate(-pivotX, -pivotY, 0);
+
+                font.drawKaraoke(context, words[i], drawX, drawY - (0.4f * activeFactor), fontSize, colorDone, colorPending, wordProgress);
+                matrices.pop();
+            } else {
+                font.drawKaraoke(context, words[i], drawX, drawY, fontSize, colorDone, colorPending, wordProgress);
+            }
+
+            curWordX += wordWidths[i] + spaceW;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  🪜 АНИМАЦИЯ «ЛЕСЕНКА»: ПОСЛЕДОВАТЕЛЬНЫЙ УХОД СЛОВ ВВЕРХ
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private static void drawLadderExit(DrawContext context, String line, float baseX, float baseY, float fontSize,
+                                       int baseAlpha, float transitionProgress, boolean wasKaraoke) {
+        if (line == null || line.trim().isEmpty()) return;
+        MsdfFont font = getFont();
+        String[] words = line.split("\\s+");
+        if (words.length == 0) return;
+
+        float spaceW = 0.25f * fontSize;
+        float curWordX = 0f;
+        int n = words.length;
+
+        for (int i = 0; i < n; i++) {
+            float wordW = font.getWidth(words[i], fontSize);
+            float drawX = baseX + curWordX;
+
+            // Каждое следующее слово начинает взлетать чуть позже предыдущего (лесенка)
+            float staggerStart = (float) i / (float) n * 0.40f;
+            float p = Math.max(0f, Math.min(1f, (transitionProgress - staggerStart) / (1f - staggerStart)));
+
+            float easeY = p * p * (3f - 2f * p);
+            float drawY = baseY - (10f * easeY);
+
+            int wordAlpha = (int)(baseAlpha * (1f - p));
+            if (wordAlpha > 5) {
+                int color = (wordAlpha << 24) | 0xFFFFFF;
+                font.draw(context, words[i], drawX, drawY, fontSize, color);
+            }
+
+            curWordX += wordW + spaceW;
+        }
     }
 }

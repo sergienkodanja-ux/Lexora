@@ -1,5 +1,7 @@
 package com.lexoravisauls.client.events;
 
+import com.lexoravisauls.client.core.ClientData;
+import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.mixin.BossBarHudAccessor;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.ClientBossBar;
@@ -60,6 +62,16 @@ public class PvpBossBarTracker {
     public static void tick() {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc == null || mc.inGameHud == null) return;
+
+        // Watermark выключена — не трогаем состояние вообще. MixinBossBarHud скрывает vanilla
+        // боссбар только когда isInPvp() == true, поэтому явно сбрасываем оба флага и выходим
+        // ДО сканирования боссбаров: без этого даже при выключенной ватермарке трекер продолжал
+        // бы находить PVP-бар и прятать его, хотя показывать замену уже некому.
+        if (!isWatermarkEnabled()) {
+            inPvp      = false;
+            pvpBarUuid = null;
+            return;
+        }
 
         Map<UUID, ClientBossBar> bars;
         try {
@@ -176,5 +188,17 @@ public class PvpBossBarTracker {
         long since = System.currentTimeMillis() - lastExtendMs;
         if (since < 0 || since > 400) return 0f;
         return 1f - (since / 400f);
+    }
+
+    /**
+     * Та же проверка, что и приватный isModuleEnabled(...) в DynamicIslandRenderer — держим
+     * логику идентичной вручную, т.к. оригинальный метод private и живёт в другом классе.
+     * Если структуру LexoraGui/ClientData.moduleStates поменяешь в одном месте — не забудь
+     * поправить и тут.
+     */
+    private static boolean isWatermarkEnabled() {
+        boolean fallback = true;
+        return LexoraGui.moduleStates.getOrDefault("Watermark", ClientData.moduleStates.getOrDefault("Watermark", fallback))
+                || ClientData.moduleStates.getOrDefault("Watermark", fallback);
     }
 }

@@ -58,13 +58,13 @@ public class TotemSoundManager {
         return ClientData.numSettings.getOrDefault("Totem Sound Pitch", 1.0f);
     }
 
-    private static String getMode() {
+    public static String getMode() {
         if (LexoraGui.modeSettings.containsKey("Totem Sound Mode")) return LexoraGui.modeSettings.get("Totem Sound Mode");
         return ClientData.modeSettings.getOrDefault("Totem Sound Mode", "Звук 1");
     }
 
     public static void tick(MinecraftClient mc) {
-        if (!isEnabled()) return;
+        if (!isEnabled() || mc == null) return;
 
         String currentSound = getMode();
         if (lastSelectedSound == null) {
@@ -77,7 +77,9 @@ public class TotemSoundManager {
             SoundEvent customEvent = getReplacementEvent();
 
             if (customEvent != SoundEvents.ITEM_TOTEM_USE && mc.getSoundManager() != null) {
-                mc.getSoundManager().play(PositionedSoundInstance.master(customEvent, getPitch(), getVolume()));
+                try {
+                    mc.getSoundManager().play(PositionedSoundInstance.master(customEvent, getPitch(), getVolume()));
+                } catch (Exception ignored) {}
             }
         }
     }
@@ -93,7 +95,7 @@ public class TotemSoundManager {
 
         if (!isPlayable(id)) {
             if (WARNED_BROKEN.add(id)) {
-                System.err.println("[LexoraVisuals] Totem sound '" + id + "' has no valid audio file (sounds/" + id + ".ogg) — falling back to vanilla.");
+                System.err.println("[LexoraVisuals] Totem sound '" + id + "' is missing or broken — falling back to vanilla.");
             }
             return SoundEvents.ITEM_TOTEM_USE;
         }
@@ -101,7 +103,7 @@ public class TotemSoundManager {
         return event;
     }
 
-    private static String resolveSoundId(String modeValue) {
+    public static String resolveSoundId(String modeValue) {
         if (modeValue == null) return null;
         String trimmed = modeValue.trim();
 
@@ -140,14 +142,19 @@ public class TotemSoundManager {
         return isEnabled() ? getPitch() : original;
     }
 
-    private static boolean isPlayable(String id) {
+    public static boolean isPlayable(String id) {
+        if (id == null || id.isEmpty()) return false;
+
         Boolean cached = VALIDITY_CACHE.get(id);
         if (cached != null) return cached;
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc == null || mc.getResourceManager() == null) return false;
 
         boolean valid;
         try {
             Identifier resource = Identifier.of("lexoravisauls", "sounds/" + id + ".ogg");
-            Optional<Resource> found = MinecraftClient.getInstance().getResourceManager().getResource(resource);
+            Optional<Resource> found = mc.getResourceManager().getResource(resource);
             valid = found.isPresent();
         } catch (Exception e) {
             valid = false;

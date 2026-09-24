@@ -68,5 +68,6 @@
   "use_totem": { "category": "master", "sounds": [ "lexoravisauls:use_totem" ] },
   "zxc": { "category": "master", "sounds": [ "lexoravisauls:zxc" ] },
   "zxcghoul": { "category": "master", "sounds": [ "lexoravisauls:zxcghoul" ] },
-  "fluger": { "category": "master", "sounds": [ "lexoravisauls:fluger" ] }
+  "fluger": { "category": "master", "sounds": [ "lexoravisauls:fluger" ] },
+  "hello": { "category": "master", "sounds": [ "lexoravisauls:hellovs" ] }
 }

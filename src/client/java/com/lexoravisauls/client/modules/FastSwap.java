@@ -1,11 +1,13 @@
 package com.lexoravisauls.client.modules;
 
+import com.lexoravisauls.client.core.BindManager;
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.client.util.InputUtil;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.LinkedHashMap;
@@ -39,19 +41,27 @@ public class FastSwap {
 
     public static void tick() {
         MinecraftClient mc = MinecraftClient.getInstance();
-        // Если открыт чат или инвентарь — свап не работает
-        if (mc.player == null || mc.currentScreen != null) return;
-        if (!LexoraGui.moduleStates.getOrDefault("Fast Swap", false)) return;
+        if (mc.player == null || mc.currentScreen != null || mc.getWindow() == null) return;
+
+        boolean isEnabled = ClientData.moduleStates.getOrDefault("Fast Swap", false)
+                || LexoraGui.moduleStates.getOrDefault("Fast Swap", false);
+        if (!isEnabled) {
+            wasPressed.clear();
+            return;
+        }
 
         for (Map.Entry<String, Item> entry : SWAP_ITEMS.entrySet()) {
             String name = entry.getKey();
             Item targetItem = entry.getValue();
 
-            int key = LexoraGui.numSettings.getOrDefault("Bind_" + name, -1f).intValue();
-            if (key == -1) continue;
+            int key = BindManager.getStoredBindValue("Bind_" + name);
+            if (key == GLFW.GLFW_KEY_UNKNOWN || key == -1) {
+                key = ClientData.moduleBinds.getOrDefault("Bind_" + name,
+                        LexoraGui.numSettings.getOrDefault("Bind_" + name, -1f).intValue());
+            }
+            if (key == GLFW.GLFW_KEY_UNKNOWN || key == -1) continue;
 
-            // Используем исправленный метод проверки
-            boolean isPressed = isKeyPressed(mc, key);
+            boolean isPressed = BindManager.isBindDown(mc.getWindow().getHandle(), key);
             boolean wasPr = wasPressed.getOrDefault(name, false);
 
             if (isPressed && !wasPr) {
@@ -61,51 +71,17 @@ public class FastSwap {
         }
     }
 
-    /**
-     * Исправленный метод проверки клавиш и кнопок мыши (M4, M5 и т.д.)
-     */
-    private static boolean isKeyPressed(MinecraftClient mc, int key) {
-        if (mc.currentScreen != null) return false;
-
-        long window = mc.getWindow().getHandle();
-
-        try {
-            if (key < 0) {
-                // ОБРАБОТКА МЫШИ
-                // В твоей системе отрицательные числа — это мышь.
-                // Обычно -100 это Mouse 1, -101 Mouse 2 и т.д.
-                // Если система просто передает -1, -2, берем модуль.
-                int mouseButton = Math.abs(key);
-
-                // Если бинд идет в формате -101, -102 (стандарт для многих GUI)
-                if (mouseButton >= 100) {
-                    mouseButton -= 100;
-                } else {
-                    // Если бинд идет в формате -1, -2 (смещение на 1)
-                    mouseButton -= 1;
-                }
-
-                // GLFW поддерживает кнопки от 0 до 7 (GLFW_MOUSE_BUTTON_1 до 8)
-                // Mouse 4 — это индекс 3, Mouse 5 — это индекс 4.
-                if (mouseButton >= 0 && mouseButton <= 7) {
-                    return GLFW.glfwGetMouseButton(window, mouseButton) == GLFW.GLFW_PRESS;
-                }
-            } else {
-                // ОБРАБОТКА КЛАВИАТУРЫ
-                return InputUtil.isKeyPressed(window, key);
-            }
-        } catch (Exception ignored) {}
-
-        return false;
-    }
-
     private static void switchToItem(MinecraftClient mc, Item targetItem) {
+        if (mc.player == null) return;
         for (int i = 0; i < 9; i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
             if (stack.getItem() == targetItem) {
                 mc.player.getInventory().selectedSlot = i;
+                if (mc.getNetworkHandler() != null) {
+                    mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(i));
+                }
                 break;
             }
         }
     }
-}
+}

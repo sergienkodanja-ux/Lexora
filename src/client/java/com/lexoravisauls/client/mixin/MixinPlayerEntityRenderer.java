@@ -33,6 +33,7 @@ public abstract class MixinPlayerEntityRenderer extends LivingEntityRenderer<Abs
 
         // Передаем (this), каст в 1.21.4 обычно не нужен, если типы в Renderer совпадают
         this.addFeature(new WaveyCapeFeatureRenderer(this));
+        this.addFeature(new com.lexoravisauls.client.cosmetic.CosmeticFeatureRenderer(this));
     }
 
     @Inject(method = "updateRenderState(Lnet/minecraft/client/network/AbstractClientPlayerEntity;Lnet/minecraft/client/render/entity/state/PlayerEntityRenderState;F)V", at = @At("RETURN"))

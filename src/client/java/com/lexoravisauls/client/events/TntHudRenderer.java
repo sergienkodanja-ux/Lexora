@@ -24,17 +24,14 @@ import java.util.Locale;
 
 public class TntHudRenderer {
 
-    // --- ШРИФТЫ И ТЕКСТУРЫ ---
     private static final Identifier FONT_TEX = Identifier.of("lexoravisauls", "msdf_data/font.png");
     private static final Identifier FONT_JSON = Identifier.of("lexoravisauls", "msdf_data/font.json");
     private static final Identifier TNT_BLOCK_TEX = Identifier.of("minecraft", "textures/block/tnt_side.png");
     private static MsdfFont msdfFont = null;
 
-    // --- ФИЗИКА "ЖЕЛЕ" (Spring Animation) ---
     private static float animAlpha = 0f, animScale = 0f, animW = 115f, animH = 42f;
     private static float scaleV = 0f, wV = 0f, hV = 0f;
 
-    // --- ПУБЛИЧНЫЕ РАЗМЕРЫ ДЛЯ ХИТБОКСА (HudManager / MixinChatScreen) ---
     public static int WIDTH = 115;
     public static int HEIGHT = 42;
 
@@ -58,9 +55,9 @@ public class TntHudRenderer {
         boolean enabled = isModuleEnabled("TNT Detect", true);
         boolean showPreview = mc.currentScreen instanceof LexoraGui || mc.currentScreen instanceof ChatScreen;
 
-        // Ищем зажжённые ТНТ в радиусе 32 блоков
+        // Ищем зажжённые ТНТ в радиусе 64 блоков
         TntEntity targetTnt = null;
-        double searchRadius = 32.0;
+        double searchRadius = 64.0;
 
         List<TntEntity> tnts = mc.world.getEntitiesByClass(
                 TntEntity.class,
@@ -102,7 +99,6 @@ public class TntHudRenderer {
 
         if (animAlpha < 0.02f) return;
 
-        // Прямой доступ к координатам через HudManager
         float x = HudManager.tntX == -1 ? 10 : HudManager.tntX;
         float y = HudManager.tntY == -1 ? 160 : HudManager.tntY;
 
@@ -116,20 +112,15 @@ public class TntHudRenderer {
 
         int alphaInt = (int) (animAlpha * 255);
 
-        // 1. Мягкое анимированное красное свечение (Bloom-эффект)
         float pulse = (float) (Math.sin(System.currentTimeMillis() * 0.007) * 0.5 + 0.5);
         drawRedGlow(context, x, y, WIDTH, HEIGHT, alphaInt, pulse);
 
-        // 2. Карточка ХУДа
         drawPanel(context, x, y, WIDTH, HEIGHT, alphaInt);
 
-        // 3. Иконка TNT
         drawSprite(context, TNT_BLOCK_TEX, x + 6, y + 5.5f, 13, 13, alphaInt);
 
-        // 4. Заголовок
-        drawString(context, "TNT", x + 23, y + 7.5f, 8.0f, (alphaInt << 24) | 0xFFFFFF);
+        drawString(context, "TNT", x + 23, y + 7.5f, 8.0f, HudThemeHelper.getTextColor(alphaInt));
 
-        // 5. Динамический таймер (Зелёный -> Оранжевый -> Красный)
         String timerText = String.format(Locale.US, "%.2fs", fuseSeconds);
         int timerColor;
 
@@ -141,7 +132,7 @@ public class TntHudRenderer {
             timerColor = (alphaInt << 24) | 0x55FF55;
         }
 
-        drawString(context, "Detonation:", x + 8, y + 24f, 7.0f, (alphaInt << 24) | 0xAAAAAA);
+        drawString(context, "Detonation:", x + 8, y + 24f, 7.0f, HudThemeHelper.getSecondaryTextColor(alphaInt));
         drawString(context, timerText, x + WIDTH - 8 - width(timerText, 8.0f), y + 23.5f, 8.0f, timerColor);
 
         context.getMatrices().pop();
@@ -150,9 +141,6 @@ public class TntHudRenderer {
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
     }
 
-    /**
-     * Мягкая расходящаяся красная аура (6 слоёв с падающим альфа-каналом)
-     */
     public static void drawRedGlow(DrawContext context, float x, float y, float width, float height, int alphaInt, float pulse) {
         float baseAlpha = (alphaInt / 255.0f) * (0.15f + pulse * 0.40f);
         if (baseAlpha <= 0.005f) return;
@@ -173,18 +161,11 @@ public class TntHudRenderer {
     }
 
     public static void drawPanel(DrawContext context, float x, float y, float width, float height, int alpha) {
-        boolean blurEnabled = LexoraGui.moduleStates.getOrDefault("TNT Detect Blur", true);
-        int bgColor = (Math.min(alpha, 180) << 24) | 0x080404;
+    boolean blurEnabled = isModuleEnabled("TNT Detect Blur", true);
+    HudThemeHelper.drawHudPanel(context, x, y, width, height, 6f, alpha, blurEnabled);
+}
 
-        if (blurEnabled && alpha > 10) {
-            context.draw();
-            com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(context, x, y, width, height, 6f, 15f, bgColor);
-        } else {
-            drawSmoothRect(context, (int) x, (int) y, (int) width, (int) height, 6f, bgColor);
-        }
-    }
-
-    public static void drawSprite(DrawContext context, Identifier texture, float x, float y, float w, float h, int alphaInt) {
+public static void drawSprite(DrawContext context, Identifier texture, float x, float y, float w, float h, int alphaInt) {
         float a = alphaInt / 255.0F;
         RenderSystem.setShaderTexture(0, texture);
         RenderSystem.setShader(ShaderProgramKeys.POSITION_TEX_COLOR);

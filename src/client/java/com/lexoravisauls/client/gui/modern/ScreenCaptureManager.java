@@ -16,6 +16,7 @@ public class ScreenCaptureManager {
         if (client == null || client.getWindow() == null) return;
 
         Framebuffer mainFbo = client.getFramebuffer();
+        if (mainFbo == null) return;
         int w = mainFbo.textureWidth;
         int h = mainFbo.textureHeight;
         if (w <= 0 || h <= 0) return;
@@ -24,14 +25,11 @@ public class ScreenCaptureManager {
 
         if (captureFbo == null || captureFbo.textureWidth != w || captureFbo.textureHeight != h) {
             if (captureFbo != null) captureFbo.delete();
-            // Оставляем 3 аргумента, как требует твоя версия!
             captureFbo = new SimpleFramebuffer(w, h, false);
         }
 
-        GlStateManager._glBindFramebuffer(36008, mainFbo.fbo);    // GL_READ_FRAMEBUFFER
-        GlStateManager._glBindFramebuffer(36009, captureFbo.fbo); // GL_DRAW_FRAMEBUFFER
-
-        // ФИКС ПЕРЕВОРОТА: Зеркалим координаты назначения по оси Y (0, h, w, 0)
+        GlStateManager._glBindFramebuffer(36008, mainFbo.fbo);
+        GlStateManager._glBindFramebuffer(36009, captureFbo.fbo);
         GlStateManager._glBlitFrameBuffer(0, 0, w, h, 0, h, w, 0, 16384, 9728);
 
         mainFbo.beginWrite(false);

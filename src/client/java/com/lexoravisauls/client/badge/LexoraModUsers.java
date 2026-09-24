@@ -35,29 +35,59 @@ public final class LexoraModUsers {
 
     private static final Set<UUID> IRC_USERS = ConcurrentHashMap.newKeySet();
     private static final Set<String> IRC_NAMES = ConcurrentHashMap.newKeySet();
+    private static final java.util.Map<String, String> IRC_DISPLAY_NAMES = new ConcurrentHashMap<>();
 
     private static final Set<String> SELF_NAMES = ConcurrentHashMap.newKeySet();
+    private static final java.util.Map<String, Boolean> NAME_CACHE = new ConcurrentHashMap<>();
 
     private LexoraModUsers() {
     }
 
+    public static boolean hasOtherModUsersOnServer() {
+        return !SERVER_BACKEND_NAMES.isEmpty() || !SERVER_USERS.isEmpty() || !SERVER_BACKEND_USERS.isEmpty() || !IRC_NAMES.isEmpty() || !IRC_USERS.isEmpty();
+    }
+
+    public static String getIrcDisplayName(String cleanName) {
+        if (cleanName == null) return "";
+        return IRC_DISPLAY_NAMES.getOrDefault(cleanName.toLowerCase(), cleanName);
+    }
+
+    public static void addIrcUser(UUID uuid, String name) {
+        if (name == null || name.isEmpty()) return;
+        String clean = normalizeName(name);
+        if (!clean.isEmpty()) {
+            IRC_NAMES.add(clean);
+            IRC_DISPLAY_NAMES.put(clean, name);
+        }
+        if (uuid != null) {
+            IRC_USERS.add(uuid);
+            LexoraIrcClient.NAME_TO_UUID.put(clean, uuid);
+            LexoraIrcClient.NAME_TO_UUID.put(name, uuid);
+        }
+        NAME_CACHE.clear();
+    }
+
     // --- ДЛЯ ОТОБРАЖЕНИЯ ОНЛАЙНА В GUI (список участников IRC-чата) ---
-    // ВАЖНО: это теперь IRC_NAMES, не SERVER_BACKEND_NAMES — LexoraIrcScreen
-    // показывает список чата, а не список игроков конкретного сервера.
-    // Если экран должен был показывать именно игроков сервера — поменяй на
-    // SERVER_BACKEND_NAMES, но исходно (судя по BACKEND_URL="/irc" в
-    // LexoraExternalPresence) это задумывался как список чата.
     public static Set<String> getOnlineNames() {
         return IRC_NAMES;
     }
 
     public static boolean has(UUID uuid) {
-        return uuid != null
-                && (
-                SERVER_USERS.contains(uuid)
-                        || SERVER_BACKEND_USERS.contains(uuid)
-                        || SELF_USERS.contains(uuid)
-        );
+        if (uuid == null) return false;
+        if (SERVER_USERS.contains(uuid)
+                || SERVER_BACKEND_USERS.contains(uuid)
+                || SELF_USERS.contains(uuid)
+                || IRC_USERS.contains(uuid)) {
+            return true;
+        }
+        if (com.lexoravisauls.client.party.LexoraPartyManager.inParty()) {
+            for (com.lexoravisauls.client.party.LexoraPartyManager.PartyMember m : com.lexoravisauls.client.party.LexoraPartyManager.members) {
+                if (m.uuid != null && m.uuid.equalsIgnoreCase(uuid.toString())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public static boolean has(UUID uuid, String name) {
@@ -65,18 +95,43 @@ public final class LexoraModUsers {
     }
 
     public static boolean hasName(String name) {
-        String clean = normalizeName(name);
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
 
-        return !clean.isEmpty()
-                && (
-                SERVER_BACKEND_NAMES.contains(clean)
-                        || SELF_NAMES.contains(clean)
-        );
+        Boolean cached = NAME_CACHE.get(name);
+        if (cached != null) {
+            return cached;
+        }
+
+        String clean = normalizeName(name);
+        if (clean.isEmpty()) {
+            return false;
+        }
+
+        boolean result = SELF_NAMES.contains(clean)
+                || IRC_NAMES.contains(clean)
+                || SERVER_BACKEND_NAMES.contains(clean)
+                || LexoraIrcClient.NAME_TO_UUID.containsKey(clean)
+                || LexoraIrcClient.NAME_TO_UUID.containsKey(name);
+
+        if (!result && com.lexoravisauls.client.party.LexoraPartyManager.inParty()) {
+            for (com.lexoravisauls.client.party.LexoraPartyManager.PartyMember m : com.lexoravisauls.client.party.LexoraPartyManager.members) {
+                if (m.name != null && normalizeName(m.name).equals(clean)) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+
+        NAME_CACHE.put(name, result);
+        return result;
     }
 
     public static void addSelf(UUID uuid) {
         if (uuid != null) {
             SELF_USERS.add(uuid);
+            NAME_CACHE.clear();
         }
     }
 
@@ -87,11 +142,13 @@ public final class LexoraModUsers {
 
         if (!clean.isEmpty()) {
             SELF_NAMES.add(clean);
+            NAME_CACHE.clear();
         }
     }
 
     public static void setServerUsers(Collection<UUID> uuids) {
         SERVER_USERS.clear();
+        NAME_CACHE.clear();
 
         if (uuids != null) {
             SERVER_USERS.addAll(uuids);
@@ -104,6 +161,7 @@ public final class LexoraModUsers {
     // — см. setIrcUsers ниже).
     public static void setBackendUsers(Collection<UUID> uuids) {
         SERVER_BACKEND_USERS.clear();
+        NAME_CACHE.clear();
 
         if (uuids != null) {
             SERVER_BACKEND_USERS.addAll(uuids);
@@ -115,6 +173,7 @@ public final class LexoraModUsers {
     // SERVER_BACKEND_NAMES (LexoraExternalPresence больше сюда не пишет).
     public static void setBackendNames(Collection<String> names) {
         SERVER_BACKEND_NAMES.clear();
+        NAME_CACHE.clear();
 
         if (names == null) {
             return;
@@ -129,12 +188,22 @@ public final class LexoraModUsers {
         }
     }
 
+    public static void addBackendName(String name) {
+        if (name == null || name.isEmpty()) return;
+        String clean = normalizeName(name);
+        if (!clean.isEmpty()) {
+            SERVER_BACKEND_NAMES.add(clean);
+            NAME_CACHE.clear();
+        }
+    }
+
     // НОВОЕ: отдельные методы для IRC-списка (список участников глобального
     // чата). Используются ТОЛЬКО из LexoraExternalPresence.sync() — раньше
     // этот класс по ошибке звал setBackendUsers()/setBackendNames() и тем
     // самым затирал список игроков сервера каждые 7 секунд.
     public static void setIrcUsers(Collection<UUID> uuids) {
         IRC_USERS.clear();
+        NAME_CACHE.clear();
 
         if (uuids != null) {
             IRC_USERS.addAll(uuids);
@@ -143,6 +212,8 @@ public final class LexoraModUsers {
 
     public static void setIrcNames(Collection<String> names) {
         IRC_NAMES.clear();
+        IRC_DISPLAY_NAMES.clear();
+        NAME_CACHE.clear();
 
         if (names == null) {
             return;
@@ -153,6 +224,7 @@ public final class LexoraModUsers {
 
             if (!clean.isEmpty()) {
                 IRC_NAMES.add(clean);
+                IRC_DISPLAY_NAMES.put(clean, name);
             }
         }
     }
@@ -166,6 +238,7 @@ public final class LexoraModUsers {
         SELF_USERS.clear();
         SERVER_BACKEND_NAMES.clear();
         SELF_NAMES.clear();
+        NAME_CACHE.clear();
         // IRC_USERS/IRC_NAMES намеренно НЕ сбрасываем — это не привязано
         // к конкретному Minecraft-серверу, глобальный чат остаётся тем же
         // независимо от того, на каком сервере ты сейчас находишься.
@@ -189,6 +262,7 @@ public final class LexoraModUsers {
     public static void clearOnRejoin() {
         SERVER_USERS.clear();
         SELF_USERS.clear();
+        NAME_CACHE.clear();
     }
 
     public static void setAll(List<UUID> users) {
@@ -196,13 +270,25 @@ public final class LexoraModUsers {
     }
 
     private static String normalizeName(String value) {
-        if (value == null) {
+        if (value == null || value.isEmpty()) {
             return "";
         }
 
-        return value
-                .trim()
-                .toLowerCase()
-                .replaceAll("[^a-z0-9_]", "");
+        int len = value.length();
+        char[] buf = new char[len];
+        int out = 0;
+        for (int i = 0; i < len; i++) {
+            char c = value.charAt(i);
+            if (c == '§' && i + 1 < len) {
+                i++; // пропускаем цветовые коды Minecraft §c, §a и т.д.
+                continue;
+            }
+            if (c >= 'A' && c <= 'Z') {
+                buf[out++] = (char) (c + 32);
+            } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+                buf[out++] = c;
+            }
+        }
+        return new String(buf, 0, out);
     }
 }

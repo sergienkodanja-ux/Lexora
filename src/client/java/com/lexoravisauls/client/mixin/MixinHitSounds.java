@@ -28,7 +28,7 @@ public class MixinHitSounds {
                 && !player.hasStatusEffect(StatusEffects.BLINDNESS)
                 && !player.hasVehicle();
 
-        ParticleSystem.spawnHitParticles(target.getPos(), isCrit);
+        ParticleSystem.onAttack(target, isCrit);
 
         if (!LexoraGui.moduleStates.getOrDefault("Hit Sounds", false)) return;
 

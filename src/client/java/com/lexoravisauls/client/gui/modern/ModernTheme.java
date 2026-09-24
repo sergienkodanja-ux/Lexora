@@ -1,8 +1,17 @@
 package com.lexoravisauls.client.gui.modern;
 
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 
 public class ModernTheme {
+
+    public static boolean isDark() {
+        return ClientData.moduleStates.getOrDefault("DarkTheme", true);
+    }
+
+    public static void setDark(boolean dark) {
+        ClientData.moduleStates.put("DarkTheme", dark);
+    }
 
     public static int accent() {
         return 0xFF000000 | LexoraGui.getThemeColor(0.0f);

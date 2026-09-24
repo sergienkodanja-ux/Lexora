@@ -1,0 +1,21 @@
+{
+    "blend": {
+        "func": "add",
+        "srcrgb": "srcalpha",
+        "dstrgb": "1-srcalpha"
+    },
+    "vertex": "lexoravisauls:core/smoke_menu",
+    "fragment": "lexoravisauls:core/smoke_menu",
+    "attributes": [
+        "Position"
+    ],
+    "samplers": [],
+    "uniforms": [
+        { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "uTime", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "uResolution", "type": "float", "count": 2, "values": [ 1920.0, 1080.0 ] },
+        { "name": "uMouse", "type": "float", "count": 2, "values": [ 0.0, 0.0 ] },
+        { "name": "uAlpha", "type": "float", "count": 1, "values": [ 1.0 ] }
+    ]
+}

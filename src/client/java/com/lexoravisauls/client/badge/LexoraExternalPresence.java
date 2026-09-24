@@ -18,7 +18,7 @@ import java.util.UUID;
 
 public final class LexoraExternalPresence {
 
-    private static final String BACKEND_URL = "https://lexoravisuals.fun/irc";
+    private static final String BACKEND_URL = "https://lexoravisuals.fun/irc/api/presence";
     private static final String GLOBAL_ROOM = "global";
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
@@ -30,6 +30,10 @@ public final class LexoraExternalPresence {
     private static long lastSyncMs;
 
     private LexoraExternalPresence() {
+    }
+
+    public static void triggerSync() {
+        lastSyncMs = 0L;
     }
 
     public static void register() {
@@ -123,6 +127,10 @@ public final class LexoraExternalPresence {
                         client.execute(() -> {
                             LexoraModUsers.setIrcUsers(users);
                             LexoraModUsers.setIrcNames(names);
+                            for (int i = 0; i < users.size() && i < names.size(); i++) {
+                                LexoraIrcClient.NAME_TO_UUID.put(names.get(i), users.get(i));
+                                LexoraIrcClient.NAME_TO_UUID.put(names.get(i).toLowerCase(), users.get(i));
+                            }
                         });
                     } catch (Exception error) {
                         System.out.println("[Lexora Backend] Parse error");

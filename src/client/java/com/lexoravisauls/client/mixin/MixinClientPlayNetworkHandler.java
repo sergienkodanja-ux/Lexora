@@ -24,13 +24,24 @@ public class MixinClientPlayNetworkHandler {
         if (PvPSave.handleCommand(command)) ci.cancel();
     }
 
-    // 🔥 ИНЖЕКТ 2: ИНДИКАТОР ТОТЕМОВ
+    // 🔥 ИНЖЕКТ 2: ИНДИКАТОР ТОТЕМОВ И СМЕРТИ (Kill Effect)
     @Inject(method = "onEntityStatus", at = @At("HEAD"))
     private void onEntityStatus(net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket packet, CallbackInfo ci) {
         MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player == null || mc.world == null) return;
 
-        // Проверяем включен ли модуль
-        if (mc.player == null || mc.world == null || !LexoraGui.moduleStates.getOrDefault("Totem Indicator", true)) return;
+        // 3 - статус смерти сущности на сервере
+        if (packet.getStatus() == 3) {
+            net.minecraft.entity.Entity entity = packet.getEntity(mc.world);
+            if (entity instanceof net.minecraft.entity.player.PlayerEntity player && entity != mc.player) {
+                com.lexoravisauls.client.modules.killeffect.KillEffectManager.triggerAt(
+                        player, player.getX(), player.getY(), player.getZ(), null
+                );
+            }
+        }
+
+        // Проверяем включен ли модуль тотемов
+        if (!LexoraGui.moduleStates.getOrDefault("Totem Indicator", true)) return;
 
         // 35 - статус срабатывания тотема
         if (packet.getStatus() == 35) {

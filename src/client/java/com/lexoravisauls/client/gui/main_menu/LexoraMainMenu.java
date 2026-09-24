@@ -1,42 +1,28 @@
 package com.lexoravisauls.client.gui.main_menu;
 
 import com.google.common.collect.ImmutableList;
-import com.lexoravisauls.client.auth.AuthManager;
-import com.lexoravisauls.client.cosmetics.CosmeticsManager;
 import com.lexoravisauls.client.events.RoundedRectShader;
 import com.lexoravisauls.client.gui.MsdfFont;
+import com.lexoravisauls.client.gui.modern.GuiLocalization;
+import com.lexoravisauls.client.gui.modern.ModernClickGui;
 import com.lexoravisauls.client.mixin.SessionAccessor;
+import com.lexoravisauls.client.utils.ConfigManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.ShaderProgramKeys;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen;
-import net.minecraft.client.gui.screen.narration.NarrationMessageBuilder;
+import net.minecraft.client.gui.screen.option.LanguageOptionsScreen;
 import net.minecraft.client.gui.screen.option.OptionsScreen;
 import net.minecraft.client.gui.screen.world.SelectWorldScreen;
-import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.render.*;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.client.gl.ShaderProgramKeys;
-import net.minecraft.resource.Resource;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL12;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.metadata.IIOMetadata;
-import javax.imageio.stream.ImageInputStream;
-import java.awt.AlphaComposite;
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -52,32 +38,38 @@ public class LexoraMainMenu extends Screen {
     private static final Identifier FONT_JSON = Identifier.of("lexoravisauls", "msdf_data/font.json");
     private static MsdfFont msdfFont = null;
 
-    // ─── Размеры текста ───────────────────────────────────────────────────────
-    public static final float SIZE_TIME  = 28.0f;
-    public static final float SIZE_DATE  = 12.0f;
-    public static final float SIZE_HINT  = 10.0f;
+    // ─── Размеры шрифта ───────────────────────────────────────────────────────
+    public static final float SIZE_LOGO  = 15.0f;
+    public static final float SIZE_TIME  = 20.0f;
+    public static final float SIZE_DATE  = 8.5f;
+    public static final float SIZE_TITLE = 11.5f;
+    public static final float SIZE_DESC  = 7.5f;
+    public static final float SIZE_HINT  = 8.0f;
     public static final float SIZE_SMALL = 8.0f;
+    public static final float SIZE_TINY  = 6.5f;
 
     // ─── Текстуры ─────────────────────────────────────────────────────────────
-    public static final Identifier ADD_TEX        = Identifier.of("lexoravisauls", "textures/gui/add.png");
-    public static final Identifier BACKGROUND_TEX = Identifier.of("lexoravisauls", "textures/gui/background.png");
-    public static final Identifier HELLO_GIF_TEX  = Identifier.of("lexoravisauls", "textures/gui/hello.gif");
+    public static final Identifier ODINOCH_TEX   = Identifier.of("lexoravisauls", "textures/gui/odinoch.png");
+    public static final Identifier SETEVA_TEX    = Identifier.of("lexoravisauls", "textures/gui/seteva.png");
+    public static final Identifier HELLO_GIF_TEX = Identifier.of("lexoravisauls", "textures/gui/hello.gif");
+    public static final Identifier ADD_TEX       = Identifier.of("lexoravisauls", "textures/gui/add.png");
 
-    // ─── Палитра ─────────────────────────────
-    private static final int COL_PANEL_BG      = 0x990A0A0A;
-    private static final int COL_PANEL_BG2     = 0x99111111;
-    private static final int COL_DIVIDER       = 0xFF1A1A1A;
-    private static final int COL_BTN_NORMAL    = 0xCC181818;
-    private static final int COL_BTN_HOVER     = 0xCC2E2E2E;
-    private static final int COL_TEXT_PRIMARY  = 0xFFE8E8E8;
-    private static final int COL_TEXT_SECONDARY= 0xFF555555;
-    private static final int COL_TEXT_MUTED    = 0xFF333333;
-    private static final int COL_TEXT_WHITE    = 0xFFFFFFFF;
-    private static final int COL_FIELD_BG      = 0xAA050505;
-    private static final int COL_FIELD_FOCUSED = 0xAA1A1A1A;
-    private static final int COL_LIST_ITEM     = 0x880E0E0E;
-    private static final int COL_LIST_HOVER    = 0xAA1C1C1C;
-    private static final int COL_LIST_SELECTED = 0xCC2A2A2A;
+    // ─── Палитра ─────────────────────────────────────────────────────────────
+    private static final int COL_TEXT_PRIMARY    = 0xFFEBEBF0;
+    private static final int COL_TEXT_SECONDARY  = 0xFF8A8A9C;
+    private static final int COL_TEXT_MUTED      = 0xFF555566;
+    private static final int COL_TEXT_WHITE      = 0xFFFFFFFF;
+    private static final int COL_CARD_BORDER     = 0x22FFFFFF;
+    private static final int COL_CARD_BORDER_HOV = 0x65FFFFFF;
+    private static final int COL_DOCK_BG         = 0x880B0C15;
+    private static final int COL_PANEL_BG        = 0xEE0C0D15;
+    private static final int COL_PANEL_BG2       = 0x99131420;
+    private static final int COL_DIVIDER         = 0x20FFFFFF;
+    private static final int COL_FIELD_BG        = 0xAA090910;
+    private static final int COL_FIELD_FOCUSED   = 0xAA1E1E2C;
+    private static final int COL_LIST_ITEM       = 0x55151622;
+    private static final int COL_LIST_HOVER      = 0x88252636;
+    private static final int COL_LIST_SELECTED   = 0xCC383955;
 
     // ─── Скины ────────────────────────────────────────────────────────────────
     public static final Identifier STEVE_SKIN = Identifier.of("minecraft", "textures/entity/player/wide/steve.png");
@@ -85,38 +77,48 @@ public class LexoraMainMenu extends Screen {
     public static final List<Identifier> ACCOUNT_SKINS = ImmutableList.of(STEVE_SKIN, ALEX_SKIN);
     private static final Map<String, Identifier> accountSkins = new HashMap<>();
 
-    // ─── GIF ──────────────────────────────────────────────────────────────────
-    private static final float HELLO_GIF_SCALE        = 0.18f;
-    private static final long  BLACK_HOLD_MS           = 150L;
-    private static final long  GIF_FADE_MS             = 350L;
-    private static final long  BLACK_AFTER_GIF_FADE_MS = 450L;
-    private static final int   PRELOAD_UPLOAD_PER_TICK  = 1;
-    private static final int   MENU_UPLOAD_PER_TICK     = 2;
-
+    // ─── GIF Интро ────────────────────────────────────────────────────────────
     private static final AnimatedGifTexture HELLO_GIF = new AnimatedGifTexture(HELLO_GIF_TEX);
     private static boolean gifPreloaderRegistered = false;
+    private static boolean introPlayedOnceThisSession = false;
 
-    // ─── Состояния авторизации на сайте ───────────────────────────────────────
-    public static boolean isAuthenticatedSession = false;
+    // ─── Состояния сессии (совместимость) ─────────────────────────────────────
+    public static boolean isAuthenticatedSession = true;
 
-    // ─── Автологин по HWID ──────────────────────────────────────────────────
-    private static volatile boolean hwidCheckStarted = false;
-    private static volatile boolean hwidCheckDone    = false;
-    private static volatile boolean hwidCheckSuccess = false; // аккаунт найден, залогинили автоматически
-    private static volatile boolean hwidConfirmedNew = false; // сервер точно подтвердил: hwid ни к чему не привязан
+    // ─── Стадии меню ─────────────────────────────────────────────────────────
+    private enum MenuStage {
+        HELLO, MENU
+    }
 
-    private String  authInputText     = "";
-    private String  authPasswordText  = "";
-    private int     authFocusedField  = 0; // 0 = нет, 1 = логин, 2 = пароль
-    private int     authCursorPos     = 0;
-    private int     authPassCursorPos = 0;
-    private boolean isAuthLoading     = false;
+    private MenuStage stage = MenuStage.MENU;
+    private long stageStartTime = 0L;
+    private boolean helloStarted = false;
+    private float helloAlpha = 0.0f;
+    private float menuEnterAnim = 0.0f;
 
-    private String  authStatusTarget   = "";
-    private String  authStatusCurrent  = "";
-    private int     authStatusColor    = 0xFFFFFFFF;
-    private long    authStatusNextChar = 0L;
-    private float   authScreenAlpha    = 0.0f;
+    // ─── Анимации наведения ──────────────────────────────────────────────────
+    private float spHoverAnim = 0.0f;
+    private float mpHoverAnim = 0.0f;
+    private float profileHoverAnim = 0.0f;
+
+    // Dock buttons: 0 = Settings, 1 = ClickGUI, 2 = Accounts, 3 = Language, 4 = Exit
+    private final float[] dockHoverAnim = new float[5];
+
+    // ─── Анимация смены языка ────────────────────────────────────────────────
+    private boolean langAnimActive = false;
+    private long langAnimStart = 0L;
+    private static final long LANG_ANIM_MS = 280L;
+    private GuiLocalization.Language pendingTargetLang = null;
+
+    // ─── Переход к другим экранам ─────────────────────────────────────────────
+    private boolean transitionOut = false;
+    private long transitionOutStart = 0L;
+    private static final long TRANSITION_OUT_MS = 220L;
+    private Runnable transitionOutTarget = null;
+
+    private boolean exitAnimating = false;
+    private long exitStartMs = 0L;
+    private static final long EXIT_ANIM_MS = 350L;
 
     // ─── Менеджер аккаунтов ───────────────────────────────────────────────────
     private boolean inAccountManager = false;
@@ -125,70 +127,30 @@ public class LexoraMainMenu extends Screen {
     private static final Set<String> usedNames = new HashSet<>();
     private static final long globalSeed = UUID.randomUUID().getMostSignificantBits() ^ System.nanoTime();
 
-    private String  inputText     = "";
-    private boolean inputFocused  = false;
-    private int     cursorPos     = 0;
+    private float accountPanelAlpha = 0f;
+    private boolean accountPanelAnimIn = false;
+    private long accountPanelAnimStart = 0L;
+    private static final long ACCOUNT_PANEL_MS = 260L;
+
+    private String inputText = "";
+    private boolean inputFocused = false;
+    private int cursorPos = 0;
 
     private String typewriterTarget = "";
-    private int    typewriterPos    = 0;
-    private long   typewriterNextMs = 0L;
-    private static final long TYPEWRITER_CHAR_MS = 38L;
+    private int typewriterPos = 0;
+    private long typewriterNextMs = 0L;
+    private static final long TYPEWRITER_CHAR_MS = 35L;
 
     private String selectedAccount = "";
-    private float  scrollYAnim     = 0f;
-    private int    scrollYTarget   = 0;
-    private long   lastClickTime   = 0;
+    private float scrollYAnim = 0f;
+    private int scrollYTarget = 0;
+    private long lastClickTime = 0;
 
-    // ─── Анимация панели аккаунтов ────────────────────────────────────────────
-    private float   accountPanelAlpha    = 0f;
-    private boolean accountPanelAnimIn   = false;
-    private long    accountPanelAnimStart= 0L;
-    private static final long ACCOUNT_PANEL_MS = 350L;
-
-    private float menuButtonsAlpha     = 1f;
-    private long  menuButtonsAnimStart = 0L;
-    private boolean menuButtonsAnimIn  = true;
-    private static final long MENU_BUTTONS_MS = 250L;
-
-    // ─── Анимация выхода ──────────────────────────────────────────────────────
-    private boolean exitAnimating = false;
-    private long    exitStartMs   = 0L;
-    private static final long EXIT_ANIM_MS = 500L;
-
-    // ─── Intro stages ─────────────────────────────────────────────────────────
-    private enum IntroStage {
-        BLACK_HOLD, HELLO, WAIT_CONTINUE, AUTH_SCREEN, TRANSITION_TO_MENU, MENU_READY
-    }
-
-    private static boolean introPlayedOnceThisSession = false;
-
-    private IntroStage introStage             = IntroStage.BLACK_HOLD;
-    private long       introStageStart        = 0L;
-    private boolean    introStartedFromRender = false;
-    private boolean    helloGifTimerStarted   = false;
-
-    private float helloAlpha        = 0.0f;
-    private float blackOverlayAlpha = 1.0f;
-    private float centerClockAlpha  = 0.0f;
-    private float continueTextAlpha = 0.0f;
-    private float topClockProgress  = 0.0f;
-    private float menuButtonsProgress = 0.0f;
-
-    // ─── Переход к другим экранам ─────────────────────────────────────────────
-    private boolean  transitionOut      = false;
-    private long     transitionOutStart = 0L;
-    private static final long TRANSITION_OUT_MS = 300L;
-    private Runnable transitionOutTarget = null;
-
-    private final List<LexoraButton> menuButtons = new ArrayList<>();
-
-    // ─── Кнопки менеджера ─────────────────────────────────────────────────────
-    private final int[]    mgrBtnX     = new int[4];
-    private final int[]    mgrBtnY     = new int[4];
-    private final int[]    mgrBtnW     = new int[4];
-    private final int[]    mgrBtnH     = new int[4];
-    private final float[]  mgrBtnHover = new float[4];
-    private final String[] mgrBtnLabel = {"Войти", "Случайный", "Удалить", "← Назад"};
+    private final int[] mgrBtnX = new int[4];
+    private final int[] mgrBtnY = new int[4];
+    private final int[] mgrBtnW = new int[4];
+    private final int[] mgrBtnH = new int[4];
+    private final float[] mgrBtnHover = new float[4];
 
     public LexoraMainMenu() {
         super(Text.literal("Lexora Main Menu"));
@@ -201,7 +163,6 @@ public class LexoraMainMenu extends Screen {
             saveAccounts();
         }
         HELLO_GIF.startPreload();
-        startHwidAutoLogin();
     }
 
     private static MsdfFont getFont() {
@@ -209,12 +170,21 @@ public class LexoraMainMenu extends Screen {
         return msdfFont;
     }
 
+    // ─── Локализация ─────────────────────────────────────────────────────────
+    private static boolean isRu() {
+        return GuiLocalization.getLanguage() == GuiLocalization.Language.RU;
+    }
+
+    private static String tr(String ru, String en) {
+        return isRu() ? ru : en;
+    }
+
     public static void registerGifPreloader() {
         if (gifPreloaderRegistered) return;
         gifPreloaderRegistered = true;
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             HELLO_GIF.startPreload();
-            HELLO_GIF.tickUpload(PRELOAD_UPLOAD_PER_TICK);
+            HELLO_GIF.tickUpload(4);
         });
     }
 
@@ -225,252 +195,153 @@ public class LexoraMainMenu extends Screen {
                 Path legacy = MinecraftClient.getInstance().runDirectory.toPath().resolve("lexora_alts.txt");
                 if (Files.exists(legacy)) file = legacy;
             }
-            if (Files.exists(file)) { savedAccounts.clear(); savedAccounts.addAll(Files.readAllLines(file)); }
-        } catch (Exception e) { System.err.println("Ошибка загрузки аккаунтов: " + e.getMessage()); }
+            if (Files.exists(file)) {
+                savedAccounts.clear();
+                savedAccounts.addAll(Files.readAllLines(file));
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка загрузки аккаунтов: " + e.getMessage());
+        }
     }
 
     private static void saveAccounts() {
         try {
             Path file = MinecraftClient.getInstance().runDirectory.toPath().resolve("lexora_accounts.txt");
             Files.write(file, savedAccounts, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (Exception e) { System.err.println("Ошибка сохранения аккаунтов: " + e.getMessage()); }
+        } catch (Exception e) {
+            System.err.println("Ошибка сохранения аккаунтов: " + e.getMessage());
+        }
     }
 
     @Override
     protected void init() {
         super.init();
         this.clearChildren();
-        this.menuButtons.clear();
         HELLO_GIF.startPreload();
-        HELLO_GIF.tickUpload(MENU_UPLOAD_PER_TICK);
+        HELLO_GIF.tickUpload(96);
 
-        if (inAccountManager) {
-            accountPanelAlpha    = 1f;
-            accountPanelAnimIn   = true;
-            menuButtonsAlpha     = 0f;
-            introStage = IntroStage.MENU_READY;
-            introStartedFromRender = true;
-            helloGifTimerStarted   = true;
-            helloAlpha = 0f; blackOverlayAlpha = 0f;
-            centerClockAlpha = 1f; continueTextAlpha = 0f;
-            topClockProgress = 1f; menuButtonsProgress = 1f;
-            authScreenAlpha = 0f;
-            computeManagerLayout();
-            return;
-        }
-
-        initMainMenu();
+        stageStartTime = System.currentTimeMillis();
 
         if (introPlayedOnceThisSession) {
-            introStage = IntroStage.MENU_READY;
-            introStartedFromRender = true;
-            helloGifTimerStarted   = true;
-            helloAlpha = 0f; blackOverlayAlpha = 0f;
-            centerClockAlpha = 1f; continueTextAlpha = 0f;
-            topClockProgress = 1f; menuButtonsProgress = 1f;
-            menuButtonsAlpha = 1f; authScreenAlpha = 0f;
-            setMenuButtonsVisible(true, true, 1.0f);
+            stage = MenuStage.MENU;
+            menuEnterAnim = 1.0f;
+            helloAlpha = 0.0f;
         } else {
-            introStage = IntroStage.BLACK_HOLD;
-            introStartedFromRender = false;
-            helloGifTimerStarted   = false;
-            introStageStart = 0L;
-            helloAlpha = 0f; blackOverlayAlpha = 1f;
-            centerClockAlpha = 0f; continueTextAlpha = 0f;
-            topClockProgress = 0f; menuButtonsProgress = 0f;
-            authScreenAlpha = 0f;
-            // ФИКС АНИМАЦИИ: Держим Alpha на 1, прогресс анимации сам плавно выведет кнопки!
-            menuButtonsAlpha = 1f;
-            setMenuButtonsVisible(true, false, 0.0f);
+            stage = MenuStage.HELLO;
+            menuEnterAnim = 0.0f;
+            helloAlpha = 0.0f;
+            helloStarted = false;
             HELLO_GIF.reset();
         }
-    }
 
-    private void initMainMenu() {
-        int btnW    = 152;
-        int btnH    = 26;
-        int centerX = this.width / 2 - btnW / 2;
-        int startY  = this.height / 2 + 40;
-        int gap     = 34;
-
-        menuButtons.add(new LexoraButton(centerX, startY, btnW, btnH, "Одиночная игра",
-                () -> navigateTo(() -> this.client.setScreen(new SelectWorldScreen(this)))));
-        menuButtons.add(new LexoraButton(centerX, startY + gap, btnW, btnH, "Сетевая игра",
-                () -> navigateTo(() -> this.client.setScreen(new MultiplayerScreen(this)))));
-        menuButtons.add(new LexoraButton(centerX, startY + gap * 2, btnW, btnH, "Настройки",
-                () -> navigateTo(() -> this.client.setScreen(new OptionsScreen(this, this.client.options)))));
-
-        int halfW = (btnW - 6) / 2;
-        menuButtons.add(new LexoraButton(centerX, startY + gap * 3, halfW, btnH, "Аккаунты",
-                this::openAccountManager));
-        menuButtons.add(new LexoraButton(centerX + halfW + 6, startY + gap * 3, halfW, btnH, "Выйти",
-                this::triggerExitAnimation));
-
-        for (LexoraButton b : menuButtons) {
-            b.visible = false; b.active = false; b.setRevealAlpha(0f);
-            this.addDrawableChild(b);
-        }
+        computeManagerLayout();
     }
 
     private void computeManagerLayout() {
-        int panelW = 580, panelH = 300;
+        int panelW = 540, panelH = 280;
         int startX = (this.width - panelW) / 2;
         int startY = (this.height - panelH) / 2;
-        int leftW  = 180;
-        int lx     = startX + 14;
+        int leftW  = 175;
+        int lx     = startX + 16;
         int ly     = startY + 42;
         int btnW   = leftW - 20;
         int btnH   = 23;
 
         for (int i = 0; i < 3; i++) {
             mgrBtnX[i] = lx + 10;
-            mgrBtnY[i] = ly + 58 + i * 29;
+            mgrBtnY[i] = ly + 54 + i * 28;
             mgrBtnW[i] = btnW;
             mgrBtnH[i] = btnH;
         }
         mgrBtnX[3] = lx + 10;
-        mgrBtnY[3] = startY + panelH - btnH - 14;
+        mgrBtnY[3] = startY + panelH - btnH - 16;
         mgrBtnW[3] = btnW;
         mgrBtnH[3] = btnH;
     }
 
     private void openAccountManager() {
-        inAccountManager     = true;
-        accountPanelAnimIn   = true;
-        accountPanelAlpha    = 0f;
+        inAccountManager = true;
+        accountPanelAnimIn = true;
+        accountPanelAlpha = 0f;
         accountPanelAnimStart = System.currentTimeMillis();
-
-        menuButtonsAnimIn    = false;
-        menuButtonsAnimStart = System.currentTimeMillis();
-        menuButtonsAlpha     = 1f;
         computeManagerLayout();
     }
 
     private void closeAccountManager() {
-        accountPanelAnimIn    = false;
+        accountPanelAnimIn = false;
         accountPanelAnimStart = System.currentTimeMillis();
-
-        menuButtonsAnimIn    = true;
-        menuButtonsAnimStart = System.currentTimeMillis() + 150L;
-        menuButtonsAlpha     = 0f;
     }
 
     private void finishCloseAccountManager() {
-        inAccountManager  = false;
+        inAccountManager = false;
         accountPanelAlpha = 0f;
-        for (LexoraButton b : menuButtons) {
-            b.visible = true;
-            b.active  = false;
-        }
     }
 
     private void navigateTo(Runnable target) {
         if (transitionOut) return;
-        transitionOut       = true;
-        transitionOutStart  = System.currentTimeMillis();
+        transitionOut = true;
+        transitionOutStart = System.currentTimeMillis();
         transitionOutTarget = target;
     }
 
     private void triggerExitAnimation() {
         if (exitAnimating) return;
         exitAnimating = true;
-        exitStartMs   = System.currentTimeMillis();
+        exitStartMs = System.currentTimeMillis();
     }
 
-    /**
-     * Отправляет на сайт текущий игровой ник для привязки косметики.
-     * Вызывай этот метод каждый раз после смены ника в Альт Менеджере!
-     */
-    public static void syncCurrentIgn(String hwid, String newIgn) {
-        java.util.concurrent.CompletableFuture.runAsync(() -> {
-            try {
-                java.net.URL url = new java.net.URL("https://lexoravisuals.fun/update_ign.php");
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                conn.setConnectTimeout(5000);
-                conn.setDoOutput(true);
-
-                // Отправляем HWID и текущий игровой ник
-                String data = "hwid=" + hwid + "&ign=" + newIgn;
-                conn.getOutputStream().write(data.getBytes());
-
-                int code = conn.getResponseCode();
-                if (code == 200) {
-                    System.out.println("[Lexora Backend] Игровой ник успешно синхронизирован: " + newIgn);
-
-                    // 1. Очищаем локальный кэш (удаляем крылья со старого ника)
-                    com.lexoravisauls.client.cosmetics.CosmeticsManager.clearCache();
-
-                    // 2. ИСПРАВЛЕНИЕ: Сразу же запрашиваем косметику для НОВОГО ника!
-                    com.lexoravisauls.client.cosmetics.CosmeticsManager.fetchCosmetics(newIgn);
-                }
-            } catch (Exception e) {
-                System.out.println("[Lexora Backend] Ошибка синхронизации ника: " + e.getMessage());
-            }
-        });
+    private void skipIntroToMenu() {
+        stage = MenuStage.MENU;
+        introPlayedOnceThisSession = true;
+        stageStartTime = System.currentTimeMillis();
     }
 
-    private void setMenuButtonsVisible(boolean visible, boolean active, float alpha) {
-        for (LexoraButton b : menuButtons) {
-            b.visible = visible;
-            b.active  = active;
-            b.setRevealAlpha(alpha);
-        }
+    private void triggerLanguageSwitchAnimation() {
+        if (langAnimActive) return;
+        langAnimActive = true;
+        langAnimStart = System.currentTimeMillis();
+        pendingTargetLang = (GuiLocalization.getLanguage() == GuiLocalization.Language.RU)
+                ? GuiLocalization.Language.EN : GuiLocalization.Language.RU;
     }
 
     private void loginAccount(String name) {
         String n = name.trim();
         if (n.isEmpty()) return;
 
-        if (this.client != null && this.client.getSession() != null)
-            ((com.lexoravisauls.client.mixin.SessionAccessor) this.client.getSession()).setUsername(n);
+        if (this.client != null && this.client.getSession() != null) {
+            ((SessionAccessor) this.client.getSession()).setUsername(n);
+        }
 
         if (!savedAccounts.contains(n)) {
             savedAccounts.add(n);
             saveAccounts();
         }
 
-        // Вызываем привязку!
-        if (isAuthenticatedSession) {
-            com.lexoravisauls.client.badge.LexoraAccount.syncCurrentIgn(n);
-        }
         com.lexoravisauls.client.badge.LexoraAccount.syncCurrentIgn(n);
     }
 
     private static String generateUniqueFakeName() {
         Random random = new Random(System.nanoTime() ^ globalSeed);
-
         String[] nameStart = {
                 "Kai", "Lex", "Val", "Max", "Zor", "Dex", "Tor", "Ren", "Leo", "Luc",
                 "Rav", "Ash", "Ard", "Nik", "Sam", "Ben", "Kel", "Jax", "Nol", "Vin",
-                "Tyr", "Sil", "Cai", "Dar", "Fen", "Gav", "Mal", "Neo"
+                "Tyr", "Sil", "Cai", "Dar", "Fen", "Gav", "Mal", "Neo", "Nova", "Vex"
         };
         String[] nameEnd = {
                 "on", "ix", "us", "en", "or", "el", "ar", "an", "eo", "is", "eth", "il",
-                "ad", "os", "an", "eus", "es", "ym", "ax", "ik"
+                "ad", "os", "an", "eus", "es", "ym", "ax", "ik", "sky", "core"
         };
         String[] suffixes = {"x", "q", "zz", "ai", "xy", "zor", "ar", "yn"};
 
         int tries = 0;
         String finalName;
-
         do {
             StringBuilder name = new StringBuilder();
             name.append(nameStart[random.nextInt(nameStart.length)]);
             name.append(nameEnd[random.nextInt(nameEnd.length)]);
 
-            if (random.nextFloat() < 0.25f) {
-                name.append(suffixes[random.nextInt(suffixes.length)]);
-            }
-            if (random.nextFloat() < 0.15f && name.length() >= 4) {
-                int mid = 1 + random.nextInt(name.length() - 2);
-                name.setCharAt(mid, Character.toUpperCase(name.charAt(mid)));
-            }
-            if (random.nextFloat() < 0.2f) {
-                name.append("_");
-            }
+            if (random.nextFloat() < 0.25f) name.append(suffixes[random.nextInt(suffixes.length)]);
+            if (random.nextFloat() < 0.2f) name.append("_");
 
             long uniquePart = (System.currentTimeMillis() + tries * 1234567L + globalSeed) & 0xFFFFF;
             name.append(uniquePart % 10000);
@@ -498,301 +369,161 @@ public class LexoraMainMenu extends Screen {
         cursorPos        = 0;
     }
 
-    private void setAuthStatus(String text, int color) {
-        authStatusTarget = text;
-        authStatusCurrent = "";
-        authStatusColor = color;
-        authStatusNextChar = System.currentTimeMillis();
-    }
-
     private void tickTypewriter() {
-        // Менеджер аккаунтов (ин-гейм)
         if (typewriterPos < typewriterTarget.length()) {
             long now = System.currentTimeMillis();
             while (typewriterPos < typewriterTarget.length() && now >= typewriterNextMs) {
                 typewriterPos++;
-                inputText        = typewriterTarget.substring(0, typewriterPos);
-                cursorPos        = inputText.length();
+                inputText = typewriterTarget.substring(0, typewriterPos);
+                cursorPos = inputText.length();
                 typewriterNextMs += TYPEWRITER_CHAR_MS;
-            }
-        }
-
-        // Экран авторизации (перед меню)
-        if (authStatusCurrent.length() < authStatusTarget.length()) {
-            long now = System.currentTimeMillis();
-            while (authStatusCurrent.length() < authStatusTarget.length() && now >= authStatusNextChar) {
-                authStatusCurrent = authStatusTarget.substring(0, authStatusCurrent.length() + 1);
-                authStatusNextChar += 25L;
             }
         }
     }
 
     private void tickScrollAnim() {
         float diff = scrollYTarget - scrollYAnim;
-        if (Math.abs(diff) < 0.3f) { scrollYAnim = scrollYTarget; return; }
+        if (Math.abs(diff) < 0.3f) {
+            scrollYAnim = scrollYTarget;
+            return;
+        }
         scrollYAnim += diff * 0.25f;
     }
 
     @Override
     public boolean shouldCloseOnEsc() {
-        if (inAccountManager) { closeAccountManager(); return false; }
+        if (inAccountManager) {
+            closeAccountManager();
+            return false;
+        }
         return false;
     }
 
     @Override
-    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) { }
-
-    private static void startHwidAutoLogin() {
-        if (hwidCheckStarted) return;
-        hwidCheckStarted = true;
-
-        new Thread(() -> {
-            try {
-                AuthManager.HwidResult res = AuthManager.checkHwid();
-
-                if (res.success && res.found) {
-                    isAuthenticatedSession = true;
-
-                    MinecraftClient mc = MinecraftClient.getInstance();
-                    if (mc != null && mc.getSession() != null) {
-                        ((SessionAccessor) mc.getSession()).setUsername(res.username);
-                    }
-                    if (!savedAccounts.contains(res.username)) {
-                        savedAccounts.add(res.username);
-                        saveAccounts();
-                    }
-
-                    com.lexoravisauls.client.badge.LexoraAccount.syncCurrentIgn(res.username);
-                    com.lexoravisauls.client.emotion.EmotionManager.fetchRadialSlots();
-
-                    hwidCheckSuccess = true;
-                } else if (res.success) {
-                    // сервер ответил и явно сказал: этот HWID ни к одному аккаунту не привязан
-                    hwidConfirmedNew = true;
-                }
-                // res.success == false -> не было связи с сервером, не считаем это "новым ПК",
-                // чтобы не отобрать кнопку "Пропустить" из-за обрыва сети
-            } catch (Exception e) {
-                System.out.println("[Lexora Backend] Ошибка автологина по HWID: " + e.getMessage());
-            } finally {
-                hwidCheckDone = true;
-            }
-        }, "Lexora-HWID-Autologin").start();
-    }
-
-    private void advanceFromHello(long now) {
-        if (hwidCheckDone && hwidCheckSuccess) {
-            introStage = IntroStage.TRANSITION_TO_MENU;
-        } else {
-            introStage = IntroStage.WAIT_CONTINUE;
-        }
-        introStageStart = now;
-    }
-
-    private void updateIntro() {
-        HELLO_GIF.tickUpload(MENU_UPLOAD_PER_TICK);
-        if (inAccountManager) return;
-
-        if (!introStartedFromRender) {
-            introStartedFromRender = true;
-            introStageStart = System.currentTimeMillis();
-            introStage = introPlayedOnceThisSession ? IntroStage.MENU_READY : IntroStage.BLACK_HOLD;
-        }
-
-        if (introPlayedOnceThisSession && introStage == IntroStage.MENU_READY) {
-            topClockProgress = 1f; menuButtonsProgress = 1f; centerClockAlpha = 1f;
-            continueTextAlpha = 0f; blackOverlayAlpha = 0f; helloAlpha = 0f; authScreenAlpha = 0f;
-            return;
-        }
-
-        long now = System.currentTimeMillis(), elapsed = now - introStageStart;
-
-        switch (introStage) {
-            case BLACK_HOLD -> {
-                helloAlpha = 0f; blackOverlayAlpha = 1f;
-                centerClockAlpha = 0f; continueTextAlpha = 0f;
-                topClockProgress = 0f; menuButtonsProgress = 0f; authScreenAlpha = 0f;
-                if (elapsed >= BLACK_HOLD_MS) {
-                    introStage = IntroStage.HELLO;
-                    introStageStart = now;
-                    helloGifTimerStarted = false;
-                    HELLO_GIF.reset();
-                }
-            }
-            case HELLO -> {
-                HELLO_GIF.tickUpload(MENU_UPLOAD_PER_TICK);
-                boolean gifReady  = HELLO_GIF.isReady();
-                boolean gifFailed = HELLO_GIF.isFailed();
-                if (!gifReady && !gifFailed) {
-                    helloAlpha = 0f; blackOverlayAlpha = 1f;
-                    return;
-                }
-                if (gifFailed) {
-                    advanceFromHello(now);
-                    return;
-                }
-                if (!helloGifTimerStarted) {
-                    helloGifTimerStarted = true;
-                    introStageStart = now;
-                    HELLO_GIF.reset();
-                    elapsed = 0L;
-                }
-                long gifDuration = HELLO_GIF.getTotalDurationMs();
-                long gifFadeEnd  = gifDuration + GIF_FADE_MS;
-                long blackEnd    = gifFadeEnd + BLACK_AFTER_GIF_FADE_MS;
-
-                if (elapsed < gifDuration) {
-                    helloAlpha = 1f; blackOverlayAlpha = 1f;
-                } else if (elapsed < gifFadeEnd) {
-                    float p = (elapsed - gifDuration) / (float) GIF_FADE_MS;
-                    helloAlpha = 1f - p; blackOverlayAlpha = 1f;
-                } else if (elapsed < blackEnd) {
-                    float p = (elapsed - gifFadeEnd) / (float) BLACK_AFTER_GIF_FADE_MS;
-                    helloAlpha = 0f; blackOverlayAlpha = 1f - p;
-                } else {
-                    advanceFromHello(now);
-                }
-            }
-            case WAIT_CONTINUE -> {
-                helloAlpha = 0f; blackOverlayAlpha = 0f;
-                centerClockAlpha = 1f; authScreenAlpha = 0f;
-                continueTextAlpha = (float)(0.55f + 0.45f * Math.sin(now / 260.0));
-
-                if (hwidCheckDone && hwidCheckSuccess) {
-                    introStage = IntroStage.TRANSITION_TO_MENU;
-                    introStageStart = now;
-                }
-            }
-            case AUTH_SCREEN -> {
-                helloAlpha = 0f; blackOverlayAlpha = 0f; centerClockAlpha = 1f; continueTextAlpha = 0f;
-                float p = Math.min(1f, elapsed / 400f);
-                topClockProgress = easeOutQuart(p); authScreenAlpha = easeOutQuart(p); menuButtonsProgress = 0f;
-            }
-            case TRANSITION_TO_MENU -> {
-                float p = Math.min(1f, (now - introStageStart) / 850f);
-                float ep = easeOutQuart(p);
-                topClockProgress = 1f; menuButtonsProgress = ep; // Часы остаются наверху
-                authScreenAlpha = 1f - ep; // Окно логина уезжает в прозрачность
-                centerClockAlpha = 1f; continueTextAlpha = 0f;
-                blackOverlayAlpha = 0f; helloAlpha = 0f;
-
-                if (p >= 1f) {
-                    introStage = IntroStage.MENU_READY;
-                    introStageStart = now;
-                    topClockProgress = 1f; menuButtonsProgress = 1f;
-                    centerClockAlpha = 1f; continueTextAlpha = 0f; authScreenAlpha = 0f;
-                    introPlayedOnceThisSession = true;
-                }
-            }
-            case MENU_READY -> {
-                topClockProgress = 1f; menuButtonsProgress = 1f;
-                centerClockAlpha = 1f; continueTextAlpha = 0f;
-                blackOverlayAlpha = 0f; helloAlpha = 0f; authScreenAlpha = 0f;
-            }
-        }
+    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+        // Отрисовывается внутри render()
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        updateIntro();
+        long now = System.currentTimeMillis();
         tickScrollAnim();
         tickTypewriter();
 
-        long nowMs = System.currentTimeMillis();
+        // Обработка анимации смены языка
+        float langTransitionAlpha = 1.0f;
+        float langTransitionOffset = 0.0f;
+        float globeSpinAngle = 0.0f;
 
+        if (langAnimActive) {
+            float p = Math.min(1.0f, (now - langAnimStart) / (float) LANG_ANIM_MS);
+            globeSpinAngle = easeOutQuart(p) * (float) (Math.PI * 2.0);
+
+            if (p < 0.5f) {
+                float halfP = p / 0.5f;
+                langTransitionAlpha = 1.0f - halfP * 0.6f;
+                langTransitionOffset = -halfP * 4.0f;
+            } else {
+                if (pendingTargetLang != null) {
+                    GuiLocalization.setLanguage(pendingTargetLang);
+                    ConfigManager.saveConfig();
+                    pendingTargetLang = null;
+                }
+                float halfP = (p - 0.5f) / 0.5f;
+                langTransitionAlpha = 0.4f + halfP * 0.6f;
+                langTransitionOffset = (1.0f - halfP) * 4.0f;
+            }
+
+            if (p >= 1.0f) {
+                langAnimActive = false;
+                langTransitionAlpha = 1.0f;
+                langTransitionOffset = 0.0f;
+            }
+        }
+
+        // 0. Если SplashOverlay (загрузка ресурсов) ещё активен — не тратим время интро и не играем звук!
+        if (this.client != null && this.client.getOverlay() != null) {
+            stageStartTime = now;
+            helloStarted = false;
+            context.fill(0, 0, this.width, this.height, 0xFF000000);
+            return;
+        }
+
+        // 1. Анимация интро Hello
+        if (stage == MenuStage.HELLO) {
+            HELLO_GIF.tickUpload(16);
+
+            if (!helloStarted) {
+                helloStarted = true;
+                stageStartTime = now;
+                HELLO_GIF.reset();
+                MainMenuSoundHelper.playHelloSound(true);
+            }
+
+            long elapsed = now - stageStartTime;
+            long gifDuration = Math.max(2200L, HELLO_GIF.getTotalDurationMs());
+            long fadeInMs = 280L;
+            long fadeOutMs = 380L;
+
+            if (elapsed < fadeInMs) {
+                helloAlpha = (float) elapsed / fadeInMs;
+            } else if (elapsed < gifDuration) {
+                helloAlpha = 1.0f;
+            } else if (elapsed < gifDuration + fadeOutMs) {
+                helloAlpha = 1.0f - ((float) (elapsed - gifDuration) / fadeOutMs);
+            } else {
+                skipIntroToMenu();
+                return;
+            }
+
+            renderHelloStage(context, mouseX, mouseY);
+            return;
+        }
+
+        // Плавный выезд меню
+        if (menuEnterAnim < 1.0f) {
+            float p = Math.min(1.0f, (now - stageStartTime) / 380.0f);
+            menuEnterAnim = easeOutQuart(p);
+        }
+
+        // Анимация модального менеджера
         if (inAccountManager) {
+            float p = Math.min(1f, (now - accountPanelAnimStart) / (float) ACCOUNT_PANEL_MS);
             if (accountPanelAnimIn) {
-                float p = Math.min(1f, (nowMs - accountPanelAnimStart) / (float) ACCOUNT_PANEL_MS);
                 accountPanelAlpha = easeOutQuart(p);
             } else {
-                float p = Math.min(1f, (nowMs - accountPanelAnimStart) / (float) ACCOUNT_PANEL_MS);
                 accountPanelAlpha = 1f - easeOutQuart(p);
                 if (p >= 1f) finishCloseAccountManager();
             }
         }
 
-        // Обновление состояния кнопок
-        {
-            long animStart = menuButtonsAnimStart;
-            if (animStart > 0) {
-                long el = nowMs - animStart;
-                if (el >= 0) {
-                    float p = Math.min(1f, el / (float) MENU_BUTTONS_MS);
-                    if (menuButtonsAnimIn) {
-                        menuButtonsAlpha = easeOutQuart(p);
-                    } else {
-                        menuButtonsAlpha = 1f - easeOutQuart(p);
-                    }
-                }
-            }
+        // 2. Фоновый шейдер дыма
+        SmokeBackgroundShader.render(context, this.width, this.height, mouseX, mouseY, 1.0f);
 
-            // ФИКС АЛЬФЫ И ВИДИМОСТИ: теперь кнопки полностью скрываются
-            float combinedAlpha = menuButtonsAlpha * menuButtonsProgress;
-            for (int i = 0; i < menuButtons.size(); i++) {
-                LexoraButton b = menuButtons.get(i);
+        // Затемняющий мягкий виньетинг для акцентирования центрального хаба
+        int topVignette = (int) (0x80 * menuEnterAnim) << 24;
+        context.fillGradient(0, 0, this.width, 55, topVignette | 0x050508, 0x00050508);
+        int botVignette = (int) (0x90 * menuEnterAnim) << 24;
+        context.fillGradient(0, this.height - 65, this.width, this.height, 0x00050508, botVignette | 0x050508);
 
-                // Для анимации выезда из-под экрана
-                float sp = Math.min(1f, Math.max(0f, (menuButtonsProgress - i * 0.07f) / 0.65f));
-                float finalReveal = combinedAlpha * easeOutQuart(sp);
+        // 3. Верхняя панель
+        renderHeader(context, mouseX, mouseY, menuEnterAnim);
 
-                b.setRevealAlpha(finalReveal);
-                b.visible = finalReveal > 0.01f;
-                b.active  = menuButtonsAlpha > 0.6f && introStage == IntroStage.MENU_READY
-                        && !transitionOut && !exitAnimating && !inAccountManager;
-            }
-        }
+        // 4. Единый центральный хаб (Часы + Компактные Карточки + Поднятая Панель Навигации)
+        renderCentralHub(context, mouseX, mouseY, menuEnterAnim, langTransitionAlpha, langTransitionOffset, globeSpinAngle);
 
-        for (int i = 0; i < 4; i++) {
-            boolean hov = mouseX >= mgrBtnX[i] && mouseX <= mgrBtnX[i] + mgrBtnW[i]
-                    && mouseY >= mgrBtnY[i] && mouseY <= mgrBtnY[i] + mgrBtnH[i];
-            mgrBtnHover[i] += ((hov ? 1f : 0f) - mgrBtnHover[i]) * 0.18f;
-            if (mgrBtnHover[i] < 0.005f) mgrBtnHover[i] = 0f;
-        }
-
-        drawTexQuad(context, BACKGROUND_TEX, 0, 0, this.width, this.height, 0f, 0f, 1f, 1f, 0xFFFFFFFF);
-
-        if (inAccountManager) {
-            renderTopClock(context, 1f);
-            renderSlidingButtons();
-            renderAccountManager(context, mouseX, mouseY);
-        } else {
-            renderIntroOrMenu(context, mouseX, mouseY);
-        }
-
-        // ИНДИКАТОР АВТОРИЗАЦИИ ЛЕВЫЙ ВЕРХНИЙ УГОЛ
-        if ((introStage == IntroStage.MENU_READY || introStage == IntroStage.TRANSITION_TO_MENU) && !inAccountManager) {
-            float ap = introStage == IntroStage.MENU_READY ? 1f : menuButtonsProgress;
-            if (ap > 0.01f) {
-                if (!isAuthenticatedSession) {
-                    getFont().draw(context.getMatrices(), "Статус: Не авторизован", 10, 10, SIZE_SMALL, adjustAlpha(0xFFDD4444, ap));
-                } else {
-                    String u = (this.client != null && this.client.getSession() != null) ? this.client.getSession().getUsername() : "Player";
-                    getFont().draw(context.getMatrices(), "Игрок: " + u, 10, 10, SIZE_SMALL, adjustAlpha(0xFFE8E8E8, ap));
-
-                    // --- ЭТОТ КУСОК МЕНЯЕМ ---
-                    String w = CosmeticsManager.getEquipped(u, "back");
-                    if (w != null && !w.equals("none")) {
-                        getFont().draw(context.getMatrices(), "Спина: " + w, 10, 22, SIZE_SMALL, adjustAlpha(0xFF44DD44, ap));
-                    }
-
-                    // --- ДОБАВЛЯЕМ ПРОВЕРКУ ГОЛОВЫ ---
-                    String h = CosmeticsManager.getEquipped(u, "head");
-                    if (h != null && !h.equals("none")) {
-                        // Рисуем текст чуть ниже, на координате Y = 34
-                        getFont().draw(context.getMatrices(), "Голова: " + h, 10, 34, SIZE_SMALL, adjustAlpha(0xFF44DD44, ap));
-                    }
-                    // ---------------------------------
-                }
-            }
+        // 5. Модальное окно менеджера аккаунтов (если открыто)
+        if (inAccountManager && accountPanelAlpha > 0.01f) {
+            renderAccountManagerModal(context, mouseX, mouseY);
         }
 
         super.render(context, mouseX, mouseY, delta);
 
-        // Переход с затемнением
+        // 6. Плавное затемнение при переходе
         if (transitionOut) {
-            long el = nowMs - transitionOutStart;
+            long el = now - transitionOutStart;
             float p = Math.min(1f, el / (float) TRANSITION_OUT_MS);
-            int a = (int)(easeOutQuart(p) * 255f);
+            int a = (int) (easeOutQuart(p) * 255f);
             context.fill(0, 0, this.width, this.height, a << 24);
 
             if (p >= 1f && transitionOutTarget != null) {
@@ -804,373 +535,414 @@ public class LexoraMainMenu extends Screen {
             }
         }
 
+        // 7. Плавный выход
         if (exitAnimating) {
-            long el = nowMs - exitStartMs;
+            long el = now - exitStartMs;
             float p = Math.min(1f, el / (float) EXIT_ANIM_MS);
-            int fadeA = (int)(easeOutQuart(p) * 255f);
+            int fadeA = (int) (easeOutQuart(p) * 255f);
             context.fill(0, 0, this.width, this.height, fadeA << 24);
-            if (p >= 1f) { this.client.scheduleStop(); return; }
-        }
-    }
-
-    private void renderIntroOrMenu(DrawContext context, int mx, int my) {
-        if (blackOverlayAlpha > 0.01f) {
-            int a = (int)(blackOverlayAlpha * 255f);
-            context.fill(0, 0, this.width, this.height, a << 24);
-        }
-        if (introStage == IntroStage.HELLO && helloAlpha > 0.01f) renderHello(context);
-
-        if (introStage == IntroStage.WAIT_CONTINUE) {
-            renderCenterClock(context, 0f);
-        } else if (introStage == IntroStage.AUTH_SCREEN) {
-            renderCenterClock(context, topClockProgress);
-            renderAuthScreen(context, mx, my);
-        } else if (introStage == IntroStage.TRANSITION_TO_MENU) {
-            renderCenterClock(context, topClockProgress);
-            if (authScreenAlpha > 0.01f) renderAuthScreen(context, mx, my);
-            renderSlidingButtons();
-        } else if (introStage == IntroStage.MENU_READY) {
-            renderTopClock(context, 1f);
-            renderSlidingButtons();
-        }
-    }
-
-    private void renderAuthScreen(DrawContext context, int mx, int my) {
-        if (authScreenAlpha <= 0.01f) return;
-        int boxW = 320, boxH = 220;
-        int boxX = this.width / 2 - boxW / 2;
-        int boxY = this.height / 2 - boxH / 2 + 30; // Сдвинуто вниз из-за часов
-
-        drawSmoothRect(context, boxX, boxY, boxW, boxH, adjustAlpha(COL_PANEL_BG, authScreenAlpha));
-        getFont().draw(context.getMatrices(), "АВТОРИЗАЦИЯ", boxX + boxW/2f - getFont().getWidth("АВТОРИЗАЦИЯ", SIZE_SMALL)/2f, boxY + 15, SIZE_SMALL, adjustAlpha(COL_TEXT_PRIMARY, authScreenAlpha));
-        context.fill(boxX + 20, boxY + 30, boxX + boxW - 20, boxY + 31, adjustAlpha(COL_DIVIDER, authScreenAlpha));
-
-        int fX = boxX + 40, fW = boxW - 80, fH = 24;
-
-        // Логин
-        int fY1 = boxY + 50;
-        drawSmoothRect(context, fX, fY1, fW, fH, adjustAlpha(authFocusedField == 1 ? COL_FIELD_FOCUSED : COL_FIELD_BG, authScreenAlpha));
-        if (authInputText.isEmpty() && authFocusedField != 1) {
-            getFont().draw(context.getMatrices(), "Логин от сайта...", fX + 8, fY1 + 8, SIZE_SMALL, adjustAlpha(COL_TEXT_MUTED, authScreenAlpha));
-        } else {
-            getFont().draw(context.getMatrices(), authInputText, fX + 8, fY1 + 8, SIZE_SMALL, adjustAlpha(COL_TEXT_PRIMARY, authScreenAlpha));
-            if (authFocusedField == 1 && ((System.currentTimeMillis() / 530) % 2) == 0) {
-                float cX = fX + 8 + getFont().getWidth(authInputText.substring(0, authCursorPos), SIZE_SMALL);
-                context.fill((int)cX, fY1 + 5, (int)cX + 1, fY1 + fH - 5, adjustAlpha(COL_TEXT_PRIMARY, authScreenAlpha));
+            if (p >= 1f) {
+                this.client.scheduleStop();
             }
         }
-
-        // Пароль
-        int fY2 = boxY + 90;
-        drawSmoothRect(context, fX, fY2, fW, fH, adjustAlpha(authFocusedField == 2 ? COL_FIELD_FOCUSED : COL_FIELD_BG, authScreenAlpha));
-        if (authPasswordText.isEmpty() && authFocusedField != 2) {
-            getFont().draw(context.getMatrices(), "Пароль...", fX + 8, fY2 + 8, SIZE_SMALL, adjustAlpha(COL_TEXT_MUTED, authScreenAlpha));
-        } else {
-            String hidden = "*".repeat(authPasswordText.length());
-            getFont().draw(context.getMatrices(), hidden, fX + 8, fY2 + 8, SIZE_SMALL, adjustAlpha(COL_TEXT_PRIMARY, authScreenAlpha));
-            if (authFocusedField == 2 && ((System.currentTimeMillis() / 530) % 2) == 0) {
-                float cX = fX + 8 + getFont().getWidth("*".repeat(authPassCursorPos), SIZE_SMALL);
-                context.fill((int)cX, fY2 + 5, (int)cX + 1, fY2 + fH - 5, adjustAlpha(COL_TEXT_PRIMARY, authScreenAlpha));
-            }
-        }
-
-        // Статус
-        if (!authStatusCurrent.isEmpty()) {
-            float tw = getFont().getWidth(authStatusCurrent, SIZE_SMALL);
-            getFont().draw(context.getMatrices(), authStatusCurrent, boxX + boxW/2f - tw/2f, boxY + 130, SIZE_SMALL, adjustAlpha(authStatusColor, authScreenAlpha));
-        }
-
-        // Кнопки
-        int bW = 110, bH = 26;
-        boolean showSkip = !hwidConfirmedNew;
-        int bX1 = showSkip ? boxX + 40 : boxX + boxW/2 - bW/2, bY1 = boxY + 170;
-        int bX2 = boxX + boxW - 40 - bW, bY2 = boxY + 170;
-
-        boolean h1 = mx >= bX1 && mx <= bX1 + bW && my >= bY1 && my <= bY1 + bH;
-
-        drawSmoothRect(context, bX1, bY1, bW, bH, adjustAlpha(h1 ? COL_BTN_HOVER : COL_BTN_NORMAL, authScreenAlpha));
-        getFont().draw(context.getMatrices(), "ВОЙТИ", bX1 + bW/2f - getFont().getWidth("ВОЙТИ", SIZE_HINT)/2f, bY1 + 8, SIZE_HINT, adjustAlpha(COL_TEXT_PRIMARY, authScreenAlpha));
-
-        if (showSkip) {
-            boolean h2 = mx >= bX2 && mx <= bX2 + bW && my >= bY2 && my <= bY2 + bH;
-            drawSmoothRect(context, bX2, bY2, bW, bH, adjustAlpha(h2 ? COL_BTN_HOVER : COL_BTN_NORMAL, authScreenAlpha));
-            getFont().draw(context.getMatrices(), "ПРОПУСТИТЬ", bX2 + bW/2f - getFont().getWidth("ПРОПУСТИТЬ", SIZE_HINT)/2f, bY2 + 8, SIZE_HINT, adjustAlpha(COL_TEXT_PRIMARY, authScreenAlpha));
-        }
     }
 
-    private void renderHello(DrawContext context) {
+    private void renderHelloStage(DrawContext context, int mouseX, int mouseY) {
+        // Чистый черный фон (#000000), чтобы GIF полностью сливался с экраном
+        context.fill(0, 0, this.width, this.height, 0xFF000000);
+        context.draw();
+
+        int a = Math.max(0, Math.min(255, (int) (helloAlpha * 255f)));
+
+        // 1. Отрисовка GIF кадра
         Identifier frame = HELLO_GIF.getFrame();
-        if (frame == null) return;
-        int a = Math.max(0, Math.min(255, (int)(helloAlpha * 255f)));
-        float drawW = HELLO_GIF.getWidth()  * HELLO_GIF_SCALE;
-        float drawH = HELLO_GIF.getHeight() * HELLO_GIF_SCALE;
-        drawTexQuad(context, frame,
-                this.width / 2f - drawW / 2f, this.height / 2f - drawH / 2f,
-                drawW, drawH, 0f, 0f, 1f, 1f, (a << 24) | 0xFFFFFF);
-    }
+        if (frame != null && helloAlpha > 0.01f) {
+            float drawW = Math.min(this.width * 0.30f, 220f);
+            float drawH = drawW * ((float) HELLO_GIF.getHeight() / (float) HELLO_GIF.getWidth());
+            float cx = this.width / 2f - drawW / 2f;
+            float cy = this.height / 2f - drawH / 2f;
 
-    private void renderCenterClock(DrawContext context, float moveToTopProgress) {
-        String dateStr = getCurrentDateString();
-        String timeStr = getCurrentTimeString();
-        int alpha     = (int)(centerClockAlpha * 255f);
-        int textColor = (alpha << 24) | 0xFFFFFF;
+            drawTexQuad(context, frame, cx, cy, drawW, drawH, 0f, 0f, 1f, 1f, (a << 24) | 0xFFFFFF);
+            context.draw();
+        } else if (helloAlpha > 0.01f) {
+            // Эстетичная надпись "hello." шрифтом MSDF
+            String helloText = "hello.";
+            float helloSize = 22.0f;
+            float hw = getFont().getWidth(helloText, helloSize);
+            float hx = this.width / 2f - hw / 2f;
+            float hy = this.height / 2f - helloSize / 2f;
 
-        float startY = this.height / 2f - 52f, endY = 12f;
-        float y      = lerp(startY, endY, moveToTopProgress);
+            getFont().draw(context, helloText, hx, hy, helloSize, (a << 24) | 0xFFFFFF);
+        }
 
-        float dateW = getFont().getWidth(dateStr, SIZE_DATE);
-        getFont().draw(context.getMatrices(), dateStr,
-                this.width / 2f - dateW / 2f, y, SIZE_DATE, textColor);
-        float timeW = getFont().getWidth(timeStr, SIZE_TIME);
-        getFont().draw(context.getMatrices(), timeStr,
-                this.width / 2f - timeW / 2f, y + 18f, SIZE_TIME, textColor);
-
-        if (introStage == IntroStage.WAIT_CONTINUE) {
-            int hA = Math.max(0, Math.min(255, (int)(continueTextAlpha * 255f)));
-            String pressText = "Нажмите, чтобы продолжить";
-            float pw = getFont().getWidth(pressText, SIZE_HINT);
-            getFont().draw(context.getMatrices(), pressText,
-                    this.width / 2f - pw / 2f, y + 72f, SIZE_HINT, (hA << 24) | 0x777777);
+        // 2. Тонкая ненавязчивая подсказка о пропуске
+        if (helloAlpha > 0.2f) {
+            long now = System.currentTimeMillis();
+            float pulse = 0.4f + 0.3f * (float) Math.sin(now / 280.0);
+            int hintA = (int) (pulse * helloAlpha * 200f);
+            if (hintA > 4) {
+                String skipHint = tr("Нажмите любую клавишу для пропуска", "Press any key to skip");
+                float hintW = getFont().getWidth(skipHint, SIZE_HINT);
+                getFont().draw(context, skipHint,
+                        this.width / 2f - hintW / 2f, this.height - 32f,
+                        SIZE_HINT, (hintA << 24) | 0x666677);
+            }
         }
     }
 
-    private void renderTopClock(DrawContext context, float progress) {
-        renderCenterClock(context, progress);
+    // ─── Верхняя панель ───────────────────────────────────────────────────────
+    private void renderHeader(DrawContext context, int mouseX, int mouseY, float anim) {
+        float offsetY = (1.0f - anim) * -16f;
+        int barY = (int) (14 + offsetY);
+
+        // Логотип LEXORA слева
+        float logoX = 22f;
+        getFont().draw(context.getMatrices(), "LEXORA", logoX, barY + 3f, SIZE_LOGO, adjustAlpha(COL_TEXT_WHITE, anim));
+
+        // Разделитель и бейдж CLIENT
+        float dividerX = logoX + getFont().getWidth("LEXORA", SIZE_LOGO) + 8f;
+        context.fill((int) dividerX, barY + 4, (int) dividerX + 1, barY + 16, adjustAlpha(0x33FFFFFF, anim));
+
+        float clientTagX = dividerX + 8f;
+        getFont().draw(context.getMatrices(), "CLIENT 1.21.4", clientTagX, barY + 5.5f, SIZE_DESC, adjustAlpha(0x88FFFFFF, anim));
+
+        // Профиль игрока справа
+        String currentName = (this.client != null && this.client.getSession() != null)
+                ? this.client.getSession().getUsername() : "Player";
+        float nameW = getFont().getWidth(currentName, SIZE_DESC);
+        int profW = (int) (nameW + 48);
+        int profH = 24;
+        int profX = this.width - profW - 22;
+        int profY = barY + 1;
+
+        boolean isHoverProfile = mouseX >= profX && mouseX <= profX + profW && mouseY >= profY && mouseY <= profY + profH && !inAccountManager;
+        profileHoverAnim += ((isHoverProfile ? 1f : 0f) - profileHoverAnim) * 0.18f;
+
+        int top = blendColors(0xDC282830, 0xDC383848, profileHoverAnim);
+        int bottom = blendColors(0xDC18181F, 0xDC22222E, profileHoverAnim);
+        RoundedRectShader.drawVerticalGradient(context, profX, profY, profW, profH, 5f, adjustAlpha(top, anim), adjustAlpha(bottom, anim));
+        int borderA = (int) (45 + profileHoverAnim * 75);
+        RoundedRectShader.drawOutline(context, profX, profY, profW, profH, 5f, 0.6f, adjustAlpha((borderA << 24) | 0xFFFFFF, anim));
+
+        drawPlayerHead(context, getAccountSkin(currentName), profX + 4, profY + 4, 16, anim);
+
+        int nameCol = blendColors(0xEBA0A0AC, 0xFFF0F0F5, profileHoverAnim);
+        getFont().draw(context.getMatrices(), currentName, profX + 24, profY + 7.5f, SIZE_DESC, adjustAlpha(nameCol, anim));
+
+        // Индикатор онлайн
+        RoundedRectShader.draw(context, profX + profW - 10, profY + 10, 4, 4, 2f, adjustAlpha(0xFF22C55E, anim));
     }
 
-    private void renderSlidingButtons() {
-        int btnW    = 152;
-        int centerX = this.width / 2 - btnW / 2;
-        int startY  = this.height / 2 + 40;
-        int halfW   = (btnW - 6) / 2;
+    // ─── Центральный хаб в стиле Velocity (с сохранением картинок) ─────────────
+    private void renderCentralHub(DrawContext context, int mouseX, int mouseY, float anim,
+                                  float langAlpha, float langOffsetY, float globeSpinAngle) {
+        float enterSlide = (1.0f - anim) * 20f;
+        float cx = this.width / 2f;
 
-        for (int i = 0; i < menuButtons.size(); i++) {
-            LexoraButton btn = menuButtons.get(i);
-            float sp = Math.min(1f, Math.max(0f, (menuButtonsProgress - i * 0.07f) / 0.65f));
-            sp = easeOutQuart(sp);
+        // Размеры главного блока
+        float cardW = 142f;
+        float cardH = 76f;
+        float gapCards = 8f;
+        float totalRowW = cardW * 2f + gapCards; // 292 px
+        float startX = cx - totalRowW / 2f;
 
-            int[] targets = {startY, startY + 34, startY + 68, startY + 102, startY + 102};
-            int targetY   = targets[Math.min(i, targets.length - 1)];
-            int targetX   = (i >= 3) ? (i == 3 ? centerX : centerX + halfW + 6) : centerX;
+        float hubTotalH = 34f + 16f + cardH + 6f + 22f; // ~154 px
+        float baseY = (this.height - hubTotalH) / 2f + enterSlide;
 
-            float slideOffset = (1f - menuButtonsAlpha) * 20f;
-            btn.setPosition(targetX, (int)(lerp(targetY + 65, targetY, sp) + slideOffset));
+        // 1. Логотип: "lexora." в стиле Velocity (минималистичный строчный жирный шрифт с точкой)
+        float logoY = baseY;
+        String logoText = "lexora.";
+        float logoW = getFont().getWidth(logoText, 34f);
+        getFont().draw(context.getMatrices(), logoText, cx - logoW / 2f, logoY, 34f, adjustAlpha(COL_TEXT_WHITE, anim));
+
+        // Подзаголовок: время и дата с плавной анимацией при смене языка
+        String subTitle = getCurrentTimeString() + "  •  " + getCurrentDateString();
+        float subW = getFont().getWidth(subTitle, SIZE_DATE);
+        context.getMatrices().push();
+        context.getMatrices().translate(0, langOffsetY * 0.5f, 0);
+        getFont().draw(context.getMatrices(), subTitle, cx - subW / 2f, logoY + 36f, SIZE_DATE, adjustAlpha(COL_TEXT_MUTED, anim * langAlpha));
+        context.getMatrices().pop();
+
+        // 2. Ряд 1: две главные кнопки-карточки (Одиночная игра и Сетевая игра)
+        float cardsY = logoY + 52f;
+
+        // Одиночная игра (odinoch.png)
+        float spX = startX;
+        boolean spHover = mouseX >= spX && mouseX <= spX + cardW && mouseY >= cardsY && mouseY <= cardsY + cardH && !inAccountManager && !transitionOut;
+        spHoverAnim += ((spHover ? 1f : 0f) - spHoverAnim) * 0.18f;
+        renderImageCard(context, spX, cardsY, cardW, cardH, ODINOCH_TEX,
+                tr("Одиночная игра", "Singleplayer"),
+                spHoverAnim, anim, langAlpha, langOffsetY);
+
+        // Сетевая игра (seteva.png, БЕЗ посторонних цветных кругов)
+        float mpX = startX + cardW + gapCards;
+        boolean mpHover = mouseX >= mpX && mouseX <= mpX + cardW && mouseY >= cardsY && mouseY <= cardsY + cardH && !inAccountManager && !transitionOut;
+        mpHoverAnim += ((mpHover ? 1f : 0f) - mpHoverAnim) * 0.18f;
+        renderImageCard(context, mpX, cardsY, cardW, cardH, SETEVA_TEX,
+                tr("Сетевая игра", "Multiplayer"),
+                mpHoverAnim, anim, langAlpha, langOffsetY);
+
+        // 3. Ряд 2: второстепенные кнопки (в стиле Velocity pills)
+        float row2Y = cardsY + cardH + 6f;
+        renderVelocityPillRow(context, startX, row2Y, totalRowW, mouseX, mouseY, anim, langAlpha, langOffsetY, globeSpinAngle);
+
+        // Нижняя строка версии
+        String ver = "Lexora Visuals Client • 1.21.4 Fabric";
+        float vw = getFont().getWidth(ver, SIZE_TINY);
+        getFont().draw(context.getMatrices(), ver, cx - vw / 2f, this.height - 12f, SIZE_TINY, adjustAlpha(0x35FFFFFF, anim));
+    }
+
+    // ─── Карточка режима игры в стиле Velocity (с картинкой) ─────────────────
+    private void renderImageCard(DrawContext context, float x, float y, float w, float h, Identifier texture,
+                                 String label, float hover, float anim, float langAlpha, float langOffsetY) {
+        float r = 5f;
+        float lift = hover * 1.5f;
+        float cy = y - lift;
+
+        // Картинка с мягким скруглением углов
+        int imgTint = blendColors(0xFFB8B8C8, 0xFFFFFFFF, hover);
+        RoundedRectShader.drawTextured(context, texture, x, cy, w, h, r, 0f, 0f, 1f, 1f, adjustAlpha(imgTint, anim));
+
+        // Темный вертикальный градиент снизу в стиле Velocity
+        int topFade = 0x0018181F;
+        int botFade = 0xDC18181F;
+        RoundedRectShader.drawVerticalGradient(context, x, cy + h - 36f, w, 36f, r, adjustAlpha(topFade, anim), adjustAlpha(botFade, anim));
+
+        // Тонкая окантовка (Velocity outline: 45 resting, до 120 на hover)
+        int borderA = (int) (45 + hover * 75);
+        int borderCol = (borderA << 24) | 0xFFFFFF;
+        RoundedRectShader.drawOutline(context, x, cy, w, h, r, 0.6f, adjustAlpha(borderCol, anim));
+
+        // Центрированный текст кнопки в стиле Velocity
+        context.getMatrices().push();
+        context.getMatrices().translate(0, langOffsetY, 0);
+
+        int textCol = blendColors(0xEBA0A0AC, 0xFFF0F0F5, hover);
+        float tw = getFont().getWidth(label, 9.5f);
+        getFont().draw(context.getMatrices(), label, x + (w - tw) / 2f, cy + h - 16f, 9.5f, adjustAlpha(textCol, anim * langAlpha));
+
+        context.getMatrices().pop();
+    }
+
+    // ─── Ряд второстепенных кнопок в стиле Velocity ───────────────────────────
+    private void renderVelocityPillRow(DrawContext context, float rowX, float rowY, float rowW,
+                                       int mouseX, int mouseY, float anim,
+                                       float langAlpha, float langOffsetY, float globeSpinAngle) {
+        float bh = 22f;
+        float r = 5f;
+        int btnCount = 5;
+        float gap = 4f;
+        float bw = (rowW - (btnCount - 1) * gap) / btnCount;
+
+        String langLabel = isRu() ? "RU" : "EN";
+        String[] labels = {
+                tr("Настройки", "Settings"),
+                tr("Моды", "Mods"),
+                tr("Аккаунты", "Accounts"),
+                langLabel,
+                tr("Выход", "Exit")
+        };
+
+        for (int i = 0; i < btnCount; i++) {
+            float bx = rowX + i * (bw + gap);
+            float by = rowY;
+
+            boolean hov = mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh && !inAccountManager && !transitionOut;
+            dockHoverAnim[i] += ((hov ? 1f : 0f) - dockHoverAnim[i]) * 0.18f;
+            float a = dockHoverAnim[i];
+
+            // Градиентный фон пилла (Velocity: top rgba(40,40,48,220), bottom rgba(24,24,31,220))
+            int top = blendColors(0xDC282830, 0xDC383848, a);
+            int bottom = blendColors(0xDC18181F, 0xDC22222E, a);
+            RoundedRectShader.drawVerticalGradient(context, bx, by, bw, bh, r, adjustAlpha(top, anim), adjustAlpha(bottom, anim));
+
+            // Окантовка (Velocity: alpha = 45 + a * 75)
+            int borderA = (int) (45 + a * 75);
+            int borderCol = (borderA << 24) | 0xFFFFFF;
+            RoundedRectShader.drawOutline(context, bx, by, bw, bh, r, 0.6f, adjustAlpha(borderCol, anim));
+
+            // Цвет текста (Velocity: resting 160,160,172 -> hover 240,240,245)
+            int textCol = blendColors(0xEBA0A0AC, 0xFFF0F0F5, a);
+
+            if (i == 3) {
+                // Кнопка языка: строго по центру кнопки с плавной анимацией перехода
+                context.getMatrices().push();
+                context.getMatrices().translate(0, langOffsetY, 0);
+                float tw = getFont().getWidth(langLabel, SIZE_DESC);
+                getFont().draw(context.getMatrices(), langLabel, bx + (bw - tw) / 2f, by + 6.5f, SIZE_DESC, adjustAlpha(textCol, anim * langAlpha));
+                context.getMatrices().pop();
+            } else {
+                context.getMatrices().push();
+                context.getMatrices().translate(0, langOffsetY * 0.7f, 0);
+                float tw = getFont().getWidth(labels[i], SIZE_DESC);
+                getFont().draw(context.getMatrices(), labels[i], bx + (bw - tw) / 2f, by + 6.5f, SIZE_DESC, adjustAlpha(textCol, anim * langAlpha));
+                context.getMatrices().pop();
+            }
         }
     }
 
-    private void renderAccountManager(DrawContext context, int mouseX, int mouseY) {
+    // ─── Модальный менеджер аккаунтов ─────────────────────────────────────────
+    private void renderAccountManagerModal(DrawContext context, int mouseX, int mouseY) {
         float ap = accountPanelAlpha;
         if (ap <= 0.01f) return;
 
-        int panelW = 580, panelH = 300;
+        context.fill(0, 0, this.width, this.height, (int) (ap * 170) << 24);
+
+        int panelW = 540, panelH = 280;
         int startX = (this.width - panelW) / 2;
         int startY = (this.height - panelH) / 2;
+        int panelOffsetY = (int) lerp(14, 0, ap);
 
-        int panelOffsetY = (int)lerp(25, 0, ap);
-        int panelA       = (int)(ap * 255);
+        int curY = startY + panelOffsetY;
+        RoundedRectShader.draw(context, startX, curY, panelW, panelH, 10f, adjustAlpha(COL_PANEL_BG, ap));
+        RoundedRectShader.draw(context, startX, curY, panelW, panelH, 10f, adjustAlpha(0x20FFFFFF, ap * 0.4f));
 
-        drawSmoothRect(context, startX, startY + panelOffsetY, panelW, panelH,
-                (panelA << 24) | (COL_PANEL_BG & 0xFFFFFF));
+        // Заголовок
+        getFont().draw(context.getMatrices(), tr("МЕНЕДЖЕР АККАУНТОВ", "ACCOUNT MANAGER"), startX + 16, curY + 14, SIZE_TITLE, adjustAlpha(COL_TEXT_PRIMARY, ap));
 
-        getFont().draw(context.getMatrices(), "АККАУНТЫ",
-                startX + 16, startY + panelOffsetY + 14, SIZE_SMALL,
-                adjustAlpha(COL_TEXT_SECONDARY, ap));
-        context.fill(startX + 14, startY + panelOffsetY + 28,
-                startX + panelW - 14, startY + panelOffsetY + 29,
-                adjustAlpha(COL_DIVIDER, ap));
+        // Кнопка закрытия ✕
+        int closeX = startX + panelW - 28, closeY = curY + 11;
+        boolean closeHov = mouseX >= closeX && mouseX <= closeX + 18 && mouseY >= closeY && mouseY <= closeY + 18;
+        if (closeHov) {
+            RoundedRectShader.draw(context, closeX, closeY, 18, 18, 9f, adjustAlpha(0x33FF4444, ap));
+        }
+        getFont().draw(context.getMatrices(), "✕", closeX + 5, closeY + 4.5f, SIZE_DESC, adjustAlpha(closeHov ? 0xFFFF6666 : COL_TEXT_SECONDARY, ap));
 
-        int leftW = 184;
-        int lx    = startX + 14;
-        int ly    = startY + panelOffsetY + 36;
-        int leftH = panelH - 50;
+        context.fill(startX + 14, curY + 32, startX + panelW - 14, curY + 33, adjustAlpha(COL_DIVIDER, ap));
 
-        drawSmoothRect(context, lx, ly, leftW, leftH, adjustAlpha(COL_PANEL_BG2, ap));
+        // Левая панель
+        int leftW = 175;
+        int lx = startX + 14;
+        int ly = curY + 40;
+        int leftH = panelH - 52;
 
-        getFont().draw(context.getMatrices(), "ВХОД", lx + 12, ly + 12, SIZE_SMALL,
-                adjustAlpha(COL_TEXT_SECONDARY, ap));
+        RoundedRectShader.draw(context, lx, ly, leftW, leftH, 7f, adjustAlpha(COL_PANEL_BG2, ap));
+        getFont().draw(context.getMatrices(), tr("ДОБАВИТЬ НИК", "ADD USERNAME"), lx + 12, ly + 11, SIZE_DESC, adjustAlpha(COL_TEXT_SECONDARY, ap));
 
-        int fieldX = lx + 10, fieldY = ly + 28, fieldW = leftW - 20, fieldH = 22;
-        drawSmoothRect(context, fieldX, fieldY, fieldW, fieldH,
-                adjustAlpha(inputFocused ? COL_FIELD_FOCUSED : COL_FIELD_BG, ap));
+        int fieldX = lx + 10, fieldY = ly + 26, fieldW = leftW - 20, fieldH = 21;
+        RoundedRectShader.draw(context, fieldX, fieldY, fieldW, fieldH, 4f, adjustAlpha(inputFocused ? COL_FIELD_FOCUSED : COL_FIELD_BG, ap));
+        RoundedRectShader.draw(context, fieldX, fieldY, fieldW, fieldH, 4f, adjustAlpha(inputFocused ? 0x66FFFFFF : 0x1EFFFFFF, ap * 0.5f));
 
         if (inputText.isEmpty() && !inputFocused) {
-            getFont().draw(context.getMatrices(), "Введите ник...",
-                    fieldX + 7, fieldY + 7, SIZE_SMALL, adjustAlpha(COL_TEXT_MUTED, ap));
+            getFont().draw(context.getMatrices(), tr("Введите ник...", "Enter username..."), fieldX + 7, fieldY + 6.5f, SIZE_DESC, adjustAlpha(COL_TEXT_MUTED, ap));
         } else {
-            getFont().draw(context.getMatrices(), inputText,
-                    fieldX + 7, fieldY + 7, SIZE_SMALL, adjustAlpha(COL_TEXT_PRIMARY, ap));
-            if (inputFocused) {
-                boolean cursorVisible = ((System.currentTimeMillis() / 530) % 2) == 0;
-                if (cursorVisible) {
-                    String beforeCursor = inputText.substring(0, Math.min(cursorPos, inputText.length()));
-                    float cursorX = fieldX + 7 + getFont().getWidth(beforeCursor, SIZE_SMALL);
-                    context.fill((int)cursorX, fieldY + 5, (int)cursorX + 1, fieldY + fieldH - 5,
-                            adjustAlpha(COL_TEXT_PRIMARY, ap));
-                }
+            getFont().draw(context.getMatrices(), inputText, fieldX + 7, fieldY + 6.5f, SIZE_DESC, adjustAlpha(COL_TEXT_PRIMARY, ap));
+            if (inputFocused && ((System.currentTimeMillis() / 500) % 2 == 0)) {
+                String before = inputText.substring(0, Math.min(cursorPos, inputText.length()));
+                float curDrawX = fieldX + 7 + getFont().getWidth(before, SIZE_DESC);
+                context.fill((int) curDrawX, fieldY + 4, (int) curDrawX + 1, fieldY + fieldH - 4, adjustAlpha(COL_TEXT_WHITE, ap));
             }
         }
 
+        // Кнопки менеджера
+        String[] mgrLabels = {
+                tr("Войти", "Login"),
+                tr("Случайный", "Random"),
+                tr("Удалить", "Delete"),
+                tr("← Назад", "← Back")
+        };
+
         for (int i = 0; i < 4; i++) {
-            int bx = mgrBtnX[i], by = mgrBtnY[i] + panelOffsetY;
-            int bw = mgrBtnW[i], bh = mgrBtnH[i];
-            float hov = mgrBtnHover[i];
-            int btnBg = adjustAlpha(blendColors(COL_BTN_NORMAL, COL_BTN_HOVER, hov), ap);
+            int bx = mgrBtnX[i];
+            int by = mgrBtnY[i] + panelOffsetY;
+            int bw = mgrBtnW[i];
+            int bh = mgrBtnH[i];
 
-            drawSmoothRect(context, bx, by, bw, bh, btnBg);
+            boolean hov = mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh;
+            mgrBtnHover[i] += ((hov ? 1f : 0f) - mgrBtnHover[i]) * 0.18f;
+            float a = mgrBtnHover[i];
 
-            context.getMatrices().push();
-            float sc = 1f + hov * 0.02f;
-            context.getMatrices().translate(bx + bw / 2f, by + bh / 2f, 0);
-            context.getMatrices().scale(sc, sc, 1f);
-            context.getMatrices().translate(-bw / 2f, -bh / 2f, 0);
+            int top = blendColors(0xDC282830, 0xDC383848, a);
+            int bottom = blendColors(0xDC18181F, 0xDC22222E, a);
+            RoundedRectShader.drawVerticalGradient(context, bx, by, bw, bh, 5f, adjustAlpha(top, ap), adjustAlpha(bottom, ap));
 
-            int textCol = blendColors(adjustAlpha(COL_TEXT_PRIMARY, ap), adjustAlpha(COL_TEXT_WHITE, ap), hov);
-            String lbl = mgrBtnLabel[i];
+            int borderA = (int) (45 + a * 75);
+            RoundedRectShader.drawOutline(context, bx, by, bw, bh, 5f, 0.6f, adjustAlpha((borderA << 24) | 0xFFFFFF, ap));
+
+            int textCol = blendColors(0xEBA0A0AC, 0xFFF0F0F5, a);
+            String lbl = mgrLabels[i];
             float lw = getFont().getWidth(lbl, SIZE_HINT);
-            getFont().draw(context.getMatrices(), lbl,
-                    (bw - lw) / 2f, (bh - SIZE_HINT) / 2f - 0.5f, SIZE_HINT, textCol);
-            context.getMatrices().pop();
+            getFont().draw(context.getMatrices(), lbl, bx + bw / 2f - lw / 2f, by + 6.5f, SIZE_HINT, adjustAlpha(textCol, ap));
         }
 
-        String curName = (this.client != null && this.client.getSession() != null)
-                ? this.client.getSession().getUsername() : "Player";
-
-        // ФИКС НАЛЕЗАНИЯ: Привязали значок строго над кнопкой "Назад"
-        int badgeY = (mgrBtnY[3] + panelOffsetY) - 28;
-
-        drawSmoothRect(context, lx + 10, badgeY, leftW - 20, 22,
-                adjustAlpha(0x99101010, ap));
-        String bStr = "◈  " + curName;
-        float bW = getFont().getWidth(bStr, SIZE_SMALL);
-        getFont().draw(context.getMatrices(), bStr,
-                lx + 10 + (leftW - 20) / 2f - bW / 2f, badgeY + 7f,
-                SIZE_SMALL, adjustAlpha(COL_TEXT_PRIMARY, ap));
-
-        int rx = lx + leftW + 12;
+        // Правая панель
+        int rx = lx + leftW + 10;
         int ry = ly;
-        int rw = panelW - leftW - 40;
+        int rw = panelW - leftW - 38;
         int rh = leftH;
 
-        drawSmoothRect(context, rx, ry, rw, rh, adjustAlpha(COL_PANEL_BG2, ap));
-        getFont().draw(context.getMatrices(), "СПИСОК АККАУНТОВ",
-                rx + 12, ry + 12, SIZE_SMALL, adjustAlpha(COL_TEXT_SECONDARY, ap));
+        RoundedRectShader.draw(context, rx, ry, rw, rh, 7f, adjustAlpha(COL_PANEL_BG2, ap));
+        String listTitle = tr("СОХРАНЕННЫЕ АККАУНТЫ", "SAVED ACCOUNTS") + " (" + savedAccounts.size() + ")";
+        getFont().draw(context.getMatrices(), listTitle, rx + 12, ry + 11, SIZE_DESC, adjustAlpha(COL_TEXT_SECONDARY, ap));
 
-        int lx2 = rx + 8, ly2 = ry + 28, lw2 = rw - 16, lh2 = rh - 36;
-        int itemH = 30;
+        int lx2 = rx + 8, ly2 = ry + 26, lw2 = rw - 16, lh2 = rh - 34;
+        int itemH = 26;
 
         context.enableScissor(lx2, ly2, lx2 + lw2, ly2 + lh2);
 
         for (int i = 0; i < savedAccounts.size(); i++) {
-            int itemY = ly2 + (i * (itemH + 4)) - (int)scrollYAnim;
+            int itemY = ly2 + (i * (itemH + 3)) - (int) scrollYAnim;
             if (itemY + itemH < ly2 || itemY > ly2 + lh2) continue;
 
-            String acc    = savedAccounts.get(i);
-            boolean hov   = mouseX >= lx2 && mouseX <= lx2 + lw2
-                    && mouseY >= itemY && mouseY <= itemY + itemH;
-            boolean sel   = acc.equals(selectedAccount);
-            boolean delHov= mouseX >= lx2 + lw2 - 26 && mouseX <= lx2 + lw2 - 4
-                    && mouseY >= itemY && mouseY <= itemY + itemH;
+            String acc = savedAccounts.get(i);
+            boolean hov = mouseX >= lx2 && mouseX <= lx2 + lw2 && mouseY >= itemY && mouseY <= itemY + itemH;
+            boolean sel = acc.equals(selectedAccount);
+            boolean delHov = mouseX >= lx2 + lw2 - 22 && mouseX <= lx2 + lw2 - 4 && mouseY >= itemY && mouseY <= itemY + itemH;
 
-            int itemBg = adjustAlpha(sel ? COL_LIST_SELECTED : (hov ? COL_LIST_HOVER : COL_LIST_ITEM), ap);
+            int itemBg = sel ? COL_LIST_SELECTED : (hov ? COL_LIST_HOVER : COL_LIST_ITEM);
+            RoundedRectShader.draw(context, lx2, itemY, lw2, itemH, 5f, adjustAlpha(itemBg, ap));
 
-            drawSmoothRect(context, lx2 + 1, itemY, lw2 - 2, itemH, itemBg);
+            drawPlayerHead(context, getAccountSkin(acc), lx2 + 5, itemY + 5, 16, ap);
 
-            drawTexQuad(context, getAccountSkin(acc), lx2 + 8, itemY + 7, 16, 16,
-                    0.125f, 0.125f, 0.25f, 0.25f, adjustAlpha(0xFFFFFFFF, ap));
+            int textCol = sel ? COL_TEXT_WHITE : COL_TEXT_PRIMARY;
+            getFont().draw(context.getMatrices(), acc, lx2 + 26, itemY + 8.5f, SIZE_DESC, adjustAlpha(textCol, ap));
 
-            int textCol = adjustAlpha(sel ? COL_TEXT_WHITE : COL_TEXT_PRIMARY, ap);
-            getFont().draw(context.getMatrices(), acc, lx2 + 30, itemY + 11, SIZE_SMALL, textCol);
-
-            int crossCol = delHov ? adjustAlpha(0xFFCC4444, ap) : adjustAlpha(0xFF3A3A3A, ap);
-            drawRotatedTexQuad(context, ADD_TEX, lx2 + lw2 - 20, itemY + 11, 8, 8,
-                    0f, 0f, 1f, 1f, crossCol, (float)(Math.PI / 4.0));
+            int crossCol = delHov ? 0xFFEE4444 : 0xFF555566;
+            getFont().draw(context.getMatrices(), "✕", lx2 + lw2 - 14, itemY + 8.5f, SIZE_DESC, adjustAlpha(crossCol, ap));
         }
 
         context.disableScissor();
     }
 
+    // ─── Обработка кликов мыши ────────────────────────────────────────────────
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        if (!inAccountManager && introStage == IntroStage.WAIT_CONTINUE && button == 0) {
-            introStage = IntroStage.AUTH_SCREEN;
-            introStageStart = System.currentTimeMillis();
+        if (stage == MenuStage.HELLO) {
+            // Не пропускать интро если оверлей загрузки ещё активен
+            if (this.client != null && this.client.getOverlay() != null) return false;
+            // Не пропускать если интро ещё не началось
+            if (!helloStarted) return false;
+            // Защита от случайных кликов: минимум 800мс
+            if (System.currentTimeMillis() - stageStartTime < 800L) return true;
+            skipIntroToMenu();
             return true;
         }
 
-        // КЛИКИ В ОКНЕ АВТОРИЗАЦИИ (Перед меню)
-        if (introStage == IntroStage.AUTH_SCREEN && button == 0) {
-            if (isAuthLoading) return true; // Блок во время проверки
-
-            int boxW = 320, boxH = 220;
-            int boxX = this.width / 2 - boxW / 2, boxY = this.height / 2 - boxH / 2 + 30;
-            int fX = boxX + 40, fW = boxW - 80, fH = 24;
-            int fY1 = boxY + 50, fY2 = boxY + 90;
-
-            if (mx >= fX && mx <= fX + fW && my >= fY1 && my <= fY1 + fH) { authFocusedField = 1; return true; }
-            else if (mx >= fX && mx <= fX + fW && my >= fY2 && my <= fY2 + fH) { authFocusedField = 2; return true; }
-            else { authFocusedField = 0; }
-
-            int bW = 110, bH = 26;
-            boolean showSkip = !hwidConfirmedNew;
-            int bX1 = showSkip ? boxX + 40 : boxX + boxW/2 - bW/2, bY1 = boxY + 170;
-            int bX2 = boxX + boxW - 40 - bW, bY2 = boxY + 170;
-
-            if (mx >= bX1 && mx <= bX1 + bW && my >= bY1 && my <= bY1 + bH) {
-                // ВОЙТИ
-                String u = authInputText.trim(), p = authPasswordText.trim();
-                if (u.isEmpty() || p.isEmpty()) { setAuthStatus("Заполните все поля", 0xFFDD4444); return true; }
-                isAuthLoading = true; setAuthStatus("Связь с сервером...", 0xFFEEEEEE);
-
-                new Thread(() -> {
-                    AuthManager.AuthResult res = AuthManager.login(u, p);
-                    if (res.success) {
-                        isAuthenticatedSession = true;
-                        setAuthStatus("Успешно!", 0xFF44DD44);
-                        loginAccount(u); // Сразу добавляем ник в альт менеджер
-
-                        // === ОБНОВЛЕНО ===
-                        // Передаем только ник, так как метод сам под капотом цепляет токен и HWID[cite: 13]
-                        com.lexoravisauls.client.badge.LexoraAccount.syncCurrentIgn(u);
-                        // =================
-                        com.lexoravisauls.client.emotion.EmotionManager.fetchRadialSlots();
-
-                        try { Thread.sleep(700); } catch (Exception e) {}
-                        introStage = IntroStage.TRANSITION_TO_MENU; introStageStart = System.currentTimeMillis();
-                    } else {
-                        isAuthenticatedSession = false;
-                        setAuthStatus(res.message, 0xFFDD4444);
-                    }
-                    isAuthLoading = false;
-                }).start();
-                return true;
-            }
-
-            if (showSkip && mx >= bX2 && mx <= bX2 + bW && my >= bY2 && my <= bY2 + bH) {
-                // ПРОПУСТИТЬ
-                isAuthenticatedSession = false;
-                introStage = IntroStage.TRANSITION_TO_MENU;
-                introStageStart = System.currentTimeMillis();
-                return true;
-            }
-            return true;
-        }
-
-        if (!inAccountManager && introStage != IntroStage.MENU_READY) return true;
-
+        // Если открыт менеджер аккаунтов
         if (inAccountManager && button == 0) {
-            int panelW = 580, panelH = 300;
+            int panelW = 540, panelH = 280;
             int startX = (this.width - panelW) / 2;
             int startY = (this.height - panelH) / 2;
-            int leftW  = 184;
-            int lx     = startX + 14;
-            int ly     = startY + 36;
-            int rh     = panelH - 50;
+
+            // Кнопка закрытия ✕
+            int closeX = startX + panelW - 28, closeY = startY + 11;
+            if (mx >= closeX && mx <= closeX + 18 && my >= closeY && my <= closeY + 18) {
+                closeAccountManager();
+                return true;
+            }
+
+            int leftW = 175;
+            int lx = startX + 14;
+            int ly = startY + 40;
 
             for (int i = 0; i < 4; i++) {
                 if (mx >= mgrBtnX[i] && mx <= mgrBtnX[i] + mgrBtnW[i]
                         && my >= mgrBtnY[i] && my <= mgrBtnY[i] + mgrBtnH[i]) {
                     switch (i) {
-                        case 0 -> { String n = inputText.trim(); if (!n.isEmpty()) loginAccount(n); }
+                        case 0 -> {
+                            String n = inputText.trim();
+                            if (!n.isEmpty()) loginAccount(n);
+                        }
                         case 1 -> {
                             String rn = generateUniqueFakeName();
                             startTypewriter(rn);
@@ -1189,31 +961,29 @@ public class LexoraMainMenu extends Screen {
                 }
             }
 
-            int fieldX = lx + 10, fieldY = ly + 28, fieldW = leftW - 20, fieldH = 22;
-            if (mx >= fieldX && mx <= fieldX + fieldW && my >= fieldY && my <= fieldY + fieldH) {
-                inputFocused = true;
-                return true;
-            } else {
-                inputFocused = false;
-            }
+            // Поле ввода
+            int fieldX = lx + 10, fieldY = ly + 26, fieldW = leftW - 20, fieldH = 21;
+            inputFocused = (mx >= fieldX && mx <= fieldX + fieldW && my >= fieldY && my <= fieldY + fieldH);
 
-            int rx  = lx + leftW + 12;
-            int ry  = ly;
-            int rw  = panelW - leftW - 40;
-            int lx2 = rx + 8, ly2 = ry + 28, lw2 = rw - 16, lh2 = rh - 36;
-            int itemH = 30;
+            // Клик по списку
+            int rx = lx + leftW + 10;
+            int ry = ly;
+            int rw = panelW - leftW - 38;
+            int lx2 = rx + 8, ly2 = ry + 26, lw2 = rw - 16, lh2 = panelH - 52 - 34;
+            int itemH = 26;
 
             if (mx >= lx2 && mx <= lx2 + lw2 && my >= ly2 && my <= ly2 + lh2) {
-                int clickY = (int)(my - ly2 + scrollYAnim);
-                int index  = clickY / (itemH + 4);
+                int clickY = (int) (my - ly2 + scrollYAnim);
+                int index = clickY / (itemH + 3);
                 if (index >= 0 && index < savedAccounts.size()) {
                     String clicked = savedAccounts.get(index);
-                    if (mx >= lx2 + lw2 - 26) {
+                    if (mx >= lx2 + lw2 - 22) {
                         savedAccounts.remove(index);
                         if (selectedAccount.equals(clicked)) selectedAccount = "";
                         saveAccounts();
                         return true;
                     }
+
                     long time = System.currentTimeMillis();
                     if (clicked.equals(selectedAccount) && time - lastClickTime < 350) {
                         loginAccount(clicked);
@@ -1226,42 +996,119 @@ public class LexoraMainMenu extends Screen {
                     return true;
                 }
             }
+            return true;
         }
+
+        if (!inAccountManager && !transitionOut && !exitAnimating) {
+            // 1. Клик по профилю игрока -> менеджер аккаунтов
+            String currentName = (this.client != null && this.client.getSession() != null)
+                    ? this.client.getSession().getUsername() : "Player";
+            float nameW = getFont().getWidth(currentName, SIZE_DESC);
+            int profW = (int) (nameW + 48);
+            int profH = 24;
+            int profX = this.width - profW - 22;
+            int profY = 15;
+
+            if (button == 0 && mx >= profX && mx <= profX + profW && my >= profY && my <= profY + profH) {
+                openAccountManager();
+                return true;
+            }
+
+            // 2. Карточки по центру
+            float cx = this.width / 2f;
+            float cardW = 142f;
+            float cardH = 76f;
+            float gapCards = 8f;
+            float totalRowW = cardW * 2f + gapCards;
+            float startX = cx - totalRowW / 2f;
+
+            float hubTotalH = 34f + 16f + cardH + 6f + 22f;
+            float baseY = (this.height - hubTotalH) / 2f;
+            float logoY = baseY;
+            float cardsY = logoY + 52f;
+
+            if (button == 0) {
+                // Одиночная игра
+                float spX = startX;
+                if (mx >= spX && mx <= spX + cardW && my >= cardsY && my <= cardsY + cardH) {
+                    navigateTo(() -> this.client.setScreen(new SelectWorldScreen(this)));
+                    return true;
+                }
+
+                // Сетевая игра
+                float mpX = startX + cardW + gapCards;
+                if (mx >= mpX && mx <= mpX + cardW && my >= cardsY && my <= cardsY + cardH) {
+                    navigateTo(() -> this.client.setScreen(new MultiplayerScreen(this)));
+                    return true;
+                }
+            }
+
+            // 3. Ряд 2 второстепенных кнопок
+            float row2Y = cardsY + cardH + 6f;
+            float bh2 = 22f;
+            int btnCount = 5;
+            float gap2 = 4f;
+            float bw2 = (totalRowW - (btnCount - 1) * gap2) / btnCount;
+
+            for (int i = 0; i < btnCount; i++) {
+                float bx = startX + i * (bw2 + gap2);
+                float by = row2Y;
+
+                if (mx >= bx && mx <= bx + bw2 && my >= by && my <= by + bh2) {
+                    switch (i) {
+                        case 0 -> {
+                            if (button == 0) navigateTo(() -> this.client.setScreen(new OptionsScreen(this, this.client.options)));
+                        }
+                        case 1 -> {
+                            if (button == 0) navigateTo(() -> this.client.setScreen(new ModernClickGui(this)));
+                        }
+                        case 2 -> {
+                            if (button == 0) openAccountManager();
+                        }
+                        case 3 -> {
+                            // Кнопка языка:
+                            if (button == 1 || Screen.hasShiftDown()) {
+                                // Правый клик или Shift+клик -> открывает экран языков Minecraft
+                                navigateTo(() -> this.client.setScreen(new LanguageOptionsScreen(this, this.client.options, this.client.getLanguageManager())));
+                            } else {
+                                // Левый клик -> плавная анимация переключения RU <-> EN
+                                triggerLanguageSwitchAnimation();
+                            }
+                        }
+                        case 4 -> {
+                            if (button == 0) triggerExitAnimation();
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+
         return super.mouseClicked(mx, my, button);
     }
 
     @Override
     public boolean mouseScrolled(double mx, double my, double hAmt, double vAmt) {
         if (inAccountManager) {
-            scrollYTarget -= (int)(vAmt * 22);
+            scrollYTarget -= (int) (vAmt * 24);
             if (scrollYTarget < 0) scrollYTarget = 0;
-            int maxScroll = Math.max(0, savedAccounts.size() * 34 - 200);
+            int maxScroll = Math.max(0, savedAccounts.size() * 29 - 150);
             if (scrollYTarget > maxScroll) scrollYTarget = maxScroll;
+            return true;
         }
         return super.mouseScrolled(mx, my, hAmt, vAmt);
     }
 
     @Override
     public boolean charTyped(char c, int modifiers) {
-        // Окно авторизации
-        if (introStage == IntroStage.AUTH_SCREEN && !isAuthLoading) {
-            if (authFocusedField == 1 && authInputText.length() < 16 && (Character.isLetterOrDigit(c) || c == '_')) {
-                authInputText = authInputText.substring(0, authCursorPos) + c + authInputText.substring(authCursorPos); authCursorPos++; return true;
-            }
-            if (authFocusedField == 2 && authPasswordText.length() < 32) {
-                authPasswordText = authPasswordText.substring(0, authPassCursorPos) + c + authPasswordText.substring(authPassCursorPos); authPassCursorPos++; return true;
-            }
-        }
-
-        // Альт менеджер
         if (inAccountManager && inputFocused) {
             if (inputText.length() < 16 && (Character.isLetterOrDigit(c) || c == '_')) {
                 String before = inputText.substring(0, Math.min(cursorPos, inputText.length()));
-                String after  = inputText.substring(Math.min(cursorPos, inputText.length()));
+                String after = inputText.substring(Math.min(cursorPos, inputText.length()));
                 inputText = before + c + after;
                 cursorPos++;
                 typewriterTarget = inputText;
-                typewriterPos    = inputText.length();
+                typewriterPos = inputText.length();
             }
             return true;
         }
@@ -1270,90 +1117,63 @@ public class LexoraMainMenu extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Окно авторизации
-        if (introStage == IntroStage.AUTH_SCREEN && !isAuthLoading) {
-            if (keyCode == 258) { authFocusedField = authFocusedField == 1 ? 2 : 1; return true; } // TAB
-            if (authFocusedField == 1) {
-                if (keyCode == 259 && authCursorPos > 0) { authInputText = authInputText.substring(0, authCursorPos - 1) + authInputText.substring(authCursorPos); authCursorPos--; }
-                if (keyCode == 261 && authCursorPos < authInputText.length()) { authInputText = authInputText.substring(0, authCursorPos) + authInputText.substring(authCursorPos + 1); }
-                if (keyCode == 263 && authCursorPos > 0) authCursorPos--; if (keyCode == 262 && authCursorPos < authInputText.length()) authCursorPos++;
-            }
-            if (authFocusedField == 2) {
-                if (keyCode == 259 && authPassCursorPos > 0) { authPasswordText = authPasswordText.substring(0, authPassCursorPos - 1) + authPasswordText.substring(authPassCursorPos); authPassCursorPos--; }
-                if (keyCode == 261 && authPassCursorPos < authPasswordText.length()) { authPasswordText = authPasswordText.substring(0, authPassCursorPos) + authPasswordText.substring(authPassCursorPos + 1); }
-                if (keyCode == 263 && authPassCursorPos > 0) authPassCursorPos--; if (keyCode == 262 && authPassCursorPos < authPasswordText.length()) authPassCursorPos++;
-            }
-            if (keyCode == 256) { authFocusedField = 0; }
+        if (stage == MenuStage.HELLO) {
+            // Не пропускать интро если оверлей загрузки ещё активен
+            if (this.client != null && this.client.getOverlay() != null) return false;
+            // Не пропускать если интро ещё не началось
+            if (!helloStarted) return false;
+            // Защита от случайных нажатий: минимум 800мс
+            if (System.currentTimeMillis() - stageStartTime < 800L) return true;
+            skipIntroToMenu();
             return true;
         }
 
-        // Альт менеджер
         if (inAccountManager && inputFocused) {
-            if (keyCode == 259 && !inputText.isEmpty() && cursorPos > 0) {
+            if (keyCode == 259 && !inputText.isEmpty() && cursorPos > 0) { // Backspace
                 inputText = inputText.substring(0, cursorPos - 1)
                         + inputText.substring(Math.min(cursorPos, inputText.length()));
                 cursorPos--;
-                typewriterTarget = inputText; typewriterPos = inputText.length();
+                typewriterTarget = inputText;
+                typewriterPos = inputText.length();
             }
-            if (keyCode == 261 && cursorPos < inputText.length()) {
+            if (keyCode == 261 && cursorPos < inputText.length()) { // Delete
                 inputText = inputText.substring(0, cursorPos) + inputText.substring(cursorPos + 1);
-                typewriterTarget = inputText; typewriterPos = inputText.length();
+                typewriterTarget = inputText;
+                typewriterPos = inputText.length();
             }
-            if (keyCode == 263 && cursorPos > 0) cursorPos--;
-            if (keyCode == 262 && cursorPos < inputText.length()) cursorPos++;
-            if (keyCode == 257 || keyCode == 335) {
-                String n = inputText.trim(); if (!n.isEmpty()) loginAccount(n);
+            if (keyCode == 263 && cursorPos > 0) cursorPos--; // Left
+            if (keyCode == 262 && cursorPos < inputText.length()) cursorPos++; // Right
+            if (keyCode == 257 || keyCode == 335) { // Enter
+                String n = inputText.trim();
+                if (!n.isEmpty()) loginAccount(n);
             }
-            if (keyCode == 256) inputFocused = false;
+            if (keyCode == 256) inputFocused = false; // Escape
             return true;
         }
+
+        if (keyCode == 256 && inAccountManager) {
+            closeAccountManager();
+            return true;
+        }
+
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    private String getCurrentTimeString() {
-        LocalTime now = LocalTime.now();
-        return String.format("%02d:%02d", now.getHour(), now.getMinute());
+    // ─── Вспомогательные методы рендеринга ────────────────────────────────────
+    public static void drawPlayerHead(DrawContext ctx, Identifier skin, int x, int y, int size, float alpha) {
+        int tint = adjustAlpha(0xFFFFFFFF, alpha);
+        // Базовый слой лица
+        drawTexQuad(ctx, skin, x, y, size, size, 0.125f, 0.125f, 0.25f, 0.25f, tint);
+        // Верхний слой шапки / волос
+        drawTexQuad(ctx, skin, x, y, size, size, 0.625f, 0.125f, 0.75f, 0.25f, tint);
     }
 
-    private String getCurrentDateString() {
-        Locale ru = new Locale("ru");
-        LocalDate now = LocalDate.now();
-        return capitalize(now.getDayOfWeek().getDisplayName(TextStyle.FULL, ru))
-                + ", " + now.getDayOfMonth() + " "
-                + now.getMonth().getDisplayName(TextStyle.FULL, ru);
-    }
-
-    private String capitalize(String s) {
-        return (s == null || s.isEmpty()) ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
-    }
-
-    private static int adjustAlpha(int color, float alpha) {
-        int a = (int)(((color >> 24) & 0xFF) * alpha);
-        return (a << 24) | (color & 0xFFFFFF);
-    }
-
-    private float lerp(float a, float b, float t)   { return a + (b - a) * t; }
-
-    private float easeOutQuart(float x)             { return 1f - (float)Math.pow(1f - x, 4f); }
-
-    public static int blendColors(int c1, int c2, float r) {
-        int a1=(c1>>24)&0xFF, r1=(c1>>16)&0xFF, g1=(c1>>8)&0xFF, b1=c1&0xFF;
-        int a2=(c2>>24)&0xFF, r2=(c2>>16)&0xFF, g2=(c2>>8)&0xFF, b2=c2&0xFF;
-        return ((int)(a1+(a2-a1)*r)<<24)|((int)(r1+(r2-r1)*r)<<16)
-                |((int)(g1+(g2-g1)*r)<<8)|(int)(b1+(b2-b1)*r);
-    }
-
-    public static void drawSmoothRect(DrawContext ctx, int x, int y, int w, int h, int color) {
-        if (w <= 0 || h <= 0) return;
-        RoundedRectShader.draw(ctx, x, y, w, h, 6f, color);
-    }
-
-    // ОПТИМИЗИРОВАННЫЙ метод отрисовки (УБРАЛ ЛАГИ)
     public static void drawTexQuad(DrawContext ctx, Identifier tex,
                                    float x, float y, float w, float h,
                                    float u0, float v0, float u1, float v1, int color) {
         int a = (color >> 24) & 0xFF;
         if (a <= 0) return;
+        ctx.draw();
         float r = ((color >> 16) & 0xFF) / 255f;
         float g = ((color >> 8)  & 0xFF) / 255f;
         float b = ( color        & 0xFF) / 255f;
@@ -1390,9 +1210,49 @@ public class LexoraMainMenu extends Screen {
         ctx.getMatrices().pop();
     }
 
-    public static class LexoraButton extends ClickableWidget {
+    private String getCurrentTimeString() {
+        LocalTime now = LocalTime.now();
+        return String.format("%02d:%02d", now.getHour(), now.getMinute());
+    }
+
+    private String getCurrentDateString() {
+        Locale loc = isRu() ? new Locale("ru") : Locale.ENGLISH;
+        LocalDate now = LocalDate.now();
+        return capitalize(now.getDayOfWeek().getDisplayName(TextStyle.FULL, loc))
+                + ", " + now.getDayOfMonth() + " "
+                + now.getMonth().getDisplayName(TextStyle.FULL, loc);
+    }
+
+    private String capitalize(String s) {
+        return (s == null || s.isEmpty()) ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private static int adjustAlpha(int color, float alpha) {
+        int a = (int) (((color >> 24) & 0xFF) * alpha);
+        return (a << 24) | (color & 0xFFFFFF);
+    }
+
+    private static float lerp(float a, float b, float t) {
+        return a + (b - a) * t;
+    }
+
+    private static float easeOutQuart(float x) {
+        return 1f - (float) Math.pow(1f - x, 4f);
+    }
+
+    public static int blendColors(int c1, int c2, float r) {
+        int a1 = (c1 >> 24) & 0xFF, r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
+        int a2 = (c2 >> 24) & 0xFF, r2 = (c2 >> 16) & 0xFF, g2 = (c2 >> 8) & 0xFF, b2 = c2 & 0xFF;
+        return ((int) (a1 + (a2 - a1) * r) << 24)
+                | ((int) (r1 + (r2 - r1) * r) << 16)
+                | ((int) (g1 + (g2 - g1) * r) << 8)
+                | (int) (b1 + (b2 - b1) * r);
+    }
+
+    // ─── Совместимость со сторонними миксинами (MixinInventoryScreen) ─────────
+    public static class LexoraButton extends net.minecraft.client.gui.widget.ClickableWidget {
         private final Runnable pressAction;
-        private float hoverAnim   = 0f;
+        private float hoverAnim = 0f;
         private float revealAlpha = 1f;
 
         public LexoraButton(int x, int y, int w, int h, String text, Runnable pressAction) {
@@ -1400,10 +1260,12 @@ public class LexoraMainMenu extends Screen {
             this.pressAction = pressAction;
         }
 
-        public void setRevealAlpha(float a) { this.revealAlpha = Math.max(0f, Math.min(1f, a)); }
+        public void setRevealAlpha(float a) {
+            this.revealAlpha = Math.max(0f, Math.min(1f, a));
+        }
 
         @Override
-        protected void appendClickableNarrations(NarrationMessageBuilder b) {}
+        protected void appendClickableNarrations(net.minecraft.client.gui.screen.narration.NarrationMessageBuilder b) {}
 
         @Override
         public void renderWidget(DrawContext ctx, int mx, int my, float delta) {
@@ -1420,17 +1282,17 @@ public class LexoraMainMenu extends Screen {
             ctx.getMatrices().scale(sc, sc, 1f);
             ctx.getMatrices().translate(-cx, -cy, 0);
 
-            int bgRaw  = blendColors(COL_BTN_NORMAL, COL_BTN_HOVER, hoverAnim);
-            int bgA    = (int)(((bgRaw >> 24) & 0xFF) * revealAlpha);
-            int bgColor= (bgA << 24) | (bgRaw & 0xFFFFFF);
+            int bgRaw = blendColors(0xCC181818, 0xCC2E2E2E, hoverAnim);
+            int bgA = (int) (((bgRaw >> 24) & 0xFF) * revealAlpha);
+            int bgColor = (bgA << 24) | (bgRaw & 0xFFFFFF);
 
-            drawSmoothRect(ctx, getX(), getY(), width, height, bgColor);
+            RoundedRectShader.draw(ctx, getX(), getY(), width, height, 6f, bgColor);
 
-            int txA = (int)(255 * revealAlpha);
+            int txA = (int) (255 * revealAlpha);
             if (txA > 5) {
                 int textColor = (txA << 24) | (blendColors(COL_TEXT_PRIMARY, COL_TEXT_WHITE, hoverAnim) & 0xFFFFFF);
-                String t  = getMessage().getString();
-                float tw  = getFont().getWidth(t, SIZE_HINT);
+                String t = getMessage().getString();
+                float tw = getFont().getWidth(t, SIZE_HINT);
                 getFont().draw(ctx.getMatrices(), t,
                         getX() + (width - tw) / 2f, getY() + (height - SIZE_HINT) / 2f - 0.5f,
                         SIZE_HINT, textColor);
@@ -1443,262 +1305,6 @@ public class LexoraMainMenu extends Screen {
         public void onClick(double mx, double my) {
             super.onClick(mx, my);
             if (this.isHovered() && pressAction != null) pressAction.run();
-        }
-    }
-
-    private static final class AnimatedGifTexture {
-        private static final int MAX_GIF_FRAMES = 240;
-        private static final int MAX_GIF_PIXELS = 12_000_000;
-
-        private final Identifier gifId;
-        private final List<Identifier> frames = new ArrayList<>();
-        private final List<Integer>    delays = new ArrayList<>();
-
-        private volatile boolean decodeStarted = false;
-        private volatile boolean decodeDone    = false;
-        private volatile boolean decodeFailed  = false;
-
-        private volatile List<DecodedFrame> decodedFrames    = List.of();
-        private volatile int  decodedWidth      = 1;
-        private volatile int  decodedHeight     = 1;
-        private volatile long decodedDurationMs = 1000L;
-
-        private int     uploadedIndex = 0;
-        private boolean uploadDone    = false;
-
-        private long startTime       = 0L;
-        private int  width           = 1;
-        private int  height          = 1;
-        private long totalDurationMs = 1000L;
-        private boolean missingLogged = false;
-        private long    missingSinceMs = 0L;
-
-        private AnimatedGifTexture(Identifier id) { this.gifId = id; }
-
-        public void reset() { startTime = System.currentTimeMillis(); }
-
-        public void startPreload() {
-            if (decodeStarted || decodeDone || decodeFailed) return;
-            try {
-                MinecraftClient mc = MinecraftClient.getInstance();
-                if (mc == null || mc.getResourceManager() == null) return;
-                Optional<Resource> res = mc.getResourceManager().getResource(gifId);
-                if (res.isEmpty()) {
-                    long now = System.currentTimeMillis();
-                    if (missingSinceMs == 0L) missingSinceMs = now;
-                    if (!missingLogged) { missingLogged = true; System.err.println("Lexora hello gif not found: " + gifId); }
-                    if (now - missingSinceMs > 3000L) decodeFailed = true;
-                    return;
-                }
-                decodeStarted = true;
-                byte[] bytes;
-                try (InputStream is = res.get().getInputStream()) { bytes = is.readAllBytes(); }
-                Thread t = new Thread(() -> decodeGif(bytes), "Lexora-GIF-Loader");
-                t.setDaemon(true);
-                t.start();
-            } catch (Throwable t) { decodeFailed = true; t.printStackTrace(); }
-        }
-
-        public void tickUpload(int max) {
-            startPreload();
-            if (!decodeDone || uploadDone || decodeFailed) return;
-            List<DecodedFrame> lf = decodedFrames;
-            if (lf.isEmpty()) { uploadDone = true; return; }
-            int limit = Math.min(lf.size(), uploadedIndex + Math.max(1, max));
-            MinecraftClient mc = MinecraftClient.getInstance();
-            while (uploadedIndex < limit) {
-                try {
-                    DecodedFrame df = lf.get(uploadedIndex);
-                    frames.add(uploadFrame(mc, df.image, uploadedIndex));
-                    delays.add(df.delayMs);
-                    uploadedIndex++;
-                } catch (Throwable t) {
-                    decodeFailed = true; uploadDone = false;
-                    frames.clear(); delays.clear();
-                    System.err.println("Lexora GIF upload failed");
-                    t.printStackTrace();
-                    return;
-                }
-            }
-            if (uploadedIndex >= lf.size()) {
-                width = decodedWidth; height = decodedHeight;
-                totalDurationMs = Math.max(1000L, decodedDurationMs);
-                uploadDone = true;
-                reset();
-            }
-        }
-
-        public boolean isReady()  { tickUpload(MENU_UPLOAD_PER_TICK); return uploadDone && !frames.isEmpty(); }
-        public boolean isFailed() { return decodeFailed; }
-
-        public Identifier getFrame() {
-            tickUpload(MENU_UPLOAD_PER_TICK);
-            if (frames.isEmpty()) return null;
-            long elapsed = System.currentTimeMillis() - startTime;
-            int total = delays.stream().mapToInt(Integer::intValue).sum();
-            if (total <= 0) return frames.get(0);
-            long time = Math.min(elapsed, total - 1L);
-            int cursor = 0;
-            for (int i = 0; i < frames.size(); i++) {
-                cursor += delays.get(i);
-                if (time < cursor) return frames.get(i);
-            }
-            return frames.get(frames.size() - 1);
-        }
-
-        public int  getWidth()           { return width; }
-        public int  getHeight()          { return height; }
-        public long getTotalDurationMs() { return Math.max(1000L, totalDurationMs); }
-
-        private void decodeGif(byte[] bytes) {
-            try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
-                 ImageInputStream iis = ImageIO.createImageInputStream(bais)) {
-                Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("gif");
-                if (!readers.hasNext()) { decodeFailed = true; return; }
-                ImageReader reader = readers.next();
-                reader.setInput(iis, false);
-                int count = reader.getNumImages(true);
-                if (count <= 0 || count > MAX_GIF_FRAMES)
-                    throw new IllegalStateException("Bad frame count: " + count);
-                int lw = 1, lh = 1;
-                try {
-                    int[] sz = readLogicalSize(reader.getStreamMetadata());
-                    lw = sz[0]; lh = sz[1];
-                } catch (Throwable ignored) {}
-                if (lw <= 1 || lh <= 1) {
-                    BufferedImage f = reader.read(0);
-                    lw = Math.max(1, f.getWidth()); lh = Math.max(1, f.getHeight());
-                }
-                if ((long)lw * lh > MAX_GIF_PIXELS)
-                    throw new IllegalStateException("GIF too large");
-                List<DecodedFrame> result = new ArrayList<>();
-                BufferedImage canvas = new BufferedImage(lw, lh, BufferedImage.TYPE_INT_ARGB);
-                Graphics2D g = canvas.createGraphics();
-                g.setComposite(AlphaComposite.SrcOver);
-                int duration = 0;
-                for (int i = 0; i < count; i++) {
-                    BufferedImage raw = toArgb(reader.read(i));
-                    FrameMeta meta = readFrameMeta(reader.getImageMetadata(i), raw);
-                    BufferedImage prev = "restoreToPrevious".equals(meta.disposalMethod) ? copyImage(canvas) : null;
-                    g.drawImage(raw, meta.left, meta.top, null);
-                    int delay = Math.max(meta.delayMs, 35);
-                    result.add(new DecodedFrame(copyImage(canvas), delay));
-                    duration += delay;
-                    if ("restoreToBackgroundColor".equals(meta.disposalMethod)) {
-                        g.setComposite(AlphaComposite.Clear);
-                        g.fillRect(meta.left, meta.top, meta.width, meta.height);
-                        g.setComposite(AlphaComposite.SrcOver);
-                    } else if ("restoreToPrevious".equals(meta.disposalMethod) && prev != null) {
-                        g.dispose(); canvas = prev;
-                        g = canvas.createGraphics();
-                        g.setComposite(AlphaComposite.SrcOver);
-                    }
-                }
-                g.dispose(); reader.dispose();
-                decodedWidth = lw; decodedHeight = lh;
-                decodedDurationMs = Math.max(1000L, duration);
-                decodedFrames = List.copyOf(result);
-                decodeDone = true;
-            } catch (Throwable t) { decodeFailed = true; t.printStackTrace(); }
-        }
-
-        private int[] readLogicalSize(IIOMetadata meta) {
-            if (meta == null) return new int[]{1, 1};
-            org.w3c.dom.Node root = meta.getAsTree(meta.getNativeMetadataFormatName());
-            org.w3c.dom.Node node = findNode(root, "LogicalScreenDescriptor");
-            if (node == null || node.getAttributes() == null) return new int[]{1, 1};
-            return new int[]{
-                    Math.max(1, readIntAttr(node, "logicalScreenWidth", 1)),
-                    Math.max(1, readIntAttr(node, "logicalScreenHeight", 1))
-            };
-        }
-
-        private FrameMeta readFrameMeta(IIOMetadata meta, BufferedImage img) {
-            FrameMeta fm = new FrameMeta();
-            fm.left = 0; fm.top = 0;
-            fm.width = img.getWidth(); fm.height = img.getHeight();
-            fm.delayMs = 70; fm.disposalMethod = "none";
-            try {
-                org.w3c.dom.Node root = meta.getAsTree(meta.getNativeMetadataFormatName());
-                org.w3c.dom.Node id = findNode(root, "ImageDescriptor");
-                if (id != null) {
-                    fm.left   = readIntAttr(id, "imageLeftPosition", 0);
-                    fm.top    = readIntAttr(id, "imageTopPosition", 0);
-                    fm.width  = readIntAttr(id, "imageWidth", img.getWidth());
-                    fm.height = readIntAttr(id, "imageHeight", img.getHeight());
-                }
-                org.w3c.dom.Node gce = findNode(root, "GraphicControlExtension");
-                if (gce != null) {
-                    fm.delayMs = readIntAttr(gce, "delayTime", 7) * 10;
-                    org.w3c.dom.Node d = gce.getAttributes().getNamedItem("disposalMethod");
-                    if (d != null) fm.disposalMethod = d.getNodeValue();
-                }
-            } catch (Throwable ignored) {}
-            fm.width  = Math.max(1, fm.width);
-            fm.height = Math.max(1, fm.height);
-            return fm;
-        }
-
-        private int readIntAttr(org.w3c.dom.Node node, String name, int fallback) {
-            try {
-                if (node == null || node.getAttributes() == null) return fallback;
-                org.w3c.dom.Node a = node.getAttributes().getNamedItem(name);
-                return a == null ? fallback : Integer.parseInt(a.getNodeValue());
-            } catch (Throwable ignored) { return fallback; }
-        }
-
-        private BufferedImage toArgb(BufferedImage src) {
-            if (src.getType() == BufferedImage.TYPE_INT_ARGB) return src;
-            BufferedImage c = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_ARGB);
-            Graphics2D g = c.createGraphics(); g.drawImage(src, 0, 0, null); g.dispose(); return c;
-        }
-
-        private BufferedImage copyImage(BufferedImage src) {
-            BufferedImage c = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_ARGB);
-            Graphics2D g = c.createGraphics(); g.drawImage(src, 0, 0, null); g.dispose(); return c;
-        }
-
-        private Identifier uploadFrame(MinecraftClient mc, BufferedImage img, int idx) {
-            if (mc == null) throw new IllegalStateException("MC is null");
-            int maxTex = 4096;
-            try { maxTex = Math.max(1024, GL11.glGetInteger(GL11.GL_MAX_TEXTURE_SIZE)); } catch (Throwable ignored) {}
-            if (img.getWidth() > maxTex || img.getHeight() > maxTex)
-                throw new IllegalStateException("Frame too large");
-            NativeImage ni = new NativeImage(img.getWidth(), img.getHeight(), true);
-            for (int y = 0; y < img.getHeight(); y++)
-                for (int x = 0; x < img.getWidth(); x++) ni.setColorArgb(x, y, img.getRGB(x, y));
-            NativeImageBackedTexture tex = new NativeImageBackedTexture(ni);
-            Identifier id = Identifier.of("lexoravisauls", "dynamic/hello_gif_" + idx);
-            mc.getTextureManager().registerTexture(id, tex);
-            try {
-                int glTex = mc.getTextureManager().getTexture(id).getGlId();
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, glTex);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
-            } catch (Throwable ignored) {}
-            return id;
-        }
-
-        private org.w3c.dom.Node findNode(org.w3c.dom.Node root, String name) {
-            if (root == null) return null;
-            if (name.equals(root.getNodeName())) return root;
-            org.w3c.dom.Node c = root.getFirstChild();
-            while (c != null) {
-                org.w3c.dom.Node f = findNode(c, name);
-                if (f != null) return f;
-                c = c.getNextSibling();
-            }
-            return null;
-        }
-
-        private static final class DecodedFrame {
-            final BufferedImage image; final int delayMs;
-            DecodedFrame(BufferedImage i, int d) { image = i; delayMs = d; }
-        }
-        private static final class FrameMeta {
-            int left, top, width, height, delayMs; String disposalMethod;
         }
     }
 }

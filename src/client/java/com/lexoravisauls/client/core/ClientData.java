@@ -2,8 +2,10 @@ package com.lexoravisauls.client.core;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class ClientData {
 
@@ -12,6 +14,11 @@ public final class ClientData {
     public static final Map<String, String> modeSettings = new HashMap<>();
     public static final Map<String, float[]> colorSettings = new HashMap<>();
     public static final Map<String, Integer> moduleBinds = new HashMap<>();
+
+    public static final Set<String> favorites = new HashSet<>();
+    public static String guiLanguage = "RU"; // "RU" или "EN"
+    public static boolean lightTheme = false;
+    public static boolean onlyFavoritesFilter = false;
 
     public static final List<String> savedConfigs = new ArrayList<>();
     public static final List<String> savedThemes = new ArrayList<>();

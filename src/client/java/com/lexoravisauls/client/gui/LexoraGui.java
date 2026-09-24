@@ -97,10 +97,23 @@ public class LexoraGui extends Screen {
 
     static {
         categories.put("HUD", Arrays.asList("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Saturation HUD", "GPS", "Scoreboard HUD", "Lexora IRC","Emotes","Hit Indicator","TNT Detect"));
-        categories.put("Visual", Arrays.asList("Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones","Kill Effect","Motion Blur", "Taksa"));
-        categories.put("Utils", Arrays.asList("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter","Healing Helper", "Streamer Mode", "No Render", "Zoom", "Tape Mouse","Self Nametags","Armor Durability","Totem Sound"));
+        categories.put("Visual", Arrays.asList("Crosshair", "Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones","Kill Effect","Motion Blur", "Taksa", "Atmosphere", "Virtual Desktop"));
+        categories.put("Utils", Arrays.asList("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter","Healing Helper", "Streamer Mode", "No Render", "Optimization", "Zoom", "Tape Mouse","Self Nametags","Armor Durability","Totem Sound"));
         categories.put("Color", Arrays.asList("Gradient Theme"));
         categories.put("Config Manager", new ArrayList<>());
+
+        if (!moduleStates.containsKey("Crosshair")) moduleStates.put("Crosshair", false);
+        if (!modeSettings.containsKey("Crosshair Type")) modeSettings.put("Crosshair Type", "Classic");
+        if (!moduleStates.containsKey("Crosshair Outline")) moduleStates.put("Crosshair Outline", true);
+        if (!moduleStates.containsKey("Crosshair Dynamic Gap")) moduleStates.put("Crosshair Dynamic Gap", true);
+        if (!moduleStates.containsKey("Crosshair Highlight Target")) moduleStates.put("Crosshair Highlight Target", true);
+        if (!moduleStates.containsKey("Crosshair Center Dot")) moduleStates.put("Crosshair Center Dot", false);
+        if (!modeSettings.containsKey("Crosshair Color Mode")) modeSettings.put("Crosshair Color Mode", "Theme");
+        if (!colorSettings.containsKey("Crosshair Custom Color")) colorSettings.put("Crosshair Custom Color", new float[]{0f, 1f, 1f});
+        if (!numSettings.containsKey("Crosshair Thickness")) numSettings.put("Crosshair Thickness", 1.5f);
+        if (!numSettings.containsKey("Crosshair Length")) numSettings.put("Crosshair Length", 4.0f);
+        if (!numSettings.containsKey("Crosshair Gap")) numSettings.put("Crosshair Gap", 3.0f);
+        if (!numSettings.containsKey("Crosshair Gap Increase")) numSettings.put("Crosshair Gap Increase", 6.0f);
 
         if (!moduleStates.containsKey("Trails")) moduleStates.put("Trails", false);
         if (!moduleStates.containsKey("Trail Show 1st Person")) moduleStates.put("Trail Show 1st Person", false);
@@ -108,6 +121,15 @@ public class LexoraGui extends Screen {
         if (!colorSettings.containsKey("Trail Custom Color")) colorSettings.put("Trail Custom Color", new float[]{0f, 1f, 1f});
         if (!moduleStates.containsKey("Music Player")) moduleStates.put("Music Player", false);
         if (!moduleStates.containsKey("Target ESP")) moduleStates.put("Target ESP", false);
+        if (!modeSettings.containsKey("Target ESP Mode")) modeSettings.put("Target ESP Mode", "Spirits");
+        if (!numSettings.containsKey("ESP Speed")) numSettings.put("ESP Speed", 1.0f);
+        if (!numSettings.containsKey("Cool Soul Rotate Speed")) numSettings.put("Cool Soul Rotate Speed", 1.0f);
+        if (!numSettings.containsKey("Cool Soul Circles")) numSettings.put("Cool Soul Circles", 2.0f);
+        if (!numSettings.containsKey("Cool Soul Radius")) numSettings.put("Cool Soul Radius", 1.15f);
+        if (!numSettings.containsKey("Cool Soul Glow Width")) numSettings.put("Cool Soul Glow Width", 0.7f);
+        if (!numSettings.containsKey("Cool Soul Speed Y")) numSettings.put("Cool Soul Speed Y", 1.0f);
+        if (!numSettings.containsKey("Lightning Count")) numSettings.put("Lightning Count", 3.0f);
+        if (!numSettings.containsKey("Lightning Width")) numSettings.put("Lightning Width", 1.0f);
         if (!moduleStates.containsKey("Target HUD")) moduleStates.put("Target HUD", true);
         if (!moduleStates.containsKey("Red On Damage")) moduleStates.put("Red On Damage", true);
         if (!moduleStates.containsKey("Only On Crit")) moduleStates.put("Only On Crit", false);
@@ -133,7 +155,7 @@ public class LexoraGui extends Screen {
         if (!modeSettings.containsKey("Jump Circle Color Mode")) modeSettings.put("Jump Circle Color Mode", "Theme");
         if (!colorSettings.containsKey("Jump Circle Custom Color")) colorSettings.put("Jump Circle Custom Color", new float[]{0f, 1f, 1f});
 
-        if (!numSettings.containsKey("Zoom Action")) numSettings.put("Zoom Action", -1f);
+        if (!numSettings.containsKey("Zoom Action")) { numSettings.put("Zoom Action", (float) GLFW.GLFW_KEY_C); ClientData.moduleBinds.putIfAbsent("Zoom Action", GLFW.GLFW_KEY_C); }
 
         if (!ClientData.moduleStates.containsKey("Markers")) ClientData.moduleStates.put("Markers", false);
         if (!ClientData.moduleStates.containsKey("Death Marker")) ClientData.moduleStates.put("Death Marker", true);
@@ -166,6 +188,31 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("Hide Name")) moduleStates.put("Hide Name", true);
         if (!moduleStates.containsKey("Hide Coords")) moduleStates.put("Hide Coords", true);
 
+                if (!moduleStates.containsKey("Optimization")) moduleStates.put("Optimization", false);
+                        if (!moduleStates.containsKey("Opt No Clouds")) moduleStates.put("Opt No Clouds", true);
+        if (!moduleStates.containsKey("Opt No Fog")) moduleStates.put("Opt No Fog", true);
+        if (!moduleStates.containsKey("Opt Fast Items")) moduleStates.put("Opt Fast Items", true);
+        if (!numSettings.containsKey("Opt Items Dist")) numSettings.put("Opt Items Dist", 20.0f);
+        if (!moduleStates.containsKey("Opt Block Culling")) moduleStates.put("Opt Block Culling", true);
+        if (!numSettings.containsKey("Opt Block Dist")) numSettings.put("Opt Block Dist", 48.0f);
+        if (!moduleStates.containsKey("Opt Fast Lighting")) moduleStates.put("Opt Fast Lighting", true);
+        if (!moduleStates.containsKey("Opt Fast HUD")) moduleStates.put("Opt Fast HUD", true);
+        if (!moduleStates.containsKey("Opt All Particles")) moduleStates.put("Opt All Particles", false);
+        if (!moduleStates.containsKey("Opt Rain Particles")) moduleStates.put("Opt Rain Particles", true);
+        if (!moduleStates.containsKey("Opt Potion Particles")) moduleStates.put("Opt Potion Particles", false);
+        if (!moduleStates.containsKey("Opt Explosion Particles")) moduleStates.put("Opt Explosion Particles", false);
+        if (!moduleStates.containsKey("Opt Smoke Particles")) moduleStates.put("Opt Smoke Particles", false);
+        if (!moduleStates.containsKey("Opt Fire Particles")) moduleStates.put("Opt Fire Particles", false);
+        if (!moduleStates.containsKey("Opt Totem Particles")) moduleStates.put("Opt Totem Particles", false);
+        if (!moduleStates.containsKey("Opt No Armor")) moduleStates.put("Opt No Armor", false);
+        if (!moduleStates.containsKey("Opt No Nametags")) moduleStates.put("Opt No Nametags", false);
+        if (!moduleStates.containsKey("Opt No Shadows")) moduleStates.put("Opt No Shadows", true);
+        if (!moduleStates.containsKey("Opt No Glint")) moduleStates.put("Opt No Glint", false);
+        if (!moduleStates.containsKey("Opt No Armor Stands")) moduleStates.put("Opt No Armor Stands", false);
+        if (!moduleStates.containsKey("Opt No Beacons")) moduleStates.put("Opt No Beacons", false);
+        if (!moduleStates.containsKey("Opt Fast Weather")) moduleStates.put("Opt Fast Weather", true);
+        if (!moduleStates.containsKey("Opt Entity Culling")) moduleStates.put("Opt Entity Culling", false);
+        if (!numSettings.containsKey("Opt Entity Dist")) numSettings.put("Opt Entity Dist", 48.0f);
         if (!moduleStates.containsKey("No Render")) moduleStates.put("No Render", false);
         if (!moduleStates.containsKey("No Fire")) moduleStates.put("No Fire", true);
         if (!moduleStates.containsKey("No Portal")) moduleStates.put("No Portal", true);
@@ -175,12 +222,12 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("No Bad Effects")) moduleStates.put("No Bad Effects", true);
         if (!moduleStates.containsKey("No Hurt Cam")) moduleStates.put("No Hurt Cam", true);
 
-        if (!moduleStates.containsKey("Zoom")) moduleStates.put("Zoom", false);
+        if (!moduleStates.containsKey("Zoom")) moduleStates.put("Zoom", true);
         if (!modeSettings.containsKey("Zoom Mode")) modeSettings.put("Zoom Mode", "Hold");
         if (!numSettings.containsKey("Zoom Value")) numSettings.put("Zoom Value", 4.0f);
         if (!numSettings.containsKey("Zoom Smooth")) numSettings.put("Zoom Smooth", 0.18f);
         if (!numSettings.containsKey("Zoom Scroll Step")) numSettings.put("Zoom Scroll Step", 0.35f);
-        if (!moduleBinds.containsKey("Zoom")) moduleBinds.put("Zoom", GLFW.GLFW_KEY_C);
+        // Zoom module itself has no default bind; inner Zoom Action handles key C
 
         if (!moduleStates.containsKey("Healing Helper")) moduleStates.put("Healing Helper", false);
         if (!moduleStates.containsKey("HH Pulsation")) moduleStates.put("HH Pulsation", true);
@@ -233,8 +280,13 @@ public class LexoraGui extends Screen {
 
         if (!moduleStates.containsKey("Custom Hitboxes")) moduleStates.put("Custom Hitboxes", false);
         if (!modeSettings.containsKey("Hitbox Style")) modeSettings.put("Hitbox Style", "Solid");
+        if (!modeSettings.containsKey("Hitbox Color Mode")) modeSettings.put("Hitbox Color Mode", "Custom");
         if (!colorSettings.containsKey("Hitbox Color")) colorSettings.put("Hitbox Color", new float[]{280f/360f, 1f, 1f});
-        if (!numSettings.containsKey("Hitbox Alpha")) numSettings.put("Hitbox Alpha", 0.5f);
+        if (!numSettings.containsKey("Hitbox Alpha")) numSettings.put("Hitbox Alpha", 0.45f);
+        if (!numSettings.containsKey("Hitbox Line Width")) numSettings.put("Hitbox Line Width", 2.0f);
+        if (!numSettings.containsKey("HB Range")) numSettings.put("HB Range", 32.0f);
+        if (!moduleStates.containsKey("HB Only Target")) moduleStates.put("HB Only Target", false);
+        if (!moduleStates.containsKey("HB Hurt Pulse")) moduleStates.put("HB Hurt Pulse", true);
         if (!moduleStates.containsKey("HB Players")) moduleStates.put("HB Players", true);
         if (!moduleStates.containsKey("HB Mobs")) moduleStates.put("HB Mobs", false);
         if (!moduleStates.containsKey("HB Items")) moduleStates.put("HB Items", false);
@@ -282,7 +334,25 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("Part. Projectiles")) moduleStates.put("Part. Projectiles", true);
         if (!moduleStates.containsKey("Disable Vanilla Totem")) moduleStates.put("Disable Vanilla Totem", true);
 
-        if (!modeSettings.containsKey("Part. Texture")) modeSettings.put("Part. Texture", "Star");
+        if (!moduleStates.containsKey("Part. Attack")) moduleStates.put("Part. Attack", true);
+        if (!moduleStates.containsKey("Part. Move")) moduleStates.put("Part. Move", false);
+        if (!moduleStates.containsKey("Part. Throw")) moduleStates.put("Part. Throw", true);
+        if (!moduleStates.containsKey("Part. Idle")) moduleStates.put("Part. Idle", false);
+        if (!moduleStates.containsKey("Part. Glow")) moduleStates.put("Part. Glow", true);
+        if (!moduleStates.containsKey("Part. Rotation")) moduleStates.put("Part. Rotation", false);
+        if (!moduleStates.containsKey("Part. Through Walls")) moduleStates.put("Part. Through Walls", false);
+        if (!moduleStates.containsKey("Part. Strong Y")) moduleStates.put("Part. Strong Y", false);
+
+        if (!modeSettings.containsKey("Part. Texture")) modeSettings.put("Part. Texture", "Bloom");
+
+        if (!numSettings.containsKey("Part. Speed")) numSettings.put("Part. Speed", 1.5f);
+        if (!numSettings.containsKey("Part. Size")) numSettings.put("Part. Size", 0.3f);
+        if (!numSettings.containsKey("Part. Attack Count")) numSettings.put("Part. Attack Count", 30.0f);
+        if (!numSettings.containsKey("Part. Totem Count")) numSettings.put("Part. Totem Count", 8.0f);
+        if (!numSettings.containsKey("Part. Move Count")) numSettings.put("Part. Move Count", 2.0f);
+        if (!numSettings.containsKey("Part. Throw Count")) numSettings.put("Part. Throw Count", 6.0f);
+        if (!numSettings.containsKey("Part. Idle Count")) numSettings.put("Part. Idle Count", 5.0f);
+        if (!numSettings.containsKey("Part. Idle Range")) numSettings.put("Part. Idle Range", 16.0f);
 
         if (!numSettings.containsKey("Amb Chance")) numSettings.put("Amb Chance", 8.0f);
         if (!numSettings.containsKey("Amb Size")) numSettings.put("Amb Size", 1.0f);
@@ -345,6 +415,10 @@ public class LexoraGui extends Screen {
         if (!numSettings.containsKey("Target HUD Scale")) numSettings.put("Target HUD Scale", 1.0f);
         if (!numSettings.containsKey("Watermark Scale")) numSettings.put("Watermark Scale", 1.0f);
         if (!numSettings.containsKey("Item Swap Action")) numSettings.put("Item Swap Action", -1f);
+        if (!modeSettings.containsKey("Swap Mode")) modeSettings.put("Swap Mode", "Двойной");
+        if (!modeSettings.containsKey("Item Swap Wheel 0")) modeSettings.put("Item Swap Wheel 0", "Тотем");
+        if (!modeSettings.containsKey("Item Swap Wheel 1")) modeSettings.put("Item Swap Wheel 1", "Шар");
+        if (!modeSettings.containsKey("Item Swap Wheel 2")) modeSettings.put("Item Swap Wheel 2", "Щит");
 
         if (!moduleStates.containsKey("Motion Clones")) moduleStates.put("Motion Clones", false);
 
@@ -387,6 +461,31 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("Hand Shaders")) moduleStates.put("Hand Shaders", false);
         if (!modeSettings.containsKey("Hand Mode")) modeSettings.put("Hand Mode", "Snow");
         if (!numSettings.containsKey("Hand Glow %")) numSettings.put("Hand Glow %", 35.0f);
+
+        if (!moduleStates.containsKey("Atmosphere")) moduleStates.put("Atmosphere", false);
+        if (!moduleStates.containsKey("WeatherFX")) moduleStates.put("WeatherFX", false);
+        if (!modeSettings.containsKey("Weather Visual Mode")) modeSettings.put("Weather Visual Mode", "Rain");
+        if (!moduleStates.containsKey("Weather Rain Only")) moduleStates.put("Weather Rain Only", false);
+        if (!modeSettings.containsKey("Rain Preset")) modeSettings.put("Rain Preset", "Rain");
+        if (!numSettings.containsKey("Rain Density")) numSettings.put("Rain Density", 1.0f);
+        if (!numSettings.containsKey("Rain Radius")) numSettings.put("Rain Radius", 26.0f);
+        if (!numSettings.containsKey("Rain Altitude")) numSettings.put("Rain Altitude", 16.0f);
+        if (!numSettings.containsKey("Rain Drop Size")) numSettings.put("Rain Drop Size", 1.0f);
+        if (!numSettings.containsKey("Rain Fall Speed")) numSettings.put("Rain Fall Speed", 1.0f);
+        if (!numSettings.containsKey("Rain Wind")) numSettings.put("Rain Wind", 1.0f);
+        if (!numSettings.containsKey("Rain Opacity")) numSettings.put("Rain Opacity", 1.0f);
+        if (!moduleStates.containsKey("Rain Splashes")) moduleStates.put("Rain Splashes", true);
+        if (!moduleStates.containsKey("Rain Droplets")) moduleStates.put("Rain Droplets", true);
+        if (!moduleStates.containsKey("Rain Mist")) moduleStates.put("Rain Mist", true);
+        if (!moduleStates.containsKey("Rain Lightning")) moduleStates.put("Rain Lightning", false);
+        if (!moduleStates.containsKey("Rain Sky Check")) moduleStates.put("Rain Sky Check", true);
+        if (!modeSettings.containsKey("Rain Color Mode")) modeSettings.put("Rain Color Mode", "Realistic");
+        if (!colorSettings.containsKey("Rain Custom Color")) colorSettings.put("Rain Custom Color", new float[]{0.6f, 0.75f, 0.9f});
+        if (!numSettings.containsKey("Wet Strength")) numSettings.put("Wet Strength", 0.85f);
+        if (!numSettings.containsKey("Wet Darkening")) numSettings.put("Wet Darkening", 0.30f);
+        if (!modeSettings.containsKey("Wet Quality")) modeSettings.put("Wet Quality", "Balanced");
+        if (!moduleStates.containsKey("Wet Ripples")) moduleStates.put("Wet Ripples", false);
+        if (!numSettings.containsKey("Ripple Speed")) numSettings.put("Ripple Speed", 1.0f);
     }
 
     public LexoraGui() {
@@ -411,24 +510,33 @@ public class LexoraGui extends Screen {
     }
 
     public static int getThemeColor(float offset) {
-        boolean gradient = moduleStates.getOrDefault("Gradient Theme", true);
-        float[] hsv1 = colorSettings.getOrDefault("Theme Color 1", new float[]{200f / 360f, 1f, 1f});
+        boolean gradient = com.lexoravisauls.client.core.ClientData.moduleStates.getOrDefault("Gradient Theme",
+                moduleStates.getOrDefault("Gradient Theme", true));
+        float[] hsv1 = com.lexoravisauls.client.core.ClientData.colorSettings.getOrDefault("Theme Color 1",
+                colorSettings.getOrDefault("Theme Color 1", new float[]{200f / 360f, 1f, 1f}));
 
-        if (!gradient) return Color.HSBtoRGB(hsv1[0], hsv1[1], hsv1[2]) & 0xFFFFFF;
+        int c1 = Color.HSBtoRGB(hsv1[0], hsv1[1], hsv1[2]) & 0xFFFFFF;
+        if (!gradient) return c1;
 
-        float[] hsv2 = colorSettings.getOrDefault("Theme Color 2", new float[]{280f / 360f, 1f, 1f});
+        float[] hsv2 = com.lexoravisauls.client.core.ClientData.colorSettings.getOrDefault("Theme Color 2",
+                colorSettings.getOrDefault("Theme Color 2", new float[]{280f / 360f, 1f, 1f}));
+        int c2 = Color.HSBtoRGB(hsv2[0], hsv2[1], hsv2[2]) & 0xFFFFFF;
+
         float time = (System.currentTimeMillis() % 3000L) / 3000.0f;
         float mixed = (time + offset) % 1.0f;
-
         float blend = (float) (Math.sin(mixed * Math.PI * 2) * 0.5 + 0.5);
-        float finalHue = hsv1[0] + (hsv2[0] - hsv1[0]) * blend;
-        float finalSat = hsv1[1] + (hsv2[1] - hsv1[1]) * blend;
-        float finalVal = hsv1[2] + (hsv2[2] - hsv1[2]) * blend;
 
-        return Color.HSBtoRGB(finalHue, finalSat, finalVal) & 0xFFFFFF;
+        int r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
+        int r2 = (c2 >> 16) & 0xFF, g2 = (c2 >> 8) & 0xFF, b2 = c2 & 0xFF;
+
+        int r = (int) (r1 + (r2 - r1) * blend);
+        int g = (int) (g1 + (g2 - g1) * blend);
+        int b = (int) (b1 + (b2 - b1) * blend);
+
+        return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
     }
 
-    private String t(String key) {
+private String t(String key) {
         switch (key) {
             case "Target ESP Mode": return "Режим ЕСП";
             case "Red On Damage": return "Красный при Уроне";
@@ -528,7 +636,13 @@ public class LexoraGui extends Screen {
             case "Поворот": return "Поворот";
 
             case "Hitbox Style": return "Стиль Хитбокса";
+            case "Hitbox Color Mode": return "Режим Цвета";
+            case "Hitbox Color": return "Цвет Хитбокса";
             case "Hitbox Alpha": return "Прозрачность";
+            case "Hitbox Line Width": return "Толщина Линий";
+            case "HB Range": return "Дистанция (Блоки)";
+            case "HB Only Target": return "Только прицел";
+            case "HB Hurt Pulse": return "Вспышка от Урона";
             case "HB Players": return "Игроки";
             case "HB Mobs": return "Мобы";
             case "HB Items": return "Предметы";
@@ -537,8 +651,10 @@ public class LexoraGui extends Screen {
             case "Hit Sound Volume": return "Громкость";
             case "Hit Sound Only Crit": return "Только при Крите";
 
+            case "Swap Mode": return "Режим Свапа";
             case "Swap From": return "Свапать С";
             case "Swap To": return "Свапать На";
+            case "Only Enchanted Totems": return "Только зач. тотемы";
 
             case "Part. Texture": return "Текстура";
 
@@ -625,11 +741,11 @@ public class LexoraGui extends Screen {
             case "Body Only": return "Только Тело";
 
             case "Standard": return "Стандарт";
-            case "Взмах": return "Взмах";
-            case "Взмах 2": return "Взмах 2";
-            case "Сдвиг": return "Сдвиг";
-            case "Ломание": return "Ломание";
-            case "Выпад": return "Выпад";
+            case "Под наклоном": return "Под наклоном";
+            case "Наклон": return "Наклон";
+            case "Вращение на 360": return "Вращение на 360";
+            case "От себя": return "От себя";
+            case "Боньк": return "Боньк";
 
             case "Обычный": return "Обычный";
             case "Драконий": return "Драконий";
@@ -863,6 +979,19 @@ public class LexoraGui extends Screen {
                 } else if (modName.equals("Target ESP")) {
                     String currentMode = modeSettings.getOrDefault("Target ESP Mode", "Spirits");
                     sY = drawTargetESPSettings(context, tr, sX, sY, sW, mx, my, fadeAlpha, currentMode.equals("Spirits"), currentMode.contains("Rhombus"));
+                } else if (modName.equals("Optimization")) {
+                    sY = drawMiniToggle(context, tr, "Opt No Clouds", "Отключить 3D облака", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt No Fog", "Отключить туман", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast Weather", "Убрать дождь и снег", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast Items", "Ограничить лут", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Opt Items Dist", 8.0f, 48.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Block Culling", "Оптимизация сундуков", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Opt Block Dist", 16.0f, 96.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Entity Culling", "Дальность сущностей", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Opt Entity Dist", 12.0f, 96.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt All Particles", "Отключить ВСЕ частицы", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast Lighting", "Быстрое освещение", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast HUD", "Убрать виньетку", sX, sY, sW, fadeAlpha);
                 } else if (modName.equals("Gradient Theme")) {
                     sY = drawColorPicker(context, tr, "Theme Color 1", sX, sY, sW, mx, my, fadeAlpha);
                     if (moduleStates.getOrDefault(modName, false)) {
@@ -927,7 +1056,8 @@ public class LexoraGui extends Screen {
 
                         // 👇 ВОТ СЮДА ВСТАЛ ТВОЙ КОД С КРУГЛЫМИ ТУМБЛЕРАМИ 👇
                         // 🔥 КРАСИВЫЙ АНИМИРОВАННЫЙ ТУМБЛЕР
-                        float animTarget = config.enabled ? 1.0f : 0.0f;
+                        boolean isItemOn = ItemHighlighter.isItemEnabled(item);
+                        float animTarget = isItemOn ? 1.0f : 0.0f;
                         float currentAnim = toggleAnimations.getOrDefault("tog_hl_" + name, animTarget);
                         currentAnim += (animTarget - currentAnim) * 0.2f;
                         toggleAnimations.put("tog_hl_" + name, currentAnim);
@@ -947,7 +1077,8 @@ public class LexoraGui extends Screen {
                         int colBoxX = sX + 200;
                         clickBounds.put("highlighter_col_" + name, new int[]{colBoxX, (int)(togY + settingsScrollY), 14, 14});
 
-                        drawCircle(context, colBoxX, togY, 7, (alphaInt << 24) | config.color | 0xFF000000);
+                        int itemCol = ItemHighlighter.getItemColor(item);
+                        drawCircle(context, colBoxX, togY, 7, (alphaInt << 24) | itemCol | 0xFF000000);
 
                         sY += 18; // Сдвигаемся вниз для следующего предмета
                     }
@@ -1033,8 +1164,6 @@ public class LexoraGui extends Screen {
                     sY = drawMiniSlider(context, tr, "Right Hand Z", -1.5f, 1.5f, sX, sY, sW, mx, my, fadeAlpha);
                     sY = draw2DPad(context, tr, "Left Hand X", "Left Hand Y", "Позиция левой руки", -2.5f, 2.5f, -2.0f, 2.0f, sX, sY, sW, mx, my, fadeAlpha);
                     sY = drawMiniSlider(context, tr, "Left Hand Z", -1.5f, 1.5f, sX, sY, sW, mx, my, fadeAlpha);
-                    sY = drawMiniSlider(context, tr, "Сила наклона", 20.0f, 75.0f, sX, sY, sW, mx, my, fadeAlpha);
-                    sY = drawMiniSlider(context, tr, "Поворот", -7.5f, 35.0f, sX, sY, sW, mx, my, fadeAlpha);
                     sY = drawMiniSlider(context, tr, "VM Speed", 0.1f, 5.0f, sX, sY, sW, mx, my, fadeAlpha);
                 } else if (modName.equals("Shift Tap")) {
                     sY = drawMiniMode(context, tr, "Shift Mode", sX, sY, sW, mx, my, fadeAlpha);
@@ -1043,15 +1172,19 @@ public class LexoraGui extends Screen {
                     sY = drawMiniMode(context, tr, "Hit Sound Mode", sX, sY, sW, mx, my, fadeAlpha);
                     sY = drawMiniSlider(context, tr, "Hit Sound Volume", 0.0f, 100.0f, sX, sY, sW, mx, my, fadeAlpha);
                 } else if (modName.equals("Item Swap")) {
-                    sY = drawMiniMode(context, tr, "Swap From", sX, sY, sW, mx, my, fadeAlpha);
-                    sY = drawMiniMode(context, tr, "Swap To", sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniMode(context, tr, "Swap Mode", sX, sY, sW, mx, my, fadeAlpha);
+                    if (modeSettings.getOrDefault("Swap Mode", "Двойной").equals("Двойной")) {
+                        sY = drawMiniMode(context, tr, "Swap From", sX, sY, sW, mx, my, fadeAlpha);
+                        sY = drawMiniMode(context, tr, "Swap To", sX, sY, sW, mx, my, fadeAlpha);
+                    }
+                    sY = drawMiniToggle(context, tr, "Only Enchanted Totems", t("Only Enchanted Totems"), sX, sY, sW, fadeAlpha);
                     sY = drawBindButton(context, tr, modName + " Action", "Кнопка Свапа", sX, sY, sW, mx, my, fadeAlpha);
-                    if (!moduleStates.containsKey("Zoom")) moduleStates.put("Zoom", false);
+                    if (!moduleStates.containsKey("Zoom")) moduleStates.put("Zoom", true);
                     if (!modeSettings.containsKey("Zoom Mode")) modeSettings.put("Zoom Mode", "Hold");
                     if (!numSettings.containsKey("Zoom Value")) numSettings.put("Zoom Value", 4.0f);
                     if (!numSettings.containsKey("Zoom Smooth")) numSettings.put("Zoom Smooth", 0.18f);
                     if (!numSettings.containsKey("Zoom Scroll Step")) numSettings.put("Zoom Scroll Step", 0.35f);
-                    if (!numSettings.containsKey("Zoom Action")) numSettings.put("Zoom Action", -1f);
+                    if (!numSettings.containsKey("Zoom Action")) { numSettings.put("Zoom Action", (float) GLFW.GLFW_KEY_C); ClientData.moduleBinds.putIfAbsent("Zoom Action", GLFW.GLFW_KEY_C); }
                 } else if (modName.equals("Elytra Swap")) {
                     sY = drawBindButton(context, tr, modName + " Action", "Кнопка Элитр", sX, sY, sW, mx, my, fadeAlpha);
                 } else if (modName.equals("Auto Eat")) {
@@ -1170,6 +1303,19 @@ public class LexoraGui extends Screen {
                     context.drawText(tr, Text.literal("Настройки этого худа").setStyle(Style.EMPTY.withFont(Identifier.of("lexoravisauls", "sfui"))), sX + 10, sY, (alphaInt << 24) | 0xFFDDDDDD, false);
                     context.drawText(tr, Text.literal("доступны по ПКМ в чате!").setStyle(Style.EMPTY.withFont(Identifier.of("lexoravisauls", "sfui"))), sX + 10, sY + 15, (alphaInt << 24) | 0xFF55FF55, false);
                     sY += 40;
+                } else if (modName.equals("Optimization")) {
+                    sY = drawMiniToggle(context, tr, "Opt No Clouds", "Отключить 3D облака", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt No Fog", "Отключить туман", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast Weather", "Убрать дождь и снег", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast Items", "Ограничить лут", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Opt Items Dist", 8.0f, 48.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Block Culling", "Оптимизация сундуков", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Opt Block Dist", 16.0f, 96.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Entity Culling", "Дальность сущностей", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Opt Entity Dist", 12.0f, 96.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt All Particles", "Отключить ВСЕ частицы", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast Lighting", "Быстрое освещение", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Opt Fast HUD", "Убрать виньетку", sX, sY, sW, fadeAlpha);
                 } else if (modName.equals("Gradient Theme")) {
                     sY = drawColorPicker(context, tr, "Theme Color 1", sX, sY, sW, mx, my, fadeAlpha);
                     if (moduleStates.getOrDefault(modName, false)) {
@@ -1262,12 +1408,22 @@ public class LexoraGui extends Screen {
                     float val = 1.0f - Math.max(0.0f, Math.min(1.0f, (my - svY) / (float) svH));
                     tempItemHSV[1] = sat;
                     tempItemHSV[2] = val;
-                    ItemHighlighter.ITEM_CONFIGS.get(activeColorPickerItem).color = java.awt.Color.HSBtoRGB(tempItemHSV[0], sat, val) & 0xFFFFFF;
+                    int rgb = java.awt.Color.HSBtoRGB(tempItemHSV[0], sat, val) & 0xFFFFFF;
+                    ItemHighlighter.ITEM_CONFIGS.get(activeColorPickerItem).color = rgb;
+                    String itemName = ItemHighlighter.ITEM_NAMES.get(activeColorPickerItem);
+                    if (itemName != null) {
+                        ClientData.colorSettings.put("HLC_" + itemName, tempItemHSV.clone());
+                    }
                 }
                 if (draggingItemHue) {
                     float hue = Math.max(0.0f, Math.min(1.0f, (mx - svX) / (float) svW));
                     tempItemHSV[0] = hue;
-                    ItemHighlighter.ITEM_CONFIGS.get(activeColorPickerItem).color = java.awt.Color.HSBtoRGB(hue, tempItemHSV[1], tempItemHSV[2]) & 0xFFFFFF;
+                    int rgb = java.awt.Color.HSBtoRGB(hue, tempItemHSV[1], tempItemHSV[2]) & 0xFFFFFF;
+                    ItemHighlighter.ITEM_CONFIGS.get(activeColorPickerItem).color = rgb;
+                    String itemName = ItemHighlighter.ITEM_NAMES.get(activeColorPickerItem);
+                    if (itemName != null) {
+                        ClientData.colorSettings.put("HLC_" + itemName, tempItemHSV.clone());
+                    }
                 }
 
                 // Регистрируем границы для кликов мышки
@@ -1437,6 +1593,7 @@ public class LexoraGui extends Screen {
         if (alphaInt < 5) return y + 25;
 
         String currentVal = modeSettings.getOrDefault(name, "Default");
+        if (name.equals("Swap Mode")) currentVal = modeSettings.getOrDefault(name, "Двойной");
         if (name.equals("Swap From")) currentVal = modeSettings.getOrDefault(name, "Тотем");
         if (name.equals("Swap To")) currentVal = modeSettings.getOrDefault(name, "Шар");
         if (name.equals("Edit Hand")) currentVal = modeSettings.getOrDefault(name, "Right");
@@ -1876,14 +2033,18 @@ public class LexoraGui extends Screen {
 
                         if (targetItem != null) {
                             if (entry.getKey().startsWith("highlighter_tog_")) {
+                                boolean cur = ItemHighlighter.isItemEnabled(targetItem);
+                                boolean newVal = !cur;
+                                ClientData.moduleStates.put("HL_" + name, newVal);
                                 ItemHighlighter.ItemConfig config = ItemHighlighter.ITEM_CONFIGS.get(targetItem);
-                                config.enabled = !config.enabled; // Вкл/Выкл квадрат
+                                if (config != null) config.enabled = newVal;
+                                ConfigManager.saveConfig();
                             } else if (entry.getKey().startsWith("highlighter_col_")) {
                                 // Открываем палитру и конвертируем текущий цвет в HSV для ползунков
                                 activeColorPickerItem = targetItem;
                                 colorPickerX = mx;
                                 colorPickerY = my;
-                                int c = ItemHighlighter.ITEM_CONFIGS.get(targetItem).color;
+                                int c = ItemHighlighter.getItemColor(targetItem);
                                 java.awt.Color.RGBtoHSB((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF, tempItemHSV);
                             }
                         }
@@ -1953,9 +2114,19 @@ public class LexoraGui extends Screen {
                     if (entry.getKey().startsWith("minimode_")) {
                         String name = entry.getKey().replace("minimode_", "");
 
+                        if (name.equals("Swap Mode")) {
+                            String current = modeSettings.getOrDefault(name, "Двойной");
+                            String next = current.equals("Двойной") ? "Тройной" : "Двойной";
+                            modeSettings.put(name, next);
+                            ClientData.modeSettings.put(name, next);
+                            ConfigManager.saveConfig();
+                        }
                         if (name.equals("Swap From") || name.equals("Swap To")) {
                             String current = modeSettings.getOrDefault(name, "Тотем");
-                            modeSettings.put(name, current.equals("Тотем") ? "Шар" : "Тотем");
+                            String next = current.equals("Тотем") ? "Шар" : (current.equals("Шар") ? "Щит" : "Тотем");
+                            modeSettings.put(name, next);
+                            ClientData.modeSettings.put(name, next);
+                            ConfigManager.saveConfig();
                         }
                         if (name.equals("Nimb Color Mode")) {
                             String current = modeSettings.getOrDefault(name, "Theme");
@@ -1985,7 +2156,14 @@ public class LexoraGui extends Screen {
                             modeSettings.put(name, arr[(idx + 1) % arr.length]);
                         }
                         if (name.equals("VM Anim")) {
-                            String[] arr = {"Standard", "Взмах", "Взмах 2", "Сдвиг", "Ломание", "Выпад"};
+                            String[] arr = {
+                                    "Standard",
+                                    "Под наклоном",
+                                    "Наклон",
+                                    "Вращение на 360",
+                                    "От себя",
+                                    "Боньк"
+                            };
                             int idx = Arrays.asList(arr).indexOf(modeSettings.getOrDefault(name, "Standard"));
                             if (idx < 0) idx = 0;
                             modeSettings.put(name, arr[(idx + 1) % arr.length]);
@@ -2046,8 +2224,9 @@ public class LexoraGui extends Screen {
                         }
 
                         if (name.equals("Part. Texture")) {
-                            String[] arr = {"Star", "Skull", "Bucks", "Snow", "Blast", "Brich", "Core", "Show"};
-                            int idx = Arrays.asList(arr).indexOf(modeSettings.getOrDefault(name, "Star"));
+                            String[] arr = {"Bloom", "Star", "Heart", "Dollar", "Snow", "Star 2", "Kronex", "Random", "Cube"};
+                            int idx = Arrays.asList(arr).indexOf(modeSettings.getOrDefault(name, "Bloom"));
+                            if (idx < 0) idx = 0;
                             modeSettings.put(name, arr[(idx + 1) % arr.length]);
                         }
 

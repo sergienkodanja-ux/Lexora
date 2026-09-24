@@ -55,9 +55,55 @@ public final class LexoraMediaUtils {
         return info != null && info.playing;
     }
 
-    public static long getProgress() {
+    // ── НЕПРЕРЫВНЫЙ ТРЕКЕР ВОСПРОИЗВЕДЕНИЯ (Без дёрганий и сбросов) ──
+    private static String lastCanonicalTrackKey = "";
+    private static long lastReportedPositionMs = -1L;
+    private static long lastReportedTimestampMs = 0L;
+    private static long trackPlayStartMs = 0L;
+
+    public static synchronized void resetTrackClock() {
+        lastCanonicalTrackKey = "";
+        lastReportedPositionMs = -1L;
+        lastReportedTimestampMs = 0L;
+        trackPlayStartMs = System.currentTimeMillis();
+    }
+
+    public static synchronized long getProgress() {
         MediaInfo info = getCurrentMedia();
-        return info != null ? info.positionMs : 0L;
+        if (info == null) return 0L;
+
+        String key = LyricsManager.getCanonicalKey(info.title, info.artist);
+        long now = System.currentTimeMillis();
+
+        if (!key.equals(lastCanonicalTrackKey)) {
+            // Смена трека
+            lastCanonicalTrackKey = key;
+            lastReportedPositionMs = info.positionMs;
+            lastReportedTimestampMs = now;
+            trackPlayStartMs = (info.positionMs > 0) ? (now - info.positionMs) : now;
+        } else {
+            // Тот же трек. Проверяем, изменилась ли секунда от Windows SMTC
+            if (info.positionMs != lastReportedPositionMs) {
+                lastReportedPositionMs = info.positionMs;
+                lastReportedTimestampMs = now;
+            }
+        }
+
+        long calculated;
+        if (lastReportedPositionMs > 0) {
+            // Точная непрерывная интерполяция от момента, когда SMTC зафиксировал секунду
+            long elapsed = info.playing ? Math.max(0L, now - lastReportedTimestampMs) : 0L;
+            calculated = lastReportedPositionMs + elapsed;
+        } else {
+            // Фолбэк по локальному времени трека
+            long elapsed = info.playing ? Math.max(0L, now - trackPlayStartMs) : 0L;
+            calculated = elapsed;
+        }
+
+        if (info.durationMs > 0) {
+            calculated = Math.min(info.durationMs, calculated);
+        }
+        return Math.max(0L, calculated);
     }
 
     public static long getDuration() {
@@ -89,10 +135,15 @@ public final class LexoraMediaUtils {
         previous(); // Исправил: раньше этот метод был пустым
     }
 
-    public static void seek(float progress) {
-        /*
-         * MediaPlayerInfo 0.1.0 не даёт seek в IMediaSession.
-         */
+    public static synchronized void seek(float progress) {
+        MediaInfo info = getCurrentMedia();
+        if (info != null && info.durationMs > 0) {
+            long targetMs = (long) (info.durationMs * progress);
+            long now = System.currentTimeMillis();
+            trackPlayStartMs = now - targetMs;
+            lastReportedPositionMs = targetMs;
+            lastReportedTimestampMs = now;
+        }
     }
 
     public static void seekThrottled(float progress) {
@@ -116,6 +167,7 @@ public final class LexoraMediaUtils {
         public final long durationMs;
         public final Identifier coverId;
         public final boolean fallbackOnly;
+        public final long timestampMs;
 
         public MediaInfo(
                 String title,
@@ -135,6 +187,7 @@ public final class LexoraMediaUtils {
             this.durationMs = Math.max(0L, durationMs);
             this.coverId = coverId;
             this.fallbackOnly = fallbackOnly;
+            this.timestampMs = System.currentTimeMillis();
         }
 
         public String getLabel() {

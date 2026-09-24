@@ -16,36 +16,26 @@ public class PartyMouseClickMixin {
 
     @Shadow @Final private MinecraftClient client;
 
-    @Inject(method = "onMouseButton", at = @At("HEAD"))
+    @Inject(method = "onMouseButton", at = @At("HEAD"), cancellable = true)
     private void onMouseButton(long window, int button, int action, int mods, CallbackInfo ci) {
-        if (action != 1 || button != 0) return;
         if (client == null || client.getWindow().getHandle() != window) return;
+
+        if (client.currentScreen == null) {
+            if (com.lexoravisauls.client.modules.virtualdesktop.VirtualDesktopManager.handleMouseButton(button, action)) {
+                ci.cancel();
+                return;
+            }
+        }
+
+        if (action != 1 || button != 0) return;
 
         double mx = client.mouse.getX() * client.getWindow().getScaledWidth()
                 / (double) client.getWindow().getWidth();
         double my = client.mouse.getY() * client.getWindow().getScaledHeight()
                 / (double) client.getWindow().getHeight();
 
-        // ── 1. Пати-приглашение ─────────────────────────────────────────────
-        LexoraPartyManager.PartyInviteNotif partyNotif = LexoraPartyManager.activeInviteNotif;
-        if (partyNotif != null) {
-            float[] ab = DynamicIslandRenderer.PARTY_ACCEPT_BOUNDS;
-            float[] db = DynamicIslandRenderer.PARTY_DECLINE_BOUNDS;
-
-            if (ab != null && inBounds(mx, my, ab)) {
-                if (partyNotif.onAccept != null) partyNotif.onAccept.run();
-                LexoraPartyManager.activeInviteNotif    = null;
-                DynamicIslandRenderer.PARTY_ACCEPT_BOUNDS  = null;
-                DynamicIslandRenderer.PARTY_DECLINE_BOUNDS = null;
-                return;
-            }
-            if (db != null && inBounds(mx, my, db)) {
-                if (partyNotif.onDecline != null) partyNotif.onDecline.run();
-                LexoraPartyManager.activeInviteNotif    = null;
-                DynamicIslandRenderer.PARTY_ACCEPT_BOUNDS  = null;
-                DynamicIslandRenderer.PARTY_DECLINE_BOUNDS = null;
-                return;
-            }
+        if (DynamicIslandRenderer.handlePartyNotifClick(mx, my, button)) {
+            return;
         }
     }
 

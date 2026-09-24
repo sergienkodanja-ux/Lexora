@@ -1,5 +1,6 @@
 package com.lexoravisauls.client.utils;
 
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,10 @@ public class LexoraShaders {
     public static ShaderUtil smokeShader;
     public static ShaderUtil stripesShader;
     public static ShaderUtil solidShader;
+    public static ShaderUtil fireShader;
+    public static ShaderUtil maskDiffShader;
+    public static ShaderUtil handTrailShader;
+    public static ShaderUtil handFireShader;
 
     // ── Sky шейдеры ───────────────────────────────────────
     public static ShaderUtil waterSkyShader;
@@ -34,7 +39,7 @@ public class LexoraShaders {
 
     // ── Инициализация sky шейдеров (lazy) ─────────────────
     public static void initSky() {
-        String skyType = LexoraGui.modeSettings.getOrDefault("Sky Type", "Standard");
+        String skyType = ClientData.modeSettings.containsKey("Sky Type") ? ClientData.modeSettings.get("Sky Type") : LexoraGui.modeSettings.getOrDefault("Sky Type", "Standard");
         switch (skyType) {
             case "Water" ->
                     waterSkyShader   = safeLoad(waterSkyShader,   "sky_base.vsh", "water.fsh");
@@ -84,8 +89,12 @@ public class LexoraShaders {
     // ── Hand: текущий шейдер ──────────────────────────────
     public static ShaderUtil getCurrentHandShader() {
         init();
-        String mode = LexoraGui.modeSettings.getOrDefault("Hand Mode", "Snow");
+        String mode = LexoraGui.modeSettings.getOrDefault("Hand Mode", "Стандарт");
         return switch (mode) {
+            case "Стандарт", "Standard", "Fire" -> {
+                fireShader = safeLoad(fireShader, "hand.vsh", "fire.fsh");
+                yield fireShader;
+            }
             case "Smoke" -> {
                 smokeShader = safeLoad(smokeShader, "hand.vsh", "smoke.fsh");
                 yield smokeShader;
@@ -105,6 +114,21 @@ public class LexoraShaders {
         };
     }
 
+    public static ShaderUtil getMaskDiffShader() {
+        maskDiffShader = safeLoad(maskDiffShader, "hand.vsh", "mask_diff.fsh");
+        return maskDiffShader;
+    }
+
+    public static ShaderUtil getHandTrailShader() {
+        handTrailShader = safeLoad(handTrailShader, "hand.vsh", "hand_trail.fsh");
+        return handTrailShader;
+    }
+
+    public static ShaderUtil getHandFireShader() {
+        handFireShader = safeLoad(handFireShader, "hand.vsh", "hand_fire.fsh");
+        return handFireShader;
+    }
+
     // ── Cleanup ───────────────────────────────────────────
     public static void cleanup() {
         // Overlay
@@ -118,7 +142,11 @@ public class LexoraShaders {
         deleteShader(smokeShader);
         deleteShader(stripesShader);
         deleteShader(solidShader);
-        snowShader = smokeShader = stripesShader = solidShader = null;
+        deleteShader(fireShader);
+        deleteShader(maskDiffShader);
+        deleteShader(handTrailShader);
+        deleteShader(handFireShader);
+        snowShader = smokeShader = stripesShader = solidShader = fireShader = maskDiffShader = handTrailShader = handFireShader = null;
 
         // Sky
         deleteShader(waterSkyShader);

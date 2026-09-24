@@ -1,5 +1,7 @@
 package com.lexoravisauls.client.mixin;
 
+import com.lexoravisauls.client.cosmetic.CosmeticManager;
+import com.lexoravisauls.client.utils.FakePlayerManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.util.SkinTextures;
@@ -12,30 +14,42 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(AbstractClientPlayerEntity.class)
 public class MixinPlayerCape {
 
-    // Путь до твоей текстуры
-    private static final Identifier LEXORA_CAPE = Identifier.of("lexoravisauls", "textures/cape.png");
-
     @Inject(method = "getSkinTextures", at = @At("RETURN"), cancellable = true)
     private void onGetSkinTextures(CallbackInfoReturnable<SkinTextures> cir) {
-        // ОБЯЗАТЕЛЬНО: Получаем ссылку на себя
         MinecraftClient client = MinecraftClient.getInstance();
-
-        // 🔥 СТРОГАЯ ПРОВЕРКА: Если этот игрок не является ЛОКАЛЬНЫМ ИГРОКОМ (то есть тобой), выходим
-        if (client.player == null || (Object)this != client.player) {
+        if (client.player == null) {
             return;
         }
 
-        // Если это ТЫ, заменяем текстуру
-        SkinTextures original = cir.getReturnValue();
-        SkinTextures customSkin = new SkinTextures(
-                original.texture(),
-                original.textureUrl(),
-                LEXORA_CAPE, // Накидываем плащ Lexora
-                LEXORA_CAPE, // Накидываем на элитры
-                original.model(),
-                original.secure()
-        );
+        AbstractClientPlayerEntity self = (AbstractClientPlayerEntity)(Object)this;
+        boolean isMe = (self == client.player || (self.getUuid() != null && self.getUuid().equals(client.player.getUuid())));
+        boolean isBot = (FakePlayerManager.fakePlayer != null && self.getId() == FakePlayerManager.fakePlayer.getId());
 
-        cir.setReturnValue(customSkin);
+        if (!isMe && !isBot) {
+            return;
+        }
+
+        CosmeticManager cm = CosmeticManager.getInstance();
+        SkinTextures baseSkin = (isBot && client.player != null) ? client.player.getSkinTextures() : cir.getReturnValue();
+
+        if (cm.isCustomCapeEnabled()) {
+            Identifier customCape = cm.getActiveCapeTexture();
+            if (customCape != null) {
+                SkinTextures customSkin = new SkinTextures(
+                        baseSkin.texture(),
+                        baseSkin.textureUrl(),
+                        customCape,
+                        null,
+                        baseSkin.model(),
+                        baseSkin.secure()
+                );
+                cir.setReturnValue(customSkin);
+                return;
+            }
+        }
+
+        if (isBot && baseSkin != null) {
+            cir.setReturnValue(baseSkin);
+        }
     }
 }

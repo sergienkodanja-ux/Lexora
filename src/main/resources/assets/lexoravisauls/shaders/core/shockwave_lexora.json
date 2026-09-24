@@ -1,0 +1,23 @@
+{
+    "blend": {
+        "func": "add",
+        "srcrgb": "srcalpha",
+        "dstrgb": "1-srcalpha"
+    },
+    "vertex": "lexoravisauls:core/shockwave_lexora",
+    "fragment": "lexoravisauls:core/shockwave_lexora",
+    "attributes": [
+        "Position"
+    ],
+    "samplers": [],
+    "uniforms": [
+        { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "uCenter", "type": "float", "count": 2, "values": [ 0.0, 0.0 ] },
+        { "name": "uRadius", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "uWaveWidth", "type": "float", "count": 1, "values": [ 40.0 ] },
+        { "name": "uProgress", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "uStartColor", "type": "float", "count": 4, "values": [ 0.05, 0.05, 0.05, 1.0 ] },
+        { "name": "uEndColor", "type": "float", "count": 4, "values": [ 0.95, 0.95, 0.95, 1.0 ] }
+    ]
+}

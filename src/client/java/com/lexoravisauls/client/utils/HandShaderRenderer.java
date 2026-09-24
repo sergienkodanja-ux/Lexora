@@ -45,7 +45,7 @@ public class HandShaderRenderer {
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
     }
 
-    private static void drawPerfectQuad() {
+    public static void drawPerfectQuad() {
         setupQuad();
 
         int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);

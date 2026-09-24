@@ -13,16 +13,16 @@ import java.util.Map;
 public class LexoraAnimation {
     public float length;
     public boolean isLoop = false;
+    public boolean isEmotecraft = false;
     public float returnTime = 0f;
     public Map<String, BoneAnimation> bones = new HashMap<>();
 
     private static final float WAIST_Y = 12.0f;
-    private static final float LOOP_BLEND_TIME = 0.20f; // 200мс кросс-фейд при перезапуске зацикленного танца
+    private static final float LOOP_BLEND_TIME = 0.20f;
 
     public void apply(BipedEntityModel<?> model, float timeInSeconds, float weight) {
         float blendWeight = 1.0f;
 
-        // Плавный переход на стыке кругов танца
         if (isLoop && length > 0f) {
             if (timeInSeconds >= length) {
                 float duration = length - returnTime;
@@ -60,25 +60,30 @@ public class LexoraAnimation {
         // 1. ТОРС (BODY)
         blendPart(model.body, bodyT.rotX, bodyT.rotY, bodyT.rotZ, targetBodyX, targetBodyY, targetBodyZ, finalWeight);
 
-        // 2. ГОЛОВА (HEAD) - Наследует вращение груди
-        applyChild(model.head, bodyRot, bodyT, headT, new Vector3f(0f, -WAIST_Y, 0f), finalWeight);
+        // 2. ГОЛОВА (HEAD)
+        applyChild(model.head, bodyRot, bodyT, headT, new Vector3f(0f, -WAIST_Y, 0f), finalWeight, isEmotecraft);
 
         // 3. ПРАВАЯ РУКА (RIGHT ARM)
-        applyChild(model.rightArm, bodyRot, bodyT, rArmT, new Vector3f(-5f, 2f - WAIST_Y, 0f), finalWeight);
+        applyChild(model.rightArm, bodyRot, bodyT, rArmT, new Vector3f(-5f, 2f - WAIST_Y, 0f), finalWeight, isEmotecraft);
 
         // 4. ЛЕВАЯ РУКА (LEFT ARM)
-        applyChild(model.leftArm, bodyRot, bodyT, lArmT, new Vector3f(5f, 2f - WAIST_Y, 0f), finalWeight);
+        applyChild(model.leftArm, bodyRot, bodyT, lArmT, new Vector3f(5f, 2f - WAIST_Y, 0f), finalWeight, isEmotecraft);
 
-        // 5. ПРАВАЯ НОГА (RIGHT LEG) - Ноги стоят ровно при поклонах
-        blendPart(model.rightLeg, rLegT.rotX, rLegT.rotY, rLegT.rotZ,
-                -1.9f + bodyT.posX + rLegT.posX, WAIST_Y + bodyT.posY + rLegT.posY, 0.0f + bodyT.posZ + rLegT.posZ, finalWeight);
-
-        // 6. ЛЕВАЯ НОГА (LEFT LEG) - Ноги стоят ровно при поклонах
-        blendPart(model.leftLeg, lLegT.rotX, lLegT.rotY, lLegT.rotZ,
-                1.9f + bodyT.posX + lLegT.posX, WAIST_Y + bodyT.posY + lLegT.posY, 0.0f + bodyT.posZ + lLegT.posZ, finalWeight);
+        // 5. НОГИ (Поворачиваются вместе с телом при разворотах танца)
+        if (isEmotecraft) {
+            // В Emotecraft ноги прикреплены к телу и крутятся при разворотах
+            applyLeg(model.rightLeg, bodyRot, bodyT, rLegT, new Vector3f(-1.9f, 0f, 0f), finalWeight);
+            applyLeg(model.leftLeg,  bodyRot, bodyT, lLegT, new Vector3f(1.9f, 0f, 0f), finalWeight);
+        } else {
+            // В Bedrock (поклоны) ноги остаются на месте
+            blendPart(model.rightLeg, rLegT.rotX, rLegT.rotY, rLegT.rotZ,
+                    -1.9f + bodyT.posX + rLegT.posX, WAIST_Y + bodyT.posY + rLegT.posY, bodyT.posZ + rLegT.posZ, finalWeight);
+            blendPart(model.leftLeg, lLegT.rotX, lLegT.rotY, lLegT.rotZ,
+                    1.9f + bodyT.posX + lLegT.posX, WAIST_Y + bodyT.posY + lLegT.posY, bodyT.posZ + lLegT.posZ, finalWeight);
+        }
     }
 
-    private void applyChild(ModelPart part, Quaternionf bodyRot, BoneTransform bodyT, BoneTransform childT, Vector3f offsetFromWaist, float weight) {
+    private void applyChild(ModelPart part, Quaternionf bodyRot, BoneTransform bodyT, BoneTransform childT, Vector3f offsetFromWaist, float weight, boolean isAbsolute) {
         float targetPitch = bodyT.rotX + childT.rotX;
         float targetYaw   = bodyT.rotY + childT.rotY;
         float targetRoll  = bodyT.rotZ + childT.rotZ;
@@ -86,9 +91,36 @@ public class LexoraAnimation {
         Vector3f rotatedOffset = new Vector3f(offsetFromWaist);
         bodyRot.transform(rotatedOffset);
 
-        float targetPivotX = rotatedOffset.x + bodyT.posX + childT.posX;
-        float targetPivotY = WAIST_Y + rotatedOffset.y + bodyT.posY + childT.posY;
-        float targetPivotZ = rotatedOffset.z + bodyT.posZ + childT.posZ;
+        float targetPivotX;
+        float targetPivotY;
+        float targetPivotZ;
+
+        if (isAbsolute) {
+            // Emotecraft: смещение ребенка не суммируется с телом повторно
+            targetPivotX = rotatedOffset.x + childT.posX;
+            targetPivotY = WAIST_Y + rotatedOffset.y + childT.posY;
+            targetPivotZ = rotatedOffset.z + childT.posZ;
+        } else {
+            // Bedrock: иерархическое смещение
+            targetPivotX = rotatedOffset.x + bodyT.posX + childT.posX;
+            targetPivotY = WAIST_Y + rotatedOffset.y + bodyT.posY + childT.posY;
+            targetPivotZ = rotatedOffset.z + bodyT.posZ + childT.posZ;
+        }
+
+        blendPart(part, targetPitch, targetYaw, targetRoll, targetPivotX, targetPivotY, targetPivotZ, weight);
+    }
+
+    private void applyLeg(ModelPart part, Quaternionf bodyRot, BoneTransform bodyT, BoneTransform legT, Vector3f hipOffset, float weight) {
+        float targetPitch = legT.rotX;
+        float targetYaw   = bodyT.rotY + legT.rotY;
+        float targetRoll  = legT.rotZ;
+
+        Vector3f rotatedHip = new Vector3f(hipOffset);
+        bodyRot.transform(rotatedHip);
+
+        float targetPivotX = rotatedHip.x + legT.posX;
+        float targetPivotY = WAIST_Y + rotatedHip.y + legT.posY;
+        float targetPivotZ = rotatedHip.z + legT.posZ;
 
         blendPart(part, targetPitch, targetYaw, targetRoll, targetPivotX, targetPivotY, targetPivotZ, weight);
     }
@@ -160,14 +192,33 @@ public class LexoraAnimation {
             delta = (time - prev.time) / (next.time - prev.time);
         }
 
+        float easedDelta = applyEasing(prev.easing, delta);
+
         return new Vec3f(
-                lerp(prev.x, next.x, delta),
-                lerp(prev.y, next.y, delta),
-                lerp(prev.z, next.z, delta)
+                lerp(prev.x, next.x, easedDelta),
+                lerp(prev.y, next.y, easedDelta),
+                lerp(prev.z, next.z, easedDelta)
         );
     }
 
-    private float lerp(float start, float end, float delta) {
+    public static float applyEasing(String easing, float t) {
+        if (easing == null) return t;
+        String e = easing.toUpperCase();
+
+        if (e.contains("EASEINOUTQUAD")) {
+            return t < 0.5f ? 2f * t * t : 1f - (float) Math.pow(-2f * t + 2f, 2) / 2f;
+        } else if (e.contains("EASEINQUAD")) {
+            return t * t;
+        } else if (e.contains("EASEOUTQUAD")) {
+            return 1f - (1f - t) * (1f - t);
+        } else if (e.contains("EASEINOUTSINE") || e.contains("EASEINOUTSINT")) {
+            return -(float) (Math.cos(Math.PI * t) - 1.0) / 2.0f;
+        }
+
+        return t; // LINEAR
+    }
+
+    private static float lerp(float start, float end, float delta) {
         return start + (end - start) * delta;
     }
 
@@ -184,12 +235,14 @@ public class LexoraAnimation {
     public static class Keyframe {
         public float time;
         public float x, y, z;
+        public String easing = "LINEAR";
 
-        public Keyframe(float time, float x, float y, float z) {
+        public Keyframe(float time, float x, float y, float z, String easing) {
             this.time = time;
             this.x = x;
             this.y = y;
             this.z = z;
+            this.easing = easing != null ? easing : "LINEAR";
         }
     }
 

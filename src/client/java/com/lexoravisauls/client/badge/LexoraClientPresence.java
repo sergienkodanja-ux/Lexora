@@ -52,6 +52,8 @@ public final class LexoraClientPresence {
                 }
             });
 
+            LexoraExternalPresence.triggerSync();
+
             if (ClientPlayNetworking.canSend(LexoraHelloC2SPayload.ID)) {
                 ClientPlayNetworking.send(new LexoraHelloC2SPayload());
                 System.out.println("[Lexora Badge] Hello packet sent to server");
@@ -68,12 +70,7 @@ public final class LexoraClientPresence {
             System.out.println("[Lexora Badge] Users cleared");
         });
 
-        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-            if (client.player != null && com.lexoravisauls.client.gui.main_menu.LexoraMainMenu.isAuthenticatedSession) {
-                // При заходе на сервер железобетонно подтверждаем сайту свой текущий ник
-                com.lexoravisauls.client.badge.LexoraAccount.syncCurrentIgn(client.player.getName().getString());
-            }
-        });
+
 
     }
 

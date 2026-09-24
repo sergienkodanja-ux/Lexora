@@ -53,10 +53,10 @@ public abstract class MixinLexoraPlayerBadgeRenderer {
         boolean isLexoraUser = LexoraModUsers.has(player.getUuid(), name);
 
         /*
-         * Если это ты и Self Nametags включён — принудительно ставим displayName.
-         * Без этого Minecraft часто не рисует ник над самим собой.
+         * Если это ты и Self Nametags включён, или это другой пользователь Lexora —
+         * гарантируем наличие displayName, чтобы бейдж отобразился.
          */
-        if (selfNametags && state.displayName == null) {
+        if ((selfNametags || (isLexoraUser && !player.isSneaking() && !player.isInvisible())) && state.displayName == null) {
             Text display = player.getDisplayName();
 
             if (display == null) {

@@ -62,6 +62,18 @@ public class RadialMenuScreen extends Screen {
 
     private float[] sectorGlowAnim = new float[0];
 
+    // АНИМАЦИЯ ОТКРЫТИЯ/ЗАКРЫТИЯ: openProgress идёт от 0 (полностью закрыто/невидимо)
+    // до 1 (полностью открыто). Домножается на все радиусы через MatrixStack.scale()
+    // вокруг всего рисования кольца — так не нужно вручную домножать каждую координату.
+    // closing=true означает "клавиша уже отпущена, доигрываем анимацию закрытия перед
+    // реальным setScreen(null)" — выбор (playEmotion) уже произошёл В МОМЕНТ отпускания,
+    // а не откладывается до конца анимации, иначе была бы заметная задержка перед стартом
+    // самой анимации эмоции.
+    private float openProgress = 0f;
+    private boolean closing = false;
+    private static final float OPEN_SPEED = 0.35f;
+    private static final float CLOSE_SPEED = 0.45f; // закрытие чуть быстрее открытия
+
     public RadialMenuScreen() {
         super(Text.literal("Круговое меню эмоций"));
         for (String anim : EmotionManager.myRadialSlots) {
@@ -75,26 +87,62 @@ public class RadialMenuScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        if (!isBindStillHeld()) {
+        // Клавиша отпущена и мы ещё НЕ в режиме закрытия — фиксируем выбор СРАЗУ (не после
+        // анимации) и переключаемся в режим "доигрываем закрытие". confirmSelectionAndClose()
+        // раньше сразу звал setScreen(null); теперь она только помечает closing=true —
+        // реальное закрытие происходит ниже, когда openProgress дойдёт до 0.
+        if (!closing && !isBindStillHeld()) {
             confirmSelectionAndClose();
+        }
+
+        float target = closing ? 0f : 1f;
+        float speed = closing ? CLOSE_SPEED : OPEN_SPEED;
+        openProgress += (target - openProgress) * speed;
+        if (Math.abs(openProgress - target) < 0.01f) openProgress = target;
+
+        if (closing && openProgress <= 0.01f) {
+            if (this.client != null) {
+                this.client.setScreen(null);
+            }
             return;
         }
 
-        this.renderBackground(context, mouseX, mouseY, delta);
+        // ПРИТЕМНЕНИЕ УБРАНО: renderBackground() — ванильный метод Screen, рисующий
+        // затемняющий оверлей/vignette позади любого GUI-экрана. Раньше он вызывался здесь
+        // и давал видимое затемнение вокруг колеса даже не смотря на то, что колесо само
+        // рисует свой собственный фон (liquid glass кольцо+внутренний круг) — то есть
+        // затемнение накладывалось ДВАЖДЫ: сначала общий vignette от Screen, потом наш
+        // собственный тёмный фон кольца поверх. Убрано полностью по запросу — теперь вокруг
+        // колеса виден чистый игровой мир без дополнительного затемнения.
 
         int centerX = this.width / 2;
         int centerY = this.height / 2;
+
+        MatrixStack matrices = context.getMatrices();
+        matrices.push();
+        // Масштабируем вокруг центра колеса, а не вокруг (0,0) экрана — иначе scale
+        // сдвигал бы весь рисунок к углу экрана вместо роста/схлопывания из своего центра
+        matrices.translate(centerX, centerY, 0);
+        matrices.scale(openProgress, openProgress, 1f);
+        matrices.translate(-centerX, -centerY, 0);
 
         if (activeEmotions.isEmpty()) {
             drawRingAndInner(context, centerX, centerY, 0, 0, sectorGlowAnim);
             drawCenteredMsdf(context, "Нет добавленных анимаций!", centerX, centerY - 5, FONT_SIZE_SUBTITLE, 0xFFFF5555);
             drawCenteredMsdf(context, "Настрой на сайте.", centerX, centerY + 4, FONT_SIZE_SUBTITLE, COLOR_TEXT_MUTED);
+            matrices.pop();
             return;
         }
 
         int count = activeEmotions.size();
         float angleStep = 360f / count;
 
+        // Наведение мышью считаем ПО РЕАЛЬНЫМ (немасштабированным) координатам курсора,
+        // но сравниваем дистанцию с радиусами, УМНОЖЕННЫМИ на openProgress — иначе во время
+        // анимации открытия/закрытия можно было бы навести на сектор, который ещё визуально
+        // не появился (или уже исчез при закрытии), но чей хитбокс молча остаётся на полный
+        // размер. mouseX/mouseY игра всегда даёт в физических координатах окна, поэтому сам
+        // курсор не масштабируем — масштабируем только радиусы сравнения.
         double dx = mouseX - centerX;
         double dy = mouseY - centerY;
         double distance = Math.sqrt(dx * dx + dy * dy);
@@ -103,14 +151,19 @@ public class RadialMenuScreen extends Screen {
         if (mouseAngle < 0) mouseAngle += 360;
 
         selectedIndex = -1;
-        if (distance > RADIUS_INNER && distance < RADIUS_OUTER + 12) {
+        // Во время анимации закрытия (closing=true) выбор больше не должен меняться —
+        // playEmotion() для выбранного сектора уже вызван в confirmSelectionAndClose(),
+        // пересчёт selectedIndex здесь только сбил бы то, что уже было подтверждено
+        double scaledInner = RADIUS_INNER * openProgress;
+        double scaledOuterHit = (RADIUS_OUTER + 12) * openProgress;
+        if (!closing && distance > scaledInner && distance < scaledOuterHit) {
             selectedIndex = (int) ((mouseAngle + (angleStep / 2)) / angleStep) % count;
         }
 
         for (int i = 0; i < count; i++) {
-            float target = (i == selectedIndex) ? 1f : 0f;
-            sectorGlowAnim[i] += (target - sectorGlowAnim[i]) * SECTOR_GLOW_SPEED;
-            if (Math.abs(sectorGlowAnim[i] - target) < 0.01f) sectorGlowAnim[i] = target;
+            float t = (i == selectedIndex) ? 1f : 0f;
+            sectorGlowAnim[i] += (t - sectorGlowAnim[i]) * SECTOR_GLOW_SPEED;
+            if (Math.abs(sectorGlowAnim[i] - t) < 0.01f) sectorGlowAnim[i] = t;
         }
 
         drawRingAndInner(context, centerX, centerY, angleStep, count, sectorGlowAnim);
@@ -125,6 +178,8 @@ public class RadialMenuScreen extends Screen {
 
         drawCenteredMsdf(context, "МЕНЮ ЭМОЦИЙ", centerX, centerY - 5, FONT_SIZE_TITLE, COLOR_TEXT_NORMAL);
         drawCenteredMsdf(context, count + " " + pluralizeAnimations(count), centerX, centerY + 4, FONT_SIZE_SUBTITLE, COLOR_TEXT_MUTED);
+
+        matrices.pop();
     }
 
     private boolean isBindStillHeld() {
@@ -137,15 +192,17 @@ public class RadialMenuScreen extends Screen {
         return InputUtil.isKeyPressed(mc.getWindow().getHandle(), bindKey);
     }
 
+    /**
+     * Клавиша отпущена — подтверждаем выбор СРАЗУ (playEmotion вызывается здесь, не после
+     * анимации закрытия) и переключаемся в режим closing. Реальное setScreen(null)
+     * происходит в render() выше, когда openProgress доиграет до 0.
+     */
     private void confirmSelectionAndClose() {
         if (selectedIndex != -1 && selectedIndex < activeEmotions.size()) {
             String selectedAnim = activeEmotions.get(selectedIndex);
             EmotionManager.playEmotion(selectedAnim);
         }
-
-        if (this.client != null) {
-            this.client.setScreen(null);
-        }
+        closing = true;
     }
 
     private void tickAndDrawNode(DrawContext context, int i, int count, float angleStep, int centerX, int centerY, boolean isHovered) {
@@ -508,10 +565,8 @@ public class RadialMenuScreen extends Screen {
             case "bow" -> "Поклон";
             case "backflip" -> "Сальто";
             case "clap" -> "Аплодисменты";
-            case "club_penguin_dance" -> "Танец пингвина";
             case "crying" -> "Плач";
             case "here" -> "Я тут!";
-            case "kazotsky_kick" -> "Казачок";
             case "palm" -> "Фейспалм";
             case "point" -> "Указать пальцем";
             case "roblox_potion_dance" -> "Roblox Танец";

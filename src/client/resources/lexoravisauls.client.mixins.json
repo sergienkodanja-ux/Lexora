@@ -1,4 +1,4 @@
-{
+﻿{
   "required": true,
   "minVersion": "0.8",
   "package": "com.lexoravisauls.client.mixin",
@@ -10,10 +10,8 @@
     "MixinScoreboardHud",
     "LivingEntityKillEffectMixin",
     "RenderLayerGhostMixin",
-    "PlayerRendererMixin",
+    "MixinPlayerSprint",
     "MixinLevelRenderer",
-    "MixinPlayerEntityRenderStateSpear",
-    "MixinPlayerEntityRendererSpear",
     "MixinPlayerEntityModel",
     "MixinCapeFeatureRenderer",
     "GameRendererAccessor",
@@ -24,10 +22,11 @@
     "MixinParticleTick",
     "MixinAbstractClientPlayerEntity",
     "MixinKeyboardInput",
+    "MixinKeyboard",
+    "InputAccessor",
     "MixinBossBarHud",
     "MixinParticleManager",
     "MixinSoundSystem",
-    "MixinInteractionManager",
     "MixinLivingEntity",
     "MixinChatScreenCommands",
     "MixinLocalMarkerCommands",
@@ -56,10 +55,16 @@
     "MixinItemEntityRenderer",
     "MixinClientPlayerInteractionManager",
     "MixinEntityRenderDispatcher",
+    "MixinEntityRenderer",
+    "MixinItemRenderer",
+    "MixinBeaconBlockEntityRenderer",
+    "MixinBlockEntityRenderDispatcher",
+    "MixinLightmapTextureManager",
     "MixinModelPart",
     "MixinArmorFeatureRenderer",
     "MixinWorldRenderer",
     "MixinPlayerCape",
+    "MixinElytraFeatureRenderer",
     "SessionAccessor",
     "MixinOverlayTexture",
     "MixinTotemNetwork",
@@ -70,7 +75,9 @@
     "MixinGameRenderer",
     "MixinHeldItemRenderer",
     "MixinHitSounds",
-    "MixinWindow"
+    "MixinWindow",
+    "MixinItemModelManager",
+    "MixinSplashOverlay"
   ],
   "injectors": {
     "defaultRequire": 1

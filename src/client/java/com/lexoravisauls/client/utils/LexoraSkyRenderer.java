@@ -11,15 +11,10 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.awt.Color;
 
 public class LexoraSkyRenderer {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger("LexoraSkyRenderer");
-    private static long lastDiagLog = 0L;
 
     private static boolean registered = false;
     private static int vaoID = -1;
@@ -27,33 +22,33 @@ public class LexoraSkyRenderer {
 
     public static void ensureRegistered() {
         if (!registered) {
-            // Меняем LAST на AFTER_SETUP.
-            // Теперь небо будет рисоваться сразу после настройки камеры и ванильного скайбокса,
-            // но ДО рендера мира, энтити и любых ESP/Предиктов.
-            // Это гарантирует, что оно навсегда останется на заднем фоне.
             WorldRenderEvents.AFTER_SETUP.register(LexoraSkyRenderer::renderSkyEvent);
             registered = true;
         }
     }
 
     private static boolean isEnabled(String key, boolean fallback) {
+        if (ClientData.moduleStates.containsKey(key)) return ClientData.moduleStates.get(key);
         if (LexoraGui.moduleStates.containsKey(key)) return LexoraGui.moduleStates.get(key);
-        return ClientData.moduleStates.getOrDefault(key, fallback);
+        return fallback;
     }
 
     private static float getNum(String key, float fallback) {
+        if (ClientData.numSettings.containsKey(key)) return ClientData.numSettings.get(key);
         if (LexoraGui.numSettings.containsKey(key)) return LexoraGui.numSettings.get(key);
-        return ClientData.numSettings.getOrDefault(key, fallback);
+        return fallback;
     }
 
     private static String getMode(String key, String fallback) {
+        if (ClientData.modeSettings.containsKey(key)) return ClientData.modeSettings.get(key);
         if (LexoraGui.modeSettings.containsKey(key)) return LexoraGui.modeSettings.get(key);
-        return ClientData.modeSettings.getOrDefault(key, fallback);
+        return fallback;
     }
 
     private static float[] getColor(String key, float[] fallback) {
+        if (ClientData.colorSettings.containsKey(key)) return ClientData.colorSettings.get(key);
         if (LexoraGui.colorSettings.containsKey(key)) return LexoraGui.colorSettings.get(key);
-        return ClientData.colorSettings.getOrDefault(key, fallback);
+        return fallback;
     }
 
     private static void setupQuad() {
@@ -82,19 +77,10 @@ public class LexoraSkyRenderer {
 
     private static void renderSkyEvent(WorldRenderContext context) {
         boolean worldCustomizerEnabled = isEnabled("World Customizer", false);
-        boolean skyMod = isEnabled("Sky Customizer", false);
+        boolean skyMod = isEnabled("Sky Customizer", true);
         String skyType = getMode("Sky Type", "Standard");
 
-        long now = System.currentTimeMillis();
-        boolean shouldLog = now - lastDiagLog > 1000L;
-        if (shouldLog) {
-            lastDiagLog = now;
-            LOGGER.info("[LexoraSky-DIAG] LAST event fired. worldCustomizerEnabled={} skyMod={} skyType='{}'",
-                    worldCustomizerEnabled, skyMod, skyType);
-        }
-
         if (!worldCustomizerEnabled || !skyMod || skyType.equals("Standard")) {
-            if (shouldLog) LOGGER.info("[LexoraSky-DIAG] early return: condition failed");
             return;
         }
 
@@ -112,8 +98,6 @@ public class LexoraSkyRenderer {
         ShaderUtil shader = LexoraShaders.getShader(shaderName);
 
         if (shader == null || !shader.isValid()) {
-            if (shouldLog) LOGGER.info("[LexoraSky-DIAG] shader is {} for '{}'",
-                    shader == null ? "NULL" : "INVALID", shaderName);
             return;
         }
 
@@ -126,8 +110,6 @@ public class LexoraSkyRenderer {
         float pitchRad = (float) Math.toRadians(camera.getPitch());
         float fov = (float) mc.options.getFov().getValue().intValue();
 
-        // 🔥 СОХРАНЯЕМ ТЕКУЩИЕ СОСТОЯНИЯ OPENGL (Главный фикс бага с рукой!) 🔥
-        // Это предотвратит рассинхронизацию кэша RenderSystem и спасет рендер партиклов/руки при критах.
         int prevProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
         int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
         int prevVBO = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
@@ -137,8 +119,6 @@ public class LexoraSkyRenderer {
         RenderSystem.defaultBlendFunc();
         RenderSystem.enableDepthTest();
 
-        // ВАЖНО: Используем GL_LEQUAL. Так как Z у квада = 0.9999,
-        // небо отрисуется ровно там, где нет блоков (у пустого неба depth = 1.0).
         RenderSystem.depthFunc(GL11.GL_LEQUAL);
         RenderSystem.depthMask(false);
 
@@ -158,17 +138,16 @@ public class LexoraSkyRenderer {
         shader.setUniform1f("uIntensity", intensity);
         shader.setUniform1f("uAlpha", alpha);
 
-        boolean useCustomColor = getMode(skyType + " Color Mode", "Theme").equals("Custom");
+        boolean useCustomColor = getMode(skyType + " Color Mode", getMode("Sky Color Mode", "Theme")).equalsIgnoreCase("Custom");
         float cr, cg, cb;
         if (useCustomColor) {
-            float[] hsv = getColor(skyType + " Custom Color", new float[]{300f / 360f, 0.75f, 1f});
+            float[] hsv = getColor(skyType + " Custom Color", getColor("Custom Sky Color", new float[]{0f, 1f, 1f}));
             int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
             cr = ((rgb >> 16) & 0xFF) / 255f;
             cg = ((rgb >> 8) & 0xFF) / 255f;
             cb = (rgb & 0xFF) / 255f;
         } else {
-            float[] hsv = getColor("Theme Color 1", new float[]{300f / 360f, 0.75f, 1f});
-            int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
+            int rgb = LexoraGui.getThemeColor(0f);
             cr = ((rgb >> 16) & 0xFF) / 255f;
             cg = ((rgb >> 8) & 0xFF) / 255f;
             cb = (rgb & 0xFF) / 255f;
@@ -185,21 +164,16 @@ public class LexoraSkyRenderer {
         GL30.glBindVertexArray(vaoID);
         GL11.glDrawArrays(GL11.GL_TRIANGLE_STRIP, 0, 4);
 
-        // 🔥 ПРАВИЛЬНОЕ ВОССТАНОВЛЕНИЕ СОСТОЯНИЙ 🔥
-
-        // Возвращаем сохраненные бинды ваниллы на место.
         GL30.glBindVertexArray(prevVAO);
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, prevVBO);
         GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, prevEBO);
         GL20.glUseProgram(prevProgram);
 
-        // Возвращаем текстурный слот
         org.lwjgl.opengl.GL13.glActiveTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
 
         RenderSystem.depthMask(true);
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
-        // ВАЖНО: Возвращаем именно GL_LEQUAL (стандарт Майнкрафта), а не GL_LESS.
         RenderSystem.depthFunc(GL11.GL_LEQUAL);
     }
 }

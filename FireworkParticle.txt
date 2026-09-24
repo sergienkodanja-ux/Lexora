@@ -1,0 +1,86 @@
+Classfile /C:/Users/Даниил/IdeaProjects/LexoraVisauls/FireworkParticle.class
+  Last modified 18 сент. 2026?г.; size 1068 bytes
+  SHA-256 checksum fd23d34f08cee00353502833091a56adfa4b80cac262cd4770d425b3ed403eb0
+  Compiled from "FireworksSparkParticle.java"
+public class net.minecraft.client.particle.FireworksSparkParticle
+  minor version: 0
+  major version: 65
+  flags: (0x0021) ACC_PUBLIC, ACC_SUPER
+  this_class: #2                          // net/minecraft/client/particle/FireworksSparkParticle
+  super_class: #4                         // java/lang/Object
+  interfaces: 0, fields: 0, methods: 1, attributes: 4
+Constant pool:
+   #1 = Utf8               net/minecraft/client/particle/FireworksSparkParticle
+   #2 = Class              #1             // net/minecraft/client/particle/FireworksSparkParticle
+   #3 = Utf8               java/lang/Object
+   #4 = Class              #3             // java/lang/Object
+   #5 = Utf8               FireworksSparkParticle.java
+   #6 = Utf8               net/minecraft/client/particle/FireworksSparkParticle$1
+   #7 = Class              #6             // net/minecraft/client/particle/FireworksSparkParticle$1
+   #8 = Utf8               net/minecraft/client/particle/FireworksSparkParticle$ExplosionFactory
+   #9 = Class              #8             // net/minecraft/client/particle/FireworksSparkParticle$ExplosionFactory
+  #10 = Utf8               net/minecraft/client/particle/FireworksSparkParticle$FlashFactory
+  #11 = Class              #10            // net/minecraft/client/particle/FireworksSparkParticle$FlashFactory
+  #12 = Utf8               net/minecraft/client/particle/FireworksSparkParticle$Flash
+  #13 = Class              #12            // net/minecraft/client/particle/FireworksSparkParticle$Flash
+  #14 = Utf8               net/minecraft/client/particle/FireworksSparkParticle$Explosion
+  #15 = Class              #14            // net/minecraft/client/particle/FireworksSparkParticle$Explosion
+  #16 = Utf8               net/minecraft/client/particle/FireworksSparkParticle$FireworkParticle
+  #17 = Class              #16            // net/minecraft/client/particle/FireworksSparkParticle$FireworkParticle
+  #18 = Utf8               ExplosionFactory
+  #19 = Utf8               FlashFactory
+  #20 = Utf8               Flash
+  #21 = Utf8               Explosion
+  #22 = Utf8               FireworkParticle
+  #23 = Utf8               <init>
+  #24 = Utf8               ()V
+  #25 = NameAndType        #23:#24        // "<init>":()V
+  #26 = Methodref          #4.#25         // java/lang/Object."<init>":()V
+  #27 = Utf8               this
+  #28 = Utf8               Lnet/minecraft/client/particle/FireworksSparkParticle;
+  #29 = Utf8               Lnet/fabricmc/api/Environment;
+  #30 = Utf8               value
+  #31 = Utf8               Lnet/fabricmc/api/EnvType;
+  #32 = Utf8               CLIENT
+  #33 = Utf8               Code
+  #34 = Utf8               LineNumberTable
+  #35 = Utf8               LocalVariableTable
+  #36 = Utf8               InnerClasses
+  #37 = Utf8               SourceFile
+  #38 = Utf8               RuntimeVisibleAnnotations
+  #39 = Utf8               NestMembers
+{
+  public net.minecraft.client.particle.FireworksSparkParticle();
+    descriptor: ()V
+    flags: (0x0001) ACC_PUBLIC
+    Code:
+      stack=1, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #26                 // Method java/lang/Object."<init>":()V
+         4: return
+      LineNumberTable:
+        line 21: 0
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0       5     0  this   Lnet/minecraft/client/particle/FireworksSparkParticle;
+}
+InnerClasses:
+  static #7;                              // class net/minecraft/client/particle/FireworksSparkParticle$1
+  public static #18= #9 of #2;            // ExplosionFactory=class net/minecraft/client/particle/FireworksSparkParticle$ExplosionFactory of class net/minecraft/client/particle/FireworksSparkParticle
+  public static #19= #11 of #2;           // FlashFactory=class net/minecraft/client/particle/FireworksSparkParticle$FlashFactory of class net/minecraft/client/particle/FireworksSparkParticle
+  public static #20= #13 of #2;           // Flash=class net/minecraft/client/particle/FireworksSparkParticle$Flash of class net/minecraft/client/particle/FireworksSparkParticle
+  private static #21= #15 of #2;          // Explosion=class net/minecraft/client/particle/FireworksSparkParticle$Explosion of class net/minecraft/client/particle/FireworksSparkParticle
+  public static #22= #17 of #2;           // FireworkParticle=class net/minecraft/client/particle/FireworksSparkParticle$FireworkParticle of class net/minecraft/client/particle/FireworksSparkParticle
+SourceFile: "FireworksSparkParticle.java"
+RuntimeVisibleAnnotations:
+  0: #29(#30=e#31.#32)
+    net.fabricmc.api.Environment(
+      value=Lnet/fabricmc/api/EnvType;.CLIENT
+    )
+NestMembers:
+  net/minecraft/client/particle/FireworksSparkParticle$1
+  net/minecraft/client/particle/FireworksSparkParticle$ExplosionFactory
+  net/minecraft/client/particle/FireworksSparkParticle$FlashFactory
+  net/minecraft/client/particle/FireworksSparkParticle$Flash
+  net/minecraft/client/particle/FireworksSparkParticle$Explosion
+  net/minecraft/client/particle/FireworksSparkParticle$FireworkParticle

@@ -1,134 +1,118 @@
 package com.lexoravisauls.client.inventorymanager;
 
+import com.lexoravisauls.client.events.HudThemeHelper;
+import com.lexoravisauls.client.events.RoundedRectShader;
+import com.lexoravisauls.client.gui.LexoraIcons;
 import com.lexoravisauls.client.gui.MsdfFont;
-import com.lexoravisauls.client.gui.main_menu.LexoraMainMenu;
+import com.lexoravisauls.client.gui.modern.ModernClickGui;
+import com.lexoravisauls.client.gui.modern.ModernGuiIcons;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.InventoryScreen;
+import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import org.lwjgl.glfw.GLFW;
 
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
- * Экран менеджера раскладок — двухколоночный master-detail, без попапов.
- * Слева: шапка (заголовок, "+ Сохранить", счётчик), поле имени новой раскладки,
- * скроллируемый список карточек (Загрузить / ✕ прямо в строке).
- * Справа: постоянная панель "Просмотр" с сеткой инвентаря выбранной раскладки.
- * <p>
- * Размер панели АДАПТИВНЫЙ — считается от реального размера окна (computePanelSize),
- * а не жёстко зашит, чтобы не вылезать за пределы маленьких окон.
+ * Современный и красивый менеджер раскладок инвентаря.
+ * Полностью согласован со стилем ModernClickGui, использует MSDF-шрифты и иконки,
+ * поддерживает тёмную/светлую тему, плавные анимации и интерактивную сетку слотов.
  */
 public class InventoryManagerScreen extends Screen {
 
-    private static final Identifier FONT_TEX  = Identifier.of("lexoravisauls", "msdf_data/font.png");
-    private static final Identifier FONT_JSON = Identifier.of("lexoravisauls", "msdf_data/font.json");
-    private static MsdfFont msdfFont = null;
-    private static MsdfFont getFont() {
-        if (msdfFont == null) msdfFont = new MsdfFont(FONT_TEX, FONT_JSON);
-        return msdfFont;
-    }
+    private static final int GUI_W = 660;
+    private static final int GUI_H = 380;
+    private static final int HEADER_H = 32;
 
-    // ─── Палитра — монохром, без фиолетового ────────────────────────────────
-    private static final int COL_PANEL_BG        = 0xF20A0A0A;
-    private static final int COL_COLUMN_BG       = 0x66131313;
-    private static final int COL_TEXT_PRIMARY    = 0xFFEDEDED;
-    private static final int COL_TEXT_SECONDARY  = 0xFF757575;
-    private static final int COL_TEXT_MUTED      = 0xFF3A3A3A;
-    private static final int COL_CARD_BG         = 0x99101010;
-    private static final int COL_CARD_HOVER      = 0xAA1E1E1E;
-    private static final int COL_CARD_SELECTED   = 0xCC262626;
-    private static final int COL_ACCENT          = 0xFFEDEDED;
-    private static final int COL_SLOT_BG         = 0x99141414;
-    private static final int COL_SLOT_EDGE       = 0x33FFFFFF;
-    private static final int COL_STATUS_OK       = 0xFF4CAF6E;
-    private static final int COL_STATUS_MISSING  = 0xFFCC5555;
-    private static final int COL_FIELD_BG        = 0xAA050505;
-    private static final int COL_FIELD_FOCUSED   = 0xAA1A1A1A;
-    private static final int COL_BTN_NORMAL      = 0xCC181818;
-    private static final int COL_BTN_HOVER       = 0xCC2C2C2C;
-    private static final int COL_BTN_PRIMARY     = 0xE0424242;
-    private static final int COL_BTN_PRIMARY_HOV = 0xF0585858;
-    private static final int COL_BTN_DANGER_HOV  = 0xCC552222;
+    private static final int CELL_SIZE = 22;
+    private static final int CELL_GAP = 3;
+    private static final int CELL_STEP = CELL_SIZE + CELL_GAP; // 25px
 
-    private static final float SIZE_TITLE = 12.5f;
-    private static final float SIZE_TEXT  = 9.5f;
-    private static final float SIZE_SMALL = 8f;
-    private static final float SIZE_TINY  = 7f;
-
-    // ─── Геометрия — компактнее прежнего, плюс адаптивная под окно ──────────
-    private static final int PANEL_W_PREF = 520;
-    private static final int PANEL_H_PREF = 360;
-    private static final int SCREEN_MARGIN = 28;
-    private static final float LEFT_COL_FRACTION = 0.44f;
-    private static final int PAD = 12;
-    private static final int COL_GAP = 14;
-    private static final int CARD_H = 40;
-    private static final int CARD_GAP = 5;
-    private static final int SLOT_STEP = 18; // 16px ячейка + 2px зазор
-
-    private int panelW, panelH, leftColW;
+    private static String savedSelectedName = null;
 
     private InventoryLoadout selectedLoadout;
     private Map<Integer, LoadoutSlotData> selectedBySlot = new HashMap<>();
 
-    private float listScrollAnim   = 0f;
-    private float listScrollTarget = 0f;
+    private float openAnim = 0.0f;
+    private boolean closing = false;
 
-    private final Map<InventoryLoadout, float[]> cardHoverAnim = new IdentityHashMap<>();
+    private float listScroll = 0f;
+    private float targetListScroll = 0f;
 
-    private String  nameInput   = "";
-    private int     cursorPos   = 0;
+    private String nameInput = "";
     private boolean nameFocused = false;
 
-    private long  screenOpenStart = 0L;
-    private float screenOpenRaw   = 0f; // линейный прогресс 0..1
-    private float screenOpenAnim  = 0f; // eased, для панели целиком
-    private static final long SCREEN_OPEN_MS = 280L;
+    private final Map<String, float[]> cardHoverAnims = new HashMap<>();
+    private final Map<String, Float> btnHoverAnims = new HashMap<>();
 
-    private static boolean onboardingDismissed = false;
+    private final Map<String, int[]> clickBounds = new HashMap<>();
 
     public InventoryManagerScreen() {
         super(Text.literal("Менеджер инвентарей"));
         LoadoutManager.ensureLoaded();
-        if (!LoadoutManager.loadouts.isEmpty()) {
+        if (savedSelectedName != null) {
+            LoadoutManager.findByName(savedSelectedName).ifPresent(this::selectLoadout);
+        }
+        if (selectedLoadout == null && !LoadoutManager.loadouts.isEmpty()) {
             selectLoadout(LoadoutManager.loadouts.get(0));
         }
+    }
+
+    private static MsdfFont font() {
+        return ModernClickGui.SFUI;
+    }
+
+    private boolean isDark() {
+        return HudThemeHelper.isDark();
     }
 
     @Override
     protected void init() {
         super.init();
-        screenOpenStart = System.currentTimeMillis();
+        openAnim = 0.0f;
+        closing = false;
     }
 
     private void backToGame() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null) client.setScreen(new InventoryScreen(client.player));
-        else client.setScreen(null);
+        closing = true;
     }
 
     @Override
-    public void close() { backToGame(); }
+    public void close() {
+        if (selectedLoadout != null) {
+            savedSelectedName = selectedLoadout.name;
+        }
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null) {
+            client.setScreen(new InventoryScreen(client.player));
+        } else {
+            super.close();
+        }
+    }
 
     @Override
-    public boolean shouldCloseOnEsc() { return true; }
+    public boolean shouldCloseOnEsc() {
+        return true;
+    }
 
     @Override
     public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {}
 
-    // ─── Действия ────────────────────────────────────────────────────────────
-
     private void selectLoadout(InventoryLoadout l) {
         selectedLoadout = l;
         selectedBySlot = new HashMap<>();
-        if (l != null) for (LoadoutSlotData d : l.slots) selectedBySlot.put(d.handlerSlotId, d);
+        if (l != null) {
+            savedSelectedName = l.name;
+            for (LoadoutSlotData d : l.slots) {
+                selectedBySlot.put(d.handlerSlotId, d);
+            }
+        }
     }
 
     private void saveCurrent() {
@@ -140,7 +124,7 @@ public class InventoryManagerScreen extends Screen {
         LoadoutManager.upsert(loadout);
         selectLoadout(loadout);
         nameInput = "";
-        cursorPos = 0;
+        playClickSound();
     }
 
     private void startLoad(InventoryLoadout loadout) {
@@ -148,11 +132,14 @@ public class InventoryManagerScreen extends Screen {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
         LoadoutRestoreExecutor.startRestore(client.player.playerScreenHandler, loadout);
+        playClickSound();
         client.setScreen(new InventoryScreen(client.player));
     }
 
     private void deleteLoadout(InventoryLoadout loadout) {
+        if (loadout == null) return;
         LoadoutManager.delete(loadout);
+        playClickSound();
         if (selectedLoadout == loadout) {
             selectLoadout(LoadoutManager.loadouts.isEmpty() ? null : LoadoutManager.loadouts.get(0));
         }
@@ -162,303 +149,430 @@ public class InventoryManagerScreen extends Screen {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
         LoadoutRestoreExecutor.tryHealGhosts(client.player.playerScreenHandler);
+        playClickSound();
     }
 
-    // ─── Render ──────────────────────────────────────────────────────────────
+    private void playClickSound() {
+        try {
+            MinecraftClient.getInstance().getSoundManager().play(
+                    PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+        } catch (Throwable ignored) {}
+    }
+
+    // ─── RENDER ──────────────────────────────────────────────────────────────
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        tickAnimations();
-        computePanelSize();
-
-        int backdropA = (int) (0xCC * screenOpenAnim);
-        context.fill(0, 0, this.width, this.height, backdropA << 24);
-
-        int px = panelX(), py = panelY();
-
-        context.getMatrices().push();
-        float s = lerp(0.95f, 1f, screenOpenAnim);
-        float cx = px + panelW / 2f, cy = py + panelH / 2f;
-        context.getMatrices().translate(cx, cy, 0);
-        context.getMatrices().scale(s, s, 1f);
-        context.getMatrices().translate(-cx, -cy, 0);
-
-        // Мягкая тень под панелью — несколько прямоугольников с падающей альфой.
-        for (int i = 3; i >= 1; i--) {
-            int a = (int) ((13 - i * 3) * screenOpenAnim);
-            LexoraMainMenu.drawSmoothRect(context, px - i, py - i + 3, panelW + i * 2, panelH + i * 2, a << 24);
+        if (closing) {
+            openAnim -= 0.12f;
+            if (openAnim <= 0.0f) {
+                close();
+                return;
+            }
+        } else {
+            if (openAnim < 1.0f) openAnim = Math.min(1.0f, openAnim + 0.10f);
         }
 
-        LexoraMainMenu.drawSmoothRect(context, px, py, panelW, panelH, adjustAlpha(COL_PANEL_BG, screenOpenAnim));
-        context.fill(px + 2, py, px + panelW - 2, py + 1, adjustAlpha(0x14FFFFFF, screenOpenAnim));
+        listScroll += (targetListScroll - listScroll) * 0.25f;
 
-        boolean backHover = inRect(mouseX, mouseY, px + PAD, py + 12, 56, 11);
-        getFont().draw(context.getMatrices(), "← Назад", px + PAD, py + 12, SIZE_TEXT,
-                adjustAlpha(backHover ? COL_TEXT_PRIMARY : COL_TEXT_SECONDARY, screenOpenAnim));
+        clickBounds.clear();
 
-        int headerY = py + 32;
-        int lcX = px + PAD;
-        int rcX = lcX + leftColW + COL_GAP;
-        int rcW = (px + panelW - PAD) - rcX;
+        boolean dark = isDark();
 
-        renderLeftColumn(context, mouseX, mouseY, lcX, headerY, py);
-        renderRightColumn(context, mouseX, mouseY, rcX, rcW, headerY, py);
+        // 1. Затемнённый фон
+        int backdropA = (int) (150 * openAnim);
+        context.fill(0, 0, this.width, this.height, backdropA << 24);
 
-        context.getMatrices().pop();
+        float guiX = (this.width - GUI_W) / 2.0f;
+        float guiY = (this.height - GUI_H) / 2.0f;
 
-        if (this.height > 480) renderOnboardingToast(context, mouseX, mouseY);
+        float scale = 0.94f + 0.06f * openAnim;
+        float scaledX = guiX + (GUI_W * (1.0f - scale) / 2.0f);
+        float scaledY = guiY + (GUI_H * (1.0f - scale) / 2.0f);
+
+        int winBg = dark ? 0xF00D0D11 : 0xF4F5F6FA;
+
+        // 2. Главная плашка окна
+        RoundedRectShader.draw(context, scaledX, scaledY, GUI_W * scale, GUI_H * scale, 12.0f, withAlpha(winBg, openAnim));
+
+        // 3. Шапка окна
+        drawHeader(context, scaledX, scaledY, GUI_W * scale, HEADER_H * scale, dark, openAnim, mouseX, mouseY);
+
+        // 4. Две колонки
+        float contentX = scaledX + 8;
+        float contentY = scaledY + (HEADER_H * scale) + 6;
+        float contentW = (GUI_W * scale) - 16;
+        float contentH = (GUI_H * scale) - (HEADER_H * scale) - 14;
+
+        float leftColW = 240.0f;
+        float rightColW = contentW - leftColW - 8;
+
+        drawLeftColumn(context, contentX, contentY, leftColW, contentH, dark, openAnim, mouseX, mouseY);
+        drawRightColumn(context, contentX + leftColW + 8, contentY, rightColW, contentH, dark, openAnim, mouseX, mouseY);
 
         super.render(context, mouseX, mouseY, delta);
     }
 
-    private void tickAnimations() {
-        float diff = listScrollTarget - listScrollAnim;
-        if (Math.abs(diff) < 0.3f) listScrollAnim = listScrollTarget;
-        else listScrollAnim += diff * 0.2f;
+    // ─── ХЕДЕР ───────────────────────────────────────────────────────────────
 
-        long now = System.currentTimeMillis();
-        screenOpenRaw = Math.min(1f, (now - screenOpenStart) / (float) SCREEN_OPEN_MS);
-        screenOpenAnim = easeOutQuart(screenOpenRaw);
-    }
+    private void drawHeader(DrawContext context, float x, float y, float w, float h, boolean dark, float anim, int mx, int my) {
+        int sepCol = dark ? 0x25FFFFFF : 0x20000000;
+        RoundedRectShader.draw(context, x, y + h - 1, w, 1, 0.0f, withAlpha(sepCol, anim));
 
-    /** Пересчитывает размер панели от размера окна — никогда не вылезает за его пределы. */
-    private void computePanelSize() {
-        panelW = Math.min(PANEL_W_PREF, Math.max(300, this.width - SCREEN_MARGIN * 2));
-        panelH = Math.min(PANEL_H_PREF, Math.max(240, this.height - SCREEN_MARGIN * 2));
-        leftColW = (int) (panelW * LEFT_COL_FRACTION);
-    }
+        ModernGuiIcons.draw(context, ModernGuiIcons.Icon.WRENCH, x + 12, y + (h - 11.0f) / 2.0f, 11.0f, withAlpha(dark ? 0xFFFFFFFF : 0xFF141418, anim));
+        font().draw(context.getMatrices(), "|", x + 26, y + (h - 10.0f) / 2.0f, 9.5f, withAlpha(dark ? 0xFF454555 : 0xFFB5B5C5, anim));
+        font().draw(context.getMatrices(), "Менеджер инвентарей", x + 34, y + (h - 10.0f) / 2.0f, 9.5f, withAlpha(dark ? 0xFFEEEEF5 : 0xFF141418, anim));
 
-    /** Стаггер-прогресс для элемента с индексом index (карточка/группа строк сетки), уже с easing. */
-    private float staggered(int index, float perItemDelay, float span) {
-        float p = (screenOpenRaw - index * perItemDelay) / span;
-        return easeOutQuart(Math.max(0f, Math.min(1f, p)));
-    }
+        font().draw(context.getMatrices(), "Сохранение и быстрая смена сетов", x + 165, y + (h - 8.0f) / 2.0f + 0.5f, 7.5f, withAlpha(dark ? 0xFF7A7A8A : 0xFF8A8A9A, anim));
 
-    private int panelX() { return (this.width - panelW) / 2; }
-    private int panelY() { return (this.height - panelH) / 2; }
+        // Кнопка закрыть (✕ с использованием LexoraIcons.Icon.CLOSE)
+        float btnX = x + w - 24;
+        float btnY = y + (h - 18) / 2.0f;
+        boolean hClose = inside(mx, my, btnX, btnY, 18, 18);
+        float hCloseAnim = updateBtnHover("btn:close", hClose);
 
-    // ─── Левая колонка: шапка + поле имени + список ─────────────────────────
-
-    private void renderLeftColumn(DrawContext context, int mouseX, int mouseY, int lcX, int headerY, int py) {
-        getFont().draw(context.getMatrices(), "Менеджер инвентарей", lcX, headerY, SIZE_TITLE,
-                adjustAlpha(COL_TEXT_PRIMARY, screenOpenAnim));
-
-        int saveW = 92, saveH = 20;
-        int saveX = lcX + leftColW - saveW, saveY = headerY - 3;
-        boolean saveEnabled = !nameInput.trim().isEmpty();
-        boolean saveHover = saveEnabled && inRect(mouseX, mouseY, saveX, saveY, saveW, saveH);
-        drawButton(context, saveX, saveY, saveW, saveH, "+ Сохранить", saveEnabled, true, saveHover ? 1f : 0f, screenOpenAnim);
-
-        getFont().draw(context.getMatrices(), pluralSaves(LoadoutManager.loadouts.size()), lcX, headerY + 14, SIZE_SMALL,
-                adjustAlpha(COL_TEXT_SECONDARY, screenOpenAnim));
-
-        int nameFieldY = headerY + 30, nameFieldH = 20;
-        LexoraMainMenu.drawSmoothRect(context, lcX, nameFieldY, leftColW, nameFieldH,
-                adjustAlpha(nameFocused ? COL_FIELD_FOCUSED : COL_FIELD_BG, screenOpenAnim));
-        if (nameInput.isEmpty() && !nameFocused) {
-            getFont().draw(context.getMatrices(), "Название раскладки...", lcX + 7, nameFieldY + 6, SIZE_SMALL,
-                    adjustAlpha(COL_TEXT_MUTED, screenOpenAnim));
-        } else {
-            getFont().draw(context.getMatrices(), nameInput, lcX + 7, nameFieldY + 6, SIZE_SMALL,
-                    adjustAlpha(COL_TEXT_PRIMARY, screenOpenAnim));
-            boolean cursorVisible = ((System.currentTimeMillis() / 530) % 2) == 0;
-            if (cursorVisible && nameFocused) {
-                float cw = getFont().getWidth(nameInput.substring(0, Math.min(cursorPos, nameInput.length())), SIZE_SMALL);
-                context.fill((int) (lcX + 7 + cw), nameFieldY + 4, (int) (lcX + 8 + cw), nameFieldY + nameFieldH - 4,
-                        adjustAlpha(COL_TEXT_PRIMARY, screenOpenAnim));
-            }
+        int closeBg = interpolateColor(0x00000000, dark ? 0x40EF4444 : 0x30EF4444, hCloseAnim);
+        if (hCloseAnim > 0.01f) {
+            RoundedRectShader.draw(context, btnX, btnY, 18, 18, 4.0f, withAlpha(closeBg, anim));
         }
 
-        int listY = nameFieldY + nameFieldH + 8;
-        int listBottom = py + panelH - PAD;
-        int listH = listBottom - listY;
-        LexoraMainMenu.drawSmoothRect(context, lcX, listY, leftColW, listH, adjustAlpha(COL_COLUMN_BG, screenOpenAnim));
+        int closeCol = interpolateColor(dark ? 0xFF8A8A9A : 0xFF656575, 0xFFFF4444, hCloseAnim);
+        LexoraIcons.draw(context, LexoraIcons.Icon.CLOSE, btnX + 4.5f, btnY + 4.5f, 9.0f, withAlpha(closeCol, anim));
+        clickBounds.put("action:close", new int[]{(int) btnX, (int) btnY, 18, 18});
+    }
 
-        int contentX = lcX + 6, contentY = listY + 6, contentW = leftColW - 12, contentH = listH - 12;
+    // ─── ЛЕВАЯ КОЛОНКА (СПИСОК РАСКЛАДОК) ────────────────────────────────────
+
+    private void drawLeftColumn(DrawContext context, float x, float y, float w, float h, boolean dark, float anim, int mx, int my) {
+        int colBg = dark ? 0xC0111115 : 0xD5FFFFFF;
+        RoundedRectShader.draw(context, x, y, w, h, 8.0f, withAlpha(colBg, anim));
+
+        // Поле ввода имени + кнопка "+ Сохранить"
+        float inX = x + 8;
+        float inY = y + 8;
+        float btnW = 68.0f;
+        float inW = w - 16 - btnW - 6;
+        float inH = 22.0f;
+
+        int inBg = nameFocused ? (dark ? 0xFF22222E : 0xFFD8DCE8) : (dark ? 0xFF181820 : 0xFFE5E8F0);
+        RoundedRectShader.draw(context, inX, inY, inW, inH, 4.5f, withAlpha(inBg, anim));
+
+        String displayTxt = nameInput.isEmpty() && !nameFocused ? "Название сета..." : nameInput;
+        if (nameFocused && ((System.currentTimeMillis() / 500) % 2 == 0)) displayTxt += "|";
+        int txtCol = nameInput.isEmpty() && !nameFocused ? (dark ? 0xFF555566 : 0xFF9999AA) : (dark ? 0xFFFFFFFF : 0xFF141418);
+        font().draw(context.getMatrices(), displayTxt, inX + 7, inY + 6.5f, 7.5f, withAlpha(txtCol, anim));
+        clickBounds.put("input:name", new int[]{(int) inX, (int) inY, (int) inW, (int) inH});
+
+        // Кнопка "+ Сохранить"
+        float sBtnX = inX + inW + 6;
+        boolean canSave = !nameInput.trim().isEmpty();
+        boolean hSave = canSave && inside(mx, my, sBtnX, inY, btnW, inH);
+        float hSaveAnim = updateBtnHover("btn:save", hSave);
+
+        int saveBg = canSave
+                ? interpolateColor(dark ? 0xFFFFFFFF : 0xFF141418, dark ? 0xFFE0E0EC : 0xFF2A2A38, hSaveAnim)
+                : (dark ? 0xFF22222C : 0xFFD2D6E0);
+        int saveTextCol = canSave
+                ? (dark ? 0xFF0E0E12 : 0xFFFFFFFF)
+                : (dark ? 0xFF666677 : 0xFF888899);
+
+        RoundedRectShader.draw(context, sBtnX, inY, btnW, inH, 4.5f, withAlpha(saveBg, anim));
+        font().draw(context.getMatrices(), "+ Сохранить", sBtnX + 8, inY + 6.5f, 7.0f, withAlpha(saveTextCol, anim));
+        if (canSave) {
+            clickBounds.put("action:save", new int[]{(int) sBtnX, (int) inY, (int) btnW, (int) inH});
+        }
+
+        // Заголовок списка сетов
+        float listTitleY = inY + inH + 9;
+        String countStr = "Сохранённые сеты (" + LoadoutManager.loadouts.size() + ")";
+        font().draw(context.getMatrices(), countStr, inX, listTitleY, 7.5f, withAlpha(dark ? 0xFF7A7A8A : 0xFF8A8A9A, anim));
+
+        // Область скроллируемых карточек
+        float listY = listTitleY + 12;
+        float listH = h - (listY - y) - 8;
+
         List<InventoryLoadout> loadouts = LoadoutManager.loadouts;
-
         if (loadouts.isEmpty()) {
-            String msg = "Список пуст — введи имя выше.";
-            float w = getFont().getWidth(msg, SIZE_SMALL);
-            getFont().draw(context.getMatrices(), msg, contentX + (contentW - w) / 2f, contentY + contentH / 2f - 4,
-                    SIZE_SMALL, adjustAlpha(COL_TEXT_SECONDARY, screenOpenAnim));
+            String emptyStr = "Нет сохранённых сетов";
+            float ew = font().getWidth(emptyStr, 8.0f);
+            font().draw(context.getMatrices(), emptyStr, x + (w - ew) / 2.0f, listY + listH / 2.0f - 4, 8.0f,
+                    withAlpha(dark ? 0xFF585868 : 0xFF9999AA, anim));
             return;
         }
 
-        int maxScroll = Math.max(0, loadouts.size() * (CARD_H + CARD_GAP) - CARD_GAP - contentH);
-        if (listScrollTarget > maxScroll) listScrollTarget = maxScroll;
+        float cardH = 44.0f;
+        float cardGap = 5.0f;
+        float totalH = loadouts.size() * (cardH + cardGap) - cardGap;
+        float maxScroll = Math.max(0, totalH - listH + 4);
+        if (targetListScroll < -maxScroll) targetListScroll = -maxScroll;
+        if (targetListScroll > 0) targetListScroll = 0;
 
-        context.enableScissor(contentX, contentY, contentX + contentW, contentY + contentH);
+        context.enableScissor((int) x, (int) listY, (int) (x + w), (int) (listY + listH));
+
+        float curY = listY + listScroll;
         for (int i = 0; i < loadouts.size(); i++) {
             InventoryLoadout l = loadouts.get(i);
-            int rowY = contentY + i * (CARD_H + CARD_GAP) - (int) listScrollAnim;
-            if (rowY + CARD_H < contentY || rowY > contentY + contentH) continue;
-            renderCard(context, l, contentX, rowY, contentW, mouseX, mouseY, staggered(i, 0.05f, 0.7f));
+            if (curY + cardH >= listY - cardH && curY <= listY + listH + cardH) {
+                drawLoadoutCard(context, inX, curY, w - 16, cardH, l, dark, anim, mx, my);
+            }
+            curY += cardH + cardGap;
         }
+
         context.disableScissor();
+
+        // Скроллбар справа
+        if (totalH > listH && maxScroll > 0) {
+            float sbTrackX = x + w - 3.0f;
+            float sbTrackY = listY + 2;
+            float sbTrackH = listH - 4;
+            RoundedRectShader.draw(context, sbTrackX, sbTrackY, 2.0f, sbTrackH, 1.0f, withAlpha(dark ? 0x20FFFFFF : 0x15000000, anim));
+
+            float thumbRatio = Math.max(0.15f, Math.min(1.0f, listH / totalH));
+            float thumbH = sbTrackH * thumbRatio;
+            float scrollRatio = Math.max(0.0f, Math.min(1.0f, -listScroll / maxScroll));
+            float thumbY = sbTrackY + (sbTrackH - thumbH) * scrollRatio;
+            int thumbCol = dark ? 0x60FFFFFF : 0x50000000;
+            RoundedRectShader.draw(context, sbTrackX, thumbY, 2.0f, thumbH, 1.0f, withAlpha(thumbCol, anim));
+        }
     }
 
-    private void renderCard(DrawContext context, InventoryLoadout l, int x, int y, int w, int mouseX, int mouseY, float entrance) {
-        boolean selected = l == selectedLoadout;
-        float[] hoverState = cardHoverAnim.computeIfAbsent(l, k -> new float[]{0f});
-        boolean hoverNow = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + CARD_H;
-        hoverState[0] += ((hoverNow ? 1f : 0f) - hoverState[0]) * 0.18f;
-        if (hoverState[0] < 0.005f) hoverState[0] = 0f;
+    private void drawLoadoutCard(DrawContext context, float x, float y, float w, float h,
+                                 InventoryLoadout l, boolean dark, float anim, int mx, int my) {
+        boolean isSel = l == selectedLoadout;
+        boolean isHover = inside(mx, my, x, y, w, h);
+        float[] hState = cardHoverAnims.computeIfAbsent(l.name, k -> new float[]{0f});
+        hState[0] += ((isHover ? 1f : 0f) - hState[0]) * 0.22f;
 
-        float alphaMul = screenOpenAnim * entrance;
+        int cardBg = isSel
+                ? (dark ? 0xFF22222E : 0xFFD8DCE8)
+                : interpolateColor(dark ? 0x80181820 : 0x80E8ECF5, dark ? 0xFF20202A : 0xFFDEE2EB, hState[0]);
 
-        int baseBg = selected ? COL_CARD_SELECTED : COL_CARD_BG;
-        int hovBg  = selected ? COL_CARD_SELECTED : COL_CARD_HOVER;
-        int bg = LexoraMainMenu.blendColors(baseBg, hovBg, hoverState[0]);
-        LexoraMainMenu.drawSmoothRect(context, x, y, w, CARD_H, adjustAlpha(bg, alphaMul));
+        RoundedRectShader.draw(context, x, y, w, h, 5.0f, withAlpha(cardBg, anim));
 
-        float accentT = Math.max(selected ? 1f : 0f, hoverState[0]);
-        if (accentT > 0.01f) {
-            LexoraMainMenu.drawSmoothRect(context, x, y + 4, 3, CARD_H - 8, adjustAlpha(COL_ACCENT, alphaMul * accentT));
+        // Индикатор выбора (полоска слева)
+        if (isSel) {
+            int pillCol = dark ? 0xFFFFFFFF : 0xFF141418;
+            RoundedRectShader.draw(context, x + 1.5f, y + 6, 2.5f, h - 12, 1.25f, withAlpha(pillCol, anim));
         }
 
-        getFont().draw(context.getMatrices(), l.name, x + 12, y + 6, SIZE_TEXT, adjustAlpha(COL_TEXT_PRIMARY, alphaMul));
-        getFont().draw(context.getMatrices(), pluralItems(l.slots.size()), x + 12, y + CARD_H - 14, SIZE_SMALL,
-                adjustAlpha(COL_TEXT_SECONDARY, alphaMul));
+        // Название сета
+        int nameCol = isSel ? (dark ? 0xFFFFFFFF : 0xFF141418) : (dark ? 0xFFEEEEF2 : 0xFF2A2A35);
+        font().draw(context.getMatrices(), l.name, x + 9, y + 8.5f, 8.5f, withAlpha(nameCol, anim));
 
-        int[] delRect = cardDeleteButtonRect(x, y, w);
-        int[] loadRect = cardLoadButtonRect(x, y, w);
-        boolean loadHover = inRect(mouseX, mouseY, loadRect);
-        boolean delHover  = inRect(mouseX, mouseY, delRect);
+        // Кол-во предметов
+        String itemsCount = l.slots.size() + " предм.";
+        font().draw(context.getMatrices(), itemsCount, x + 9, y + 23.0f, 7.0f, withAlpha(dark ? 0xFF7A7A8A : 0xFF8A8A9A, anim));
 
-        drawButton(context, loadRect[0], loadRect[1], loadRect[2], loadRect[3], "Загрузить", true, true,
-                loadHover ? 1f : 0f, alphaMul);
+        // Кнопка "Загрузить" (Pill)
+        float loadW = 58.0f;
+        float loadH = 20.0f;
+        float loadX = x + w - loadW - 24;
+        float loadY = y + (h - loadH) / 2.0f;
 
-        int delBg = adjustAlpha(LexoraMainMenu.blendColors(COL_BTN_NORMAL, COL_BTN_DANGER_HOV, delHover ? 1f : 0f), alphaMul);
-        LexoraMainMenu.drawSmoothRect(context, delRect[0], delRect[1], delRect[2], delRect[3], delBg);
-        String cross = "✕";
-        float cw = getFont().getWidth(cross, SIZE_SMALL);
-        getFont().draw(context.getMatrices(), cross, delRect[0] + (delRect[2] - cw) / 2f, delRect[1] + (delRect[3] - SIZE_SMALL) / 2f,
-                SIZE_SMALL, adjustAlpha(delHover ? 0xFFDD8888 : COL_TEXT_SECONDARY, alphaMul));
+        boolean hLoad = inside(mx, my, loadX, loadY, loadW, loadH);
+        float hLoadAnim = updateBtnHover("load:" + l.name, hLoad);
+        int loadBg = interpolateColor(dark ? 0xFF2A2A38 : 0xFFD0D5E0, dark ? 0xFFFFFFFF : 0xFF141418, hLoadAnim);
+        int loadTxtCol = interpolateColor(dark ? 0xFFEEEEF5 : 0xFF141418, dark ? 0xFF0E0E12 : 0xFFFFFFFF, hLoadAnim);
+
+        RoundedRectShader.draw(context, loadX, loadY, loadW, loadH, 4.0f, withAlpha(loadBg, anim));
+        font().draw(context.getMatrices(), "Загрузить", loadX + 9, loadY + 5.5f, 6.8f, withAlpha(loadTxtCol, anim));
+        clickBounds.put("load:" + l.name, new int[]{(int) loadX, (int) loadY, (int) loadW, (int) loadH});
+
+        // Кнопка удаления (используем LexoraIcons.Icon.CLOSE)
+        float delSize = 18.0f;
+        float delX = x + w - delSize - 4;
+        float delY = y + (h - delSize) / 2.0f;
+        boolean hDel = inside(mx, my, delX, delY, delSize, delSize);
+        float hDelAnim = updateBtnHover("del:" + l.name, hDel);
+
+        if (hDelAnim > 0.01f) {
+            int delBg = interpolateColor(0x00000000, dark ? 0x40EF4444 : 0x30EF4444, hDelAnim);
+            RoundedRectShader.draw(context, delX, delY, delSize, delSize, 3.5f, withAlpha(delBg, anim));
+        }
+
+        int delCol = interpolateColor(dark ? 0xFF7A7A8A : 0xFF9090A0, 0xFFFF4444, hDelAnim);
+        LexoraIcons.draw(context, LexoraIcons.Icon.CLOSE, delX + 5.0f, delY + 5.0f, 8.0f, withAlpha(delCol, anim));
+        clickBounds.put("del:" + l.name, new int[]{(int) delX, (int) delY, (int) delSize, (int) delSize});
+
+        // Клик по самой карточке для выбора
+        clickBounds.put("select:" + l.name, new int[]{(int) x, (int) y, (int) (w - loadW - 30), (int) h});
     }
 
-    private int[] cardDeleteButtonRect(int cardX, int cardY, int cardW) {
-        int size = 18;
-        return new int[]{cardX + cardW - 8 - size, cardY + (CARD_H - size) / 2, size, size};
-    }
+    // ─── ПРАВАЯ КОЛОНКА (СЕТКА ПРОСМОТРА ИНВЕНТАРЯ) ──────────────────────────
 
-    private int[] cardLoadButtonRect(int cardX, int cardY, int cardW) {
-        int[] del = cardDeleteButtonRect(cardX, cardY, cardW);
-        int w = 64, h = 20;
-        return new int[]{del[0] - 5 - w, cardY + (CARD_H - h) / 2, w, h};
-    }
+    private void drawRightColumn(DrawContext context, float x, float y, float w, float h, boolean dark, float anim, int mx, int my) {
+        int colBg = dark ? 0xC0111115 : 0xD5FFFFFF;
+        RoundedRectShader.draw(context, x, y, w, h, 8.0f, withAlpha(colBg, anim));
 
-    // ─── Правая колонка: "Просмотр" + сетка инвентаря ───────────────────────
+        // Шапка превью
+        float pHeadY = y + 8;
+        String title = selectedLoadout != null ? "Просмотр: " + selectedLoadout.name : "Просмотр инвентаря";
+        font().draw(context.getMatrices(), title, x + 12, pHeadY + 3.0f, 9.0f, withAlpha(dark ? 0xFFFFFFFF : 0xFF141418, anim));
 
-    private void renderRightColumn(DrawContext context, int mouseX, int mouseY, int rcX, int rcW, int headerY, int py) {
-        getFont().draw(context.getMatrices(), "Просмотр", rcX, headerY, SIZE_TITLE, adjustAlpha(COL_TEXT_PRIMARY, screenOpenAnim));
-        String previewName = selectedLoadout != null ? selectedLoadout.name : "—";
-        getFont().draw(context.getMatrices(), previewName, rcX, headerY + 14, SIZE_SMALL, adjustAlpha(COL_TEXT_SECONDARY, screenOpenAnim));
-
-        int refreshW = 76, refreshH = 18;
-        int refreshX = rcX + rcW - refreshW, refreshY = headerY - 2;
-        boolean refreshHover = inRect(mouseX, mouseY, refreshX, refreshY, refreshW, refreshH);
-        drawButton(context, refreshX, refreshY, refreshW, refreshH, "Обновить", true, false, refreshHover ? 1f : 0f, screenOpenAnim);
-
-        int gridPanelY = headerY + 30 + 8;
-        int gridPanelBottom = py + panelH - PAD;
-        int gridPanelH = gridPanelBottom - gridPanelY;
-        LexoraMainMenu.drawSmoothRect(context, rcX, gridPanelY, rcW, gridPanelH, adjustAlpha(COL_COLUMN_BG, screenOpenAnim));
+        // Кнопка "Обновить оверлей"
+        float refW = 95.0f;
+        float refH = 20.0f;
+        float refX = x + w - refW - 12;
+        boolean hRef = inside(mx, my, refX, pHeadY, refW, refH);
+        float hRefAnim = updateBtnHover("btn:refresh", hRef);
+        int refBg = interpolateColor(dark ? 0x60252535 : 0x60D5DAE5, dark ? 0xFF2A2A38 : 0xFFC0C5D5, hRefAnim);
+        RoundedRectShader.draw(context, refX, pHeadY, refW, refH, 4.0f, withAlpha(refBg, anim));
+        font().draw(context.getMatrices(), "Обновить оверлей", refX + 9, pHeadY + 6.0f, 6.5f, withAlpha(dark ? 0xFFEEEEF2 : 0xFF141418, anim));
+        clickBounds.put("action:refresh", new int[]{(int) refX, (int) pHeadY, (int) refW, (int) refH});
 
         if (selectedLoadout == null) {
-            String msg = "Выбери раскладку слева";
-            float w = getFont().getWidth(msg, SIZE_TEXT);
-            getFont().draw(context.getMatrices(), msg, rcX + (rcW - w) / 2f, gridPanelY + gridPanelH / 2f - 4, SIZE_TEXT,
-                    adjustAlpha(COL_TEXT_SECONDARY, screenOpenAnim));
+            String noSel = "Выберите раскладку слева для предпросмотра";
+            float nw = font().getWidth(noSel, 8.5f);
+            font().draw(context.getMatrices(), noSel, x + (w - nw) / 2.0f, y + h / 2.0f, 8.5f,
+                    withAlpha(dark ? 0xFF666677 : 0xFF9999AA, anim));
             return;
         }
 
-        int contentBlockH = 16 + 8 + 3 * SLOT_STEP + 5 + 16 + 12 + 9;
-        int gx = rcX + 12;
-        int gy = gridPanelY + Math.max(12, (gridPanelH - contentBlockH) / 2);
-        int mainGridY = gy + 24;
-        int hotbarY = mainGridY + 3 * SLOT_STEP + 5;
+        // Контейнер сетки
+        float gridBoxY = pHeadY + refH + 10;
+        float gridBoxH = h - (gridBoxY - y) - 42;
+        int boxBg = dark ? 0x600B0B0E : 0x60E8EBF2;
+        RoundedRectShader.draw(context, x + 10, gridBoxY, w - 20, gridBoxH, 6.0f, withAlpha(boxBg, anim));
 
-        MinecraftClient client = MinecraftClient.getInstance();
-        PlayerInventory inv = client.player != null ? client.player.getInventory() : null;
+        float matrixW = 9 * CELL_STEP - CELL_GAP; // 9 * 25 - 3 = 222px
+        float gridStartX = x + 10 + ((w - 20) - matrixW) / 2.0f;
 
-        LoadoutSlotData hoveredSlot = null;
-        for (int slotId = InventorySlotIds.MANAGED_START; slotId <= InventorySlotIds.MANAGED_END; slotId++) {
-            int[] pos = gridPosForSlot(slotId, gx, gy, mainGridY, hotbarY);
-            float rowAnim = staggered(rowGroupOf(slotId), 0.08f, 0.7f);
-            float slotAlpha = screenOpenAnim * rowAnim;
+        MinecraftClient mc = MinecraftClient.getInstance();
+        PlayerInventory playerInv = mc.player != null ? mc.player.getInventory() : null;
 
-            LexoraMainMenu.drawSmoothRect(context, pos[0], pos[1], 16, 16, adjustAlpha(COL_SLOT_BG, slotAlpha));
-            context.fill(pos[0], pos[1], pos[0] + 16, pos[1] + 1, adjustAlpha(COL_SLOT_EDGE, slotAlpha));
+        LoadoutSlotData hoveredData = null;
 
-            LoadoutSlotData d = selectedBySlot.get(slotId);
-            if (d == null) continue;
+        // 1. Броня & Офхенд (верхний ряд)
+        float armorY = gridBoxY + 14;
+        font().draw(context.getMatrices(), "Броня & Офхенд", gridStartX, armorY - 9, 6.5f, withAlpha(dark ? 0xFF7A7A8A : 0xFF8A8A9A, anim));
 
-            boolean has = inv != null && playerHasItem(inv, d.matchKey());
-            drawSlotItem(context, d, pos[0], pos[1], has, slotAlpha);
-
-            if (mouseX >= pos[0] && mouseX < pos[0] + 16 && mouseY >= pos[1] && mouseY < pos[1] + 16) {
-                hoveredSlot = d;
+        // Броня: слоты 5 (шлем), 6 (нагрудник), 7 (штаны), 8 (ботинки)
+        for (int i = 0; i < 4; i++) {
+            int slotId = InventorySlotIds.ARMOR_START + i;
+            float sx = gridStartX + i * CELL_STEP;
+            float sy = armorY;
+            LoadoutSlotData data = selectedBySlot.get(slotId);
+            drawSlotCell(context, sx, sy, data, playerInv, dark, anim);
+            if (inside(mx, my, sx, sy, CELL_SIZE, CELL_SIZE)) {
+                hoveredData = data;
             }
         }
 
-        int statusY = hotbarY + SLOT_STEP + 12;
+        // Офхенд: слот 45 (справа в ряду)
+        float offhandX = gridStartX + 8 * CELL_STEP;
+        LoadoutSlotData offhandData = selectedBySlot.get(InventorySlotIds.OFFHAND);
+        drawSlotCell(context, offhandX, armorY, offhandData, playerInv, dark, anim);
+        if (inside(mx, my, offhandX, armorY, CELL_SIZE, CELL_SIZE)) {
+            hoveredData = offhandData;
+        }
+
+        // 2. Основной инвентарь 3x9 (слоты 9..35)
+        float mainInvY = armorY + CELL_STEP + 16;
+        font().draw(context.getMatrices(), "Инвентарь (3x9)", gridStartX, mainInvY - 9, 6.5f, withAlpha(dark ? 0xFF7A7A8A : 0xFF8A8A9A, anim));
+
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 9; col++) {
+                int slotId = InventorySlotIds.STORAGE_START + row * 9 + col;
+                float sx = gridStartX + col * CELL_STEP;
+                float sy = mainInvY + row * CELL_STEP;
+                LoadoutSlotData data = selectedBySlot.get(slotId);
+                drawSlotCell(context, sx, sy, data, playerInv, dark, anim);
+                if (inside(mx, my, sx, sy, CELL_SIZE, CELL_SIZE)) {
+                    hoveredData = data;
+                }
+            }
+        }
+
+        // 3. Хотбар 1x9 (слоты 36..44)
+        float hotbarY = mainInvY + 3 * CELL_STEP + 10;
+        int sepLineCol = dark ? 0x25FFFFFF : 0x20000000;
+        RoundedRectShader.draw(context, gridStartX, hotbarY - 5, matrixW, 1, 0.0f, withAlpha(sepLineCol, anim));
+
+        for (int col = 0; col < 9; col++) {
+            int slotId = InventorySlotIds.HOTBAR_START + col;
+            float sx = gridStartX + col * CELL_STEP;
+            float sy = hotbarY;
+            LoadoutSlotData data = selectedBySlot.get(slotId);
+            drawSlotCell(context, sx, sy, data, playerInv, dark, anim);
+            if (inside(mx, my, sx, sy, CELL_SIZE, CELL_SIZE)) {
+                hoveredData = data;
+            }
+        }
+
+        // Нижняя строка действий
+        float botY = gridBoxY + gridBoxH + 8;
         int ghostCount = LoadoutRestoreExecutor.ghosts().size();
-        String statusText = ghostCount == 0 ? "Оверлей выключен" : ("Оверлей активен — " + pluralItems(ghostCount));
-        int dotColor = ghostCount == 0 ? COL_TEXT_MUTED : COL_STATUS_MISSING;
-        LexoraMainMenu.drawSmoothRect(context, gx, statusY + 2, 5, 5, adjustAlpha(dotColor, screenOpenAnim));
-        getFont().draw(context.getMatrices(), statusText, gx + 10, statusY, SIZE_SMALL, adjustAlpha(COL_TEXT_SECONDARY, screenOpenAnim));
+        String ghostStatus = ghostCount == 0
+                ? "● Оверлей нехватки: выключен"
+                : "● Оверлей активен (" + ghostCount + " предм.)";
+        int statusColor = ghostCount == 0 ? (dark ? 0xFF7A7A8A : 0xFF8A8A9A) : 0xFFEF4444;
+        font().draw(context.getMatrices(), ghostStatus, x + 12, botY + 7.0f, 7.0f, withAlpha(statusColor, anim));
 
-        if (hoveredSlot != null) {
-            boolean has = inv != null && playerHasItem(inv, hoveredSlot.matchKey());
-            String label = ItemIdentity.displayName(hoveredSlot.itemId, hoveredSlot.customName) + (has ? "  ✓" : "  ✗");
-            float tw = getFont().getWidth(label, SIZE_SMALL);
-            int tx = mouseX + 12, ty = mouseY - 4;
-            LexoraMainMenu.drawSmoothRect(context, tx - 5, ty - 3, (int) tw + 10, 14, 0xF0050505);
-            getFont().draw(context.getMatrices(), label, tx, ty, SIZE_SMALL, has ? COL_STATUS_OK : COL_STATUS_MISSING);
+        // Большая кнопка "Применить раскладку"
+        float appW = 135.0f;
+        float appH = 24.0f;
+        float appX = x + w - appW - 12;
+        boolean hApp = inside(mx, my, appX, botY, appW, appH);
+        float hAppAnim = updateBtnHover("btn:apply", hApp);
+        int appBg = interpolateColor(dark ? 0xFFFFFFFF : 0xFF141418, dark ? 0xFFD8D8E5 : 0xFF2A2A38, hAppAnim);
+        int appTxt = dark ? 0xFF0E0E12 : 0xFFFFFFFF;
+        RoundedRectShader.draw(context, appX, botY, appW, appH, 5.0f, withAlpha(appBg, anim));
+        font().draw(context.getMatrices(), "Применить раскладку", appX + 15, botY + 7.5f, 7.5f, withAlpha(appTxt, anim));
+        clickBounds.put("action:apply", new int[]{(int) appX, (int) botY, (int) appW, (int) appH});
+
+        // Всплывающий тултип предмета
+        if (hoveredData != null) {
+            boolean has = playerInv != null && playerHasItem(playerInv, hoveredData.matchKey());
+            String titleName = ItemIdentity.displayName(hoveredData.itemId, hoveredData.customName);
+            String status = has ? "✓ В наличии" : "✗ Отсутствует";
+            int statusCol = has ? 0xFF22C55E : 0xFFEF4444;
+
+            float tw1 = font().getWidth(titleName, 7.5f);
+            float tw2 = font().getWidth(status, 6.5f);
+            float tipW = Math.max(tw1, tw2) + 16;
+            float tipH = 28.0f;
+
+            float tipX = mx + 12;
+            float tipY = my - 15;
+            if (tipX + tipW > this.width - 10) tipX = mx - tipW - 12;
+            if (tipY + tipH > this.height - 10) tipY = my - tipH - 5;
+
+            int tipBg = dark ? 0xF5111116 : 0xF5FFFFFF;
+            RoundedRectShader.draw(context, tipX, tipY, tipW, tipH, 5.0f, withAlpha(tipBg, anim));
+            RoundedRectShader.draw(context, tipX - 1, tipY - 1, tipW + 2, tipH + 2, 5.5f, withAlpha(dark ? 0x30FFFFFF : 0x20000000, anim));
+
+            font().draw(context.getMatrices(), titleName, tipX + 8, tipY + 6.0f, 7.5f, withAlpha(dark ? 0xFFFFFFFF : 0xFF141418, anim));
+            font().draw(context.getMatrices(), status, tipX + 8, tipY + 17.0f, 6.5f, withAlpha(statusCol, anim));
         }
     }
 
-    private void drawSlotItem(DrawContext context, LoadoutSlotData d, int x, int y, boolean present, float alphaMul) {
-        ItemStack stack = ItemIdentity.templateStack(d);
-        context.drawItem(stack, x, y);
+    private void drawSlotCell(DrawContext context, float x, float y, LoadoutSlotData data, PlayerInventory inv, boolean dark, float anim) {
+        int slotBg = dark ? 0x701E1E28 : 0x70D2D7E5;
+        RoundedRectShader.draw(context, x, y, CELL_SIZE, CELL_SIZE, 4.0f, withAlpha(slotBg, anim));
+
+        if (data == null) return;
+
+        boolean present = inv != null && playerHasItem(inv, data.matchKey());
+
+        ItemStack stack = ItemIdentity.templateStack(data);
+        context.drawItem(stack, (int) x + 3, (int) y + 3);
+
+        // Красная подсветка, если предмета нет в инвентаре
         if (!present) {
-            context.fill(x, y, x + 16, y + 16, (((int) (0x66 * alphaMul)) << 24) | 0x771111);
+            RoundedRectShader.draw(context, x, y, CELL_SIZE, CELL_SIZE, 4.0f, withAlpha(0x50EF4444, anim));
+            RoundedRectShader.draw(context, x + CELL_SIZE - 5.0f, y + 2.0f, 3.5f, 3.5f, 1.75f, withAlpha(0xFFEF4444, anim));
         }
-        if (d.count > 1) {
-            String cs = String.valueOf(d.count);
-            float cw = getFont().getWidth(cs, SIZE_TINY);
-            float tx = x + 15 - cw, ty = y + 9;
-            getFont().draw(context.getMatrices(), cs, tx + 1, ty + 1, SIZE_TINY, adjustAlpha(0xFF000000, alphaMul));
-            getFont().draw(context.getMatrices(), cs, tx, ty, SIZE_TINY, adjustAlpha(0xFFFFFFFF, alphaMul));
-        }
-    }
 
-    private int[] gridPosForSlot(int slotId, int gx, int gy, int mainGridY, int hotbarY) {
-        if (InventorySlotIds.isArmor(slotId)) {
-            int i = slotId - InventorySlotIds.ARMOR_START;
-            return new int[]{gx + i * SLOT_STEP, gy};
+        // Кол-во предмета
+        if (data.count > 1) {
+            String countText = String.valueOf(data.count);
+            float cw = font().getWidth(countText, 6.5f);
+            font().draw(context.getMatrices(), countText, x + CELL_SIZE - cw - 2.0f, y + CELL_SIZE - 7.5f, 6.5f, withAlpha(0xFFFFFFFF, anim));
         }
-        if (InventorySlotIds.isStorage(slotId)) {
-            int idx = slotId - InventorySlotIds.STORAGE_START;
-            int row = idx / 9, col = idx % 9;
-            return new int[]{gx + col * SLOT_STEP, mainGridY + row * SLOT_STEP};
-        }
-        if (InventorySlotIds.isHotbar(slotId)) {
-            int col = slotId - InventorySlotIds.HOTBAR_START;
-            return new int[]{gx + col * SLOT_STEP, hotbarY};
-        }
-        return new int[]{gx + 9 * SLOT_STEP + 8, hotbarY}; // офхенд
-    }
-
-    /** Группа строки для стаггера сетки: 0=броня, 1-3=сумка по рядам, 4=хотбар+офхенд (последняя волна). */
-    private int rowGroupOf(int slotId) {
-        if (InventorySlotIds.isArmor(slotId)) return 0;
-        if (InventorySlotIds.isStorage(slotId)) return 1 + (slotId - InventorySlotIds.STORAGE_START) / 9;
-        return 4;
     }
 
     private static boolean playerHasItem(PlayerInventory inv, String matchKey) {
+        if (inv == null) return false;
         for (ItemStack s : inv.main) {
             if (!s.isEmpty() && ItemIdentity.matchKeyOf(s).equals(matchKey)) return true;
         }
@@ -472,170 +586,119 @@ public class InventoryManagerScreen extends Screen {
         return false;
     }
 
-    // ─── Приветственная плашка ───────────────────────────────────────────────
-
-    private int[] toastRect() {
-        int w = Math.min(460, this.width - 40), h = 56;
-        return new int[]{(this.width - w) / 2, this.height - h - 20, w, h};
-    }
-
-    private void renderOnboardingToast(DrawContext context, int mouseX, int mouseY) {
-        if (onboardingDismissed) return;
-        int[] r = toastRect();
-        int tx = r[0], ty = r[1], tw = r[2];
-
-        LexoraMainMenu.drawSmoothRect(context, tx, ty, tw, r[3], adjustAlpha(0xF0121212, screenOpenAnim));
-        getFont().draw(context.getMatrices(), "Добро пожаловать в «Менеджер инвентарей»", tx + 14, ty + 9, SIZE_TEXT,
-                adjustAlpha(COL_TEXT_PRIMARY, screenOpenAnim));
-        getFont().draw(context.getMatrices(), "Сохраняй раскладки и загружай одним кликом. Если предмета",
-                tx + 14, ty + 25, SIZE_SMALL, adjustAlpha(COL_TEXT_SECONDARY, screenOpenAnim));
-        getFont().draw(context.getMatrices(), "не хватит — на его месте появится красный значок в инвентаре.",
-                tx + 14, ty + 37, SIZE_SMALL, adjustAlpha(COL_TEXT_SECONDARY, screenOpenAnim));
-
-        boolean closeHover = inRect(mouseX, mouseY, tx + tw - 24, ty + 7, 16, 16);
-        String cross = "✕";
-        float cw = getFont().getWidth(cross, SIZE_SMALL);
-        getFont().draw(context.getMatrices(), cross, tx + tw - 24 + (16 - cw) / 2f, ty + 11, SIZE_SMALL,
-                adjustAlpha(closeHover ? 0xFFCC5555 : COL_TEXT_SECONDARY, screenOpenAnim));
-    }
-
-    // ─── Мелкие хелперы ───────────────────────────────────────────────────────
-
-    private void drawButton(DrawContext context, int x, int y, int w, int h, String label,
-                            boolean enabled, boolean primary, float hoverT, float alphaMul) {
-        int normal = primary ? COL_BTN_PRIMARY : COL_BTN_NORMAL;
-        int hoverC = primary ? COL_BTN_PRIMARY_HOV : COL_BTN_HOVER;
-        float visualAlpha = (enabled ? 1f : 0.4f) * alphaMul;
-        int bg = adjustAlpha(LexoraMainMenu.blendColors(normal, hoverC, hoverT), visualAlpha);
-        LexoraMainMenu.drawSmoothRect(context, x, y, w, h, bg);
-        context.fill(x + 2, y + h - 1, x + w - 2, y + h, adjustAlpha(0x33000000, visualAlpha));
-
-        int textCol = adjustAlpha(hoverT > 0.4f ? COL_TEXT_PRIMARY : COL_TEXT_SECONDARY, visualAlpha);
-        float lw = getFont().getWidth(label, SIZE_SMALL);
-        getFont().draw(context.getMatrices(), label, x + (w - lw) / 2f, y + (h - SIZE_SMALL) / 2f, SIZE_SMALL, textCol);
-    }
-
-    private static int adjustAlpha(int color, float alpha) {
-        int a = (int) (((color >> 24) & 0xFF) * alpha);
-        return (a << 24) | (color & 0xFFFFFF);
-    }
-
-    private float lerp(float a, float b, float t) { return a + (b - a) * t; }
-
-    private float easeOutQuart(float x) { return 1f - (float) Math.pow(1f - x, 4f); }
-
-    private boolean inRect(double mx, double my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
-    }
-
-    private boolean inRect(double mx, double my, int[] r) { return inRect(mx, my, r[0], r[1], r[2], r[3]); }
-
-    private String pluralSaves(int n) {
-        int m100 = n % 100, m10 = n % 10;
-        if (m100 >= 11 && m100 <= 14) return n + " сохранений";
-        if (m10 == 1) return n + " сохранение";
-        if (m10 >= 2 && m10 <= 4) return n + " сохранения";
-        return n + " сохранений";
-    }
-
-    private String pluralItems(int n) {
-        int m100 = n % 100, m10 = n % 10;
-        if (m100 >= 11 && m100 <= 14) return n + " предметов";
-        if (m10 == 1) return n + " предмет";
-        if (m10 >= 2 && m10 <= 4) return n + " предмета";
-        return n + " предметов";
-    }
-
-    // ─── Ввод ────────────────────────────────────────────────────────────────
+    // ─── ОБРАБОТКА МЫШИ И КЛАВИАТУРЫ ──────────────────────────────────────────
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        if (button != 0) return super.mouseClicked(mx, my, button);
-
-        computePanelSize();
-
-        if (!onboardingDismissed && this.height > 480) {
-            int[] r = toastRect();
-            if (inRect(mx, my, r[0] + r[2] - 24, r[1] + 7, 16, 16)) { onboardingDismissed = true; return true; }
-        }
-
-        int px = panelX(), py = panelY();
-        int headerY = py + 32;
-        int lcX = px + PAD;
-        int rcX = lcX + leftColW + COL_GAP;
-        int rcW = (px + panelW - PAD) - rcX;
-
-        if (inRect(mx, my, px + PAD, py + 12, 56, 11)) { backToGame(); return true; }
-
-        int saveW = 92, saveH = 20;
-        if (inRect(mx, my, lcX + leftColW - saveW, headerY - 3, saveW, saveH)) { saveCurrent(); return true; }
-
-        int nameFieldY = headerY + 30, nameFieldH = 20;
-        if (inRect(mx, my, lcX, nameFieldY, leftColW, nameFieldH)) { nameFocused = true; return true; }
-
-        int listY = nameFieldY + nameFieldH + 8;
-        int listBottom = py + panelH - PAD;
-        int listH = listBottom - listY;
-        int contentX = lcX + 6, contentY = listY + 6, contentW = leftColW - 12, contentH = listH - 12;
-        List<InventoryLoadout> loadouts = LoadoutManager.loadouts;
-
-        if (mx >= contentX && mx <= contentX + contentW && my >= contentY && my <= contentY + contentH) {
-            int localY = (int) (my - contentY + listScrollAnim);
-            int index = localY / (CARD_H + CARD_GAP);
-            int within = localY % (CARD_H + CARD_GAP);
-            if (index >= 0 && index < loadouts.size() && within <= CARD_H) {
-                InventoryLoadout l = loadouts.get(index);
-                int rowY = contentY + index * (CARD_H + CARD_GAP) - (int) listScrollAnim;
-                if (inRect(mx, my, cardLoadButtonRect(contentX, rowY, contentW))) { startLoad(l); return true; }
-                if (inRect(mx, my, cardDeleteButtonRect(contentX, rowY, contentW))) { deleteLoadout(l); return true; }
-                selectLoadout(l);
-                return true;
+        if (button == 0) {
+            for (Map.Entry<String, int[]> e : clickBounds.entrySet()) {
+                String key = e.getKey();
+                int[] b = e.getValue();
+                if (inside((float) mx, (float) my, b[0], b[1], b[2], b[3])) {
+                    handleClickAction(key);
+                    return true;
+                }
             }
+            nameFocused = false;
         }
-
-        int refreshW = 76, refreshH = 18;
-        if (inRect(mx, my, rcX + rcW - refreshW, headerY - 2, refreshW, refreshH)) { refreshGhosts(); return true; }
-
-        nameFocused = false;
         return super.mouseClicked(mx, my, button);
     }
 
-    @Override
-    public boolean mouseScrolled(double mx, double my, double hAmt, double vAmt) {
-        listScrollTarget -= (int) (vAmt * 22);
-        if (listScrollTarget < 0) listScrollTarget = 0;
-        return super.mouseScrolled(mx, my, hAmt, vAmt);
+    private void handleClickAction(String key) {
+        if (key.equals("action:close")) {
+            backToGame();
+        } else if (key.equals("input:name")) {
+            nameFocused = true;
+            playClickSound();
+        } else if (key.equals("action:save")) {
+            saveCurrent();
+        } else if (key.startsWith("select:")) {
+            String name = key.substring(7);
+            LoadoutManager.findByName(name).ifPresent(this::selectLoadout);
+            playClickSound();
+        } else if (key.startsWith("load:")) {
+            String name = key.substring(5);
+            LoadoutManager.findByName(name).ifPresent(this::startLoad);
+        } else if (key.startsWith("del:")) {
+            String name = key.substring(4);
+            LoadoutManager.findByName(name).ifPresent(this::deleteLoadout);
+        } else if (key.equals("action:refresh")) {
+            refreshGhosts();
+        } else if (key.equals("action:apply")) {
+            if (selectedLoadout != null) {
+                startLoad(selectedLoadout);
+            }
+        }
     }
 
     @Override
-    public boolean charTyped(char c, int modifiers) {
+    public boolean mouseScrolled(double mx, double my, double horizontalAmount, double verticalAmount) {
+        targetListScroll += (float) (verticalAmount * 24.0);
+        return true;
+    }
+
+    @Override
+    public boolean charTyped(char chr, int modifiers) {
         if (nameFocused) {
-            if (nameInput.length() < 32 && !Character.isISOControl(c)) {
-                nameInput = nameInput.substring(0, cursorPos) + c + nameInput.substring(cursorPos);
-                cursorPos++;
+            if (chr >= 32 && nameInput.length() < 24) {
+                nameInput += chr;
+                return true;
             }
-            return true;
         }
-        return super.charTyped(c, modifiers);
+        return super.charTyped(chr, modifiers);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (nameFocused) {
-            if (keyCode == 259 && cursorPos > 0) {
-                nameInput = nameInput.substring(0, cursorPos - 1) + nameInput.substring(cursorPos);
-                cursorPos--;
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE && !nameInput.isEmpty()) {
+                nameInput = nameInput.substring(0, nameInput.length() - 1);
                 return true;
             }
-            if (keyCode == 261 && cursorPos < nameInput.length()) {
-                nameInput = nameInput.substring(0, cursorPos) + nameInput.substring(cursorPos + 1);
+            if (keyCode == GLFW.GLFW_KEY_ENTER) {
+                saveCurrent();
+                nameFocused = false;
                 return true;
             }
-            if (keyCode == 263 && cursorPos > 0) { cursorPos--; return true; }
-            if (keyCode == 262 && cursorPos < nameInput.length()) { cursorPos++; return true; }
-            if (keyCode == 257 || keyCode == 335) { saveCurrent(); return true; }
-            if (keyCode == 256) { nameFocused = false; return true; }
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                nameFocused = false;
+                return true;
+            }
+        }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            backToGame();
+            return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    // ─── ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ───────────────────────────────────────────────
+
+    private float updateBtnHover(String key, boolean hovered) {
+        float current = btnHoverAnims.getOrDefault(key, 0.0f);
+        float target = hovered ? 1.0f : 0.0f;
+        current += (target - current) * 0.25f;
+        btnHoverAnims.put(key, current);
+        return current;
+    }
+
+    private boolean inside(float mx, float my, float x, float y, float w, float h) {
+        return mx >= x && mx <= x + w && my >= y && my <= y + h;
+    }
+
+    private int withAlpha(int color, float alpha) {
+        int a = Math.max(0, Math.min(255, (int) (((color >>> 24) & 0xFF) * alpha)));
+        return (a << 24) | (color & 0x00FFFFFF);
+    }
+
+    private int interpolateColor(int c1, int c2, float ratio) {
+        ratio = Math.max(0.0f, Math.min(1.0f, ratio));
+        int a1 = (c1 >>> 24) & 0xFF, r1 = (c1 >>> 16) & 0xFF, g1 = (c1 >>> 8) & 0xFF, b1 = c1 & 0xFF;
+        int a2 = (c2 >>> 24) & 0xFF, r2 = (c2 >>> 16) & 0xFF, g2 = (c2 >>> 8) & 0xFF, b2 = c2 & 0xFF;
+        int a = (int) (a1 + (a2 - a1) * ratio);
+        int r = (int) (r1 + (r2 - r1) * ratio);
+        int g = (int) (g1 + (g2 - g1) * ratio);
+        int b = (int) (b1 + (b2 - b1) * ratio);
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 }

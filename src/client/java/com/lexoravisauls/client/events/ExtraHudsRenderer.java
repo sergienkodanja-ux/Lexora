@@ -146,17 +146,17 @@ public class ExtraHudsRenderer {
         drawPanel(context, x, y, keybindsW, keybindsH, alpha, "Keybinds"); // Передаем Имя модуля
 
         // Шапка
-        LexoraIcons.draw(context, LexoraIcons.Icon.KEYBOARD, x + 6, y + 6, 9.0f, (alpha << 24) | 0xFFFFFF);
-        drawString(context, "Keybinds", x + 18, y + 6.5f, 8.0f, (alpha << 24) | 0xFFFFFF);
+        LexoraIcons.draw(context, LexoraIcons.Icon.KEYBOARD, x + 6, y + 6, 9.0f, HudThemeHelper.getTextColor(alpha));
+        drawString(context, "Keybinds", x + 18, y + 6.5f, 8.0f, HudThemeHelper.getTextColor(alpha));
 
         float currentY = y + 23;
         if (activeMods.isEmpty() && showPreview) {
-            drawString(context, "No Active Binds", x + 6, currentY, 7.5f, (alpha << 24) | 0xAAAAAA);
+            drawString(context, "No Active Binds", x + 6, currentY, 7.5f, HudThemeHelper.getSecondaryTextColor(alpha));
         } else {
             for (int i = 0; i < activeMods.size(); i++) {
-                drawString(context, activeMods.get(i), x + 6, currentY, 7.5f, (alpha << 24) | 0xEEEEEE);
+                drawString(context, activeMods.get(i), x + 6, currentY, 7.5f, HudThemeHelper.getTextColor(alpha));
                 String keyStr = activeKeys.get(i);
-                drawString(context, keyStr, x + keybindsW - 6 - width(keyStr, 7.5f), currentY, 7.5f, (alpha << 24) | 0x888888);
+                drawString(context, keyStr, x + keybindsW - 6 - width(keyStr, 7.5f), currentY, 7.5f, HudThemeHelper.getSecondaryTextColor(alpha));
                 currentY += 16;
             }
         }
@@ -208,8 +208,8 @@ public class ExtraHudsRenderer {
         drawPanel(context, x, y, armorW, armorH, alpha, "Armor Status"); // Передаем Имя модуля
 
         // Шапка
-        LexoraIcons.draw(context, LexoraIcons.Icon.SHIELD, x + 6, y + 6, 9.0f, (alpha << 24) | 0xFFFFFF);
-        drawString(context, "Armor", x + 18, y + 6.5f, 8.0f, (alpha << 24) | 0xFFFFFF);
+        LexoraIcons.draw(context, LexoraIcons.Icon.SHIELD, x + 6, y + 6, 9.0f, HudThemeHelper.getTextColor(alpha));
+        drawString(context, "Armor", x + 18, y + 6.5f, 8.0f, HudThemeHelper.getTextColor(alpha));
 
         if (!items.isEmpty() || !showPreview) {
             int currentX = (int) x + 4;
@@ -221,7 +221,7 @@ public class ExtraHudsRenderer {
                     String cnt = String.valueOf(stack.getCount());
                     ms.push();
                     ms.translate(0, 0, 200);
-                    drawString(context, cnt, currentX + 17 - width(cnt, 7.5f), currentY + 9, 7.5f, (alpha << 24) | 0xFFFFFF);
+                    drawString(context, cnt, currentX + 17 - width(cnt, 7.5f), currentY + 9, 7.5f, HudThemeHelper.getTextColor(alpha));
                     ms.pop();
                 }
 
@@ -230,7 +230,7 @@ public class ExtraHudsRenderer {
                     float durabilityLeft = Math.max(0.0f, 1.0f - damageProgress);
                     if (durabilityLeft < 1.0f) {
                         int color = MathHelper.hsvToRgb(durabilityLeft / 3.0f, 1.0f, 1.0f);
-                        drawSmoothRect(context, currentX, currentY + 16, 16, 2, 1f, (alpha << 24) | 0x1E1E1E);
+                        drawSmoothRect(context, currentX, currentY + 16, 16, 2, 1f, HudThemeHelper.getBarTrackColor(alpha));
                         drawSmoothRect(context, currentX, currentY + 16, (int)(16 * durabilityLeft), 2, 1f, (alpha << 24) | (color & 0xFFFFFF));
                     }
                 }
@@ -279,8 +279,8 @@ public class ExtraHudsRenderer {
         drawPanel(context, x, y, invW, invH, alpha, "Inventory HUD"); // Передаем Имя модуля
 
         // Шапка
-        LexoraIcons.draw(context, LexoraIcons.Icon.APPS, x + 6, y + 6, 9.0f, (alpha << 24) | 0xFFFFFF);
-        drawString(context, "Inventory", x + 18, y + 6.5f, 8.0f, (alpha << 24) | 0xFFFFFF);
+        LexoraIcons.draw(context, LexoraIcons.Icon.APPS, x + 6, y + 6, 9.0f, HudThemeHelper.getTextColor(alpha));
+        drawString(context, "Inventory", x + 18, y + 6.5f, 8.0f, HudThemeHelper.getTextColor(alpha));
 
         int startX = (int)x + 6;
         int startY = (int)y + 24;
@@ -299,7 +299,7 @@ public class ExtraHudsRenderer {
                         String cnt = String.valueOf(stack.getCount());
                         ms.push();
                         ms.translate(0, 0, 200);
-                        drawString(context, cnt, slotX + 17 - width(cnt, 7.5f), slotY + 9, 7.5f, (alpha << 24) | 0xFFFFFF);
+                        drawString(context, cnt, slotX + 17 - width(cnt, 7.5f), slotY + 9, 7.5f, HudThemeHelper.getTextColor(alpha));
                         ms.pop();
                     }
                 }
@@ -386,8 +386,8 @@ public class ExtraHudsRenderer {
         drawPanel(context, x, y, coolW, coolH, alpha, "Cooldowns"); // Передаем Имя модуля
 
         // Шапка
-        LexoraIcons.draw(context, LexoraIcons.Icon.HOURGLASS, x + 6, y + 6, 9.0f, (alpha << 24) | 0xFFFFFF);
-        drawString(context, "Cooldowns", x + 18, y + 6.5f, 8.0f, (alpha << 24) | 0xFFFFFF);
+        LexoraIcons.draw(context, LexoraIcons.Icon.HOURGLASS, x + 6, y + 6, 9.0f, HudThemeHelper.getTextColor(alpha));
+        drawString(context, "Cooldowns", x + 18, y + 6.5f, 8.0f, HudThemeHelper.getTextColor(alpha));
 
         float currentY = y + 24;
         for (ItemStack stack : cooldownItems) {
@@ -401,14 +401,14 @@ public class ExtraHudsRenderer {
 
             context.drawItem(stack, (int)x + 6, (int)currentY - 2);
             String name = stack.getItem().getName().getString();
-            drawString(context, name, x + 26, currentY + 1, 7.5f, (alpha << 24) | 0xEEEEEE);
+            drawString(context, name, x + 26, currentY + 1, 7.5f, HudThemeHelper.getTextColor(alpha));
 
             String pct = String.format(java.util.Locale.US, "%.0f%%", progress * 100);
-            drawString(context, pct, x + coolW - 6 - width(pct, 7.5f), currentY + 1, 7.5f, (alpha << 24) | 0xAAAAAA);
+            drawString(context, pct, x + coolW - 6 - width(pct, 7.5f), currentY + 1, 7.5f, HudThemeHelper.getSecondaryTextColor(alpha));
 
             // Тонкая белая полоска
-            drawSmoothRect(context, (int)x + 26, (int)currentY + 11, (int)(coolW - 32), 1, 0.5f, (alpha << 24) | 0x1E1E1E);
-            drawSmoothRect(context, (int)x + 26, (int)currentY + 11, (int)((coolW - 32) * progress), 1, 0.5f, (alpha << 24) | 0xFFFFFF);
+            drawSmoothRect(context, (int)x + 26, (int)currentY + 11, (int)(coolW - 32), 1, 0.5f, HudThemeHelper.getBarTrackColor(alpha));
+            drawSmoothRect(context, (int)x + 26, (int)currentY + 11, (int)((coolW - 32) * progress), 1, 0.5f, HudThemeHelper.getTextColor(alpha));
 
             currentY += 18;
         }
@@ -420,20 +420,11 @@ public class ExtraHudsRenderer {
     // ==========================================================
 
     private static void drawPanel(DrawContext context, float x, float y, float width, float height, int alpha, String moduleName) {
-        // ФИКС: Теперь каждый худ использует свою собственную настройку блюра из LexoraGui!
-        boolean blurEnabled = LexoraGui.moduleStates.getOrDefault(moduleName + " Blur", true);
+    boolean blurEnabled = isModuleEnabled(moduleName + " Blur", true);
+    HudThemeHelper.drawHudPanel(context, x, y, width, height, 6f, alpha, blurEnabled);
+}
 
-        int bgColor = (Math.min(alpha, 160) << 24) | 0x050505;
-
-        if (blurEnabled && alpha > 10) {
-            context.draw(); // <--- ДОБАВИТЬ ЭТО
-            com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(context, x, y, width, height, 6f, 15f, bgColor);
-        } else {
-            drawSmoothRect(context, (int)x, (int)y, (int)width, (int)height, 6f, bgColor);
-        }
-    }
-
-    private static boolean isModuleEnabled(String key, boolean fallback) {
+private static boolean isModuleEnabled(String key, boolean fallback) {
         return LexoraGui.moduleStates.getOrDefault(key, ClientData.moduleStates.getOrDefault(key, fallback)) || ClientData.moduleStates.getOrDefault(key, fallback);
     }
 

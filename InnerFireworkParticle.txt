@@ -1,0 +1,8 @@
+Compiled from "FireworksSparkParticle.java"
+public class net.minecraft.client.particle.FireworksSparkParticle {
+  public net.minecraft.client.particle.FireworksSparkParticle();
+    Code:
+       0: aload_0
+       1: invokespecial #26                 // Method java/lang/Object."<init>":()V
+       4: return
+}

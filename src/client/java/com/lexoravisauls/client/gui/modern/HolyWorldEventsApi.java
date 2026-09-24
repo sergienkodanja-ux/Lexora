@@ -83,7 +83,53 @@ public final class HolyWorldEventsApi {
         return lastSuccessMillis == 0 ? -1 : (System.currentTimeMillis() - lastSuccessMillis) / 1000;
     }
 
-    public static int tierColor(String tier) {
+    public static List<HwEvent> parseRawEvents(String raw) {
+    if (raw == null || raw.trim().isEmpty() || raw.contains("Загрузка")) return List.of();
+    List<HwEvent> list = new ArrayList<>();
+    String[] lines = raw.split("\n");
+    for (String line : lines) {
+        line = line.trim();
+        if (line.isEmpty()) continue;
+        int colonIdx = line.indexOf(':');
+        if (colonIdx == -1) {
+            String clean = line.replace("*", "").trim();
+            if (!clean.isEmpty()) {
+                list.add(new HwEvent("hw", clean, "event", "Ивент", "rare", "Ивент"));
+            }
+            continue;
+        }
+
+        String eventName = line.substring(0, colonIdx).replace("*", "").trim();
+        String serversPart = line.substring(colonIdx + 1).trim();
+
+        String lowerName = eventName.toLowerCase();
+        String tier = "normal";
+        if (lowerName.contains("голос")) tier = "rare";
+        else if (lowerName.contains("босс")) tier = "legendary";
+        else if (lowerName.contains("мист") || lowerName.contains("смерт") || lowerName.contains("сундук")) tier = "epic";
+        else if (lowerName.contains("полян") || lowerName.contains("аирдроп") || lowerName.contains("посылк")) tier = "normal";
+
+        String rarityDisplay = switch (tier) {
+            case "legendary" -> "Легендарный";
+            case "epic" -> "Эпический";
+            case "rare" -> "Голосование";
+            case "normal" -> "Обычный";
+            default -> "Ивент";
+        };
+
+        String[] servers = serversPart.split(",");
+        for (String srv : servers) {
+            String serverName = srv.replace("*", "").trim();
+            if (serverName.isEmpty()) continue;
+
+            String serverCode = serverName.replaceAll("[^0-9a-zA-Zа-яА-Я_#]", "");
+            list.add(new HwEvent(serverCode, serverName, lowerName, eventName, tier, rarityDisplay));
+        }
+    }
+    return list;
+}
+
+public static int tierColor(String tier) {
         return switch (tier) {
             case "legendary" -> 0xFFFFA500;
             case "epic" -> 0xFFB55CFF;

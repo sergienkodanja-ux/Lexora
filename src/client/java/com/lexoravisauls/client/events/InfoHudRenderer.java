@@ -173,11 +173,11 @@ public class InfoHudRenderer {
     }
 
     public static int getBaseX(MinecraftClient mc) {
-        return 5;
+        return com.lexoravisauls.client.gui.HudManager.infoX;
     }
 
     public static int getBaseY(MinecraftClient mc) {
-        return 5;
+        return com.lexoravisauls.client.gui.HudManager.infoY;
     }
 
     private static boolean isInfoEnabled() {
@@ -313,7 +313,7 @@ public class InfoHudRenderer {
     }
 
     private static boolean canEdit(MinecraftClient mc) {
-        return mc.currentScreen instanceof ChatScreen || mc.currentScreen instanceof ModernClickGui || mc.currentScreen instanceof LexoraGui;
+        return mc.currentScreen instanceof ModernClickGui || mc.currentScreen instanceof LexoraGui;
     }
 
     private static IslandType getIslandAt(float mouseX, float mouseY) {
@@ -402,15 +402,16 @@ public class InfoHudRenderer {
         boolean first = true;
 
         if (showName) {
-            LexoraIcons.draw(context, LexoraIcons.Icon.PLAYER, x, centerY - ICON_SIZE / 2.0f, ICON_SIZE, (alphaInt << 24) | 0xFFFFFF);
+            LexoraIcons.draw(context, LexoraIcons.Icon.PLAYER, x, centerY - ICON_SIZE / 2.0f, ICON_SIZE, HudThemeHelper.getTextColor(alphaInt));
             x += ICON_SIZE + 4.0f;
 
             String username = getUsername(mc);
-            drawString(context, username, x, centerY - FONT_SIZE / 2.0f, (alphaInt << 24) | 0xFFFFFF);
+            drawString(context, username, x, centerY - FONT_SIZE / 2.0f, HudThemeHelper.getTextColor(alphaInt));
             x += width(username);
 
             if (showUuid) {
-                String siteUid = System.getProperty("lexora.uid", "???");
+                String siteUid = System.getProperty("lexora.uid", com.lexoravisauls.client.badge.LexoraAccount.uuid != null ? com.lexoravisauls.client.badge.LexoraAccount.uuid : "1");
+                if (siteUid == null || siteUid.isEmpty() || siteUid.equals("???")) siteUid = com.lexoravisauls.client.badge.LexoraAccount.uuid != null ? com.lexoravisauls.client.badge.LexoraAccount.uuid : "1";
                 String drawStr = "UID: " + siteUid;
 
                 x += 4.0f;
@@ -418,7 +419,7 @@ public class InfoHudRenderer {
                 context.getMatrices().scale(0.8f, 0.8f, 1.0f);
                 float scaledX = x / 0.8f;
                 float scaledY = (centerY - (FONT_SIZE * 0.8f) / 2.0f + 0.5f) / 0.8f;
-                drawString(context, drawStr, scaledX, scaledY, (alphaInt << 24) | 0xAAAAAA);
+                drawString(context, drawStr, scaledX, scaledY, HudThemeHelper.getSecondaryTextColor(alphaInt));
                 context.getMatrices().pop();
 
                 x += width(drawStr) * 0.8f;
@@ -430,17 +431,17 @@ public class InfoHudRenderer {
         if (showFps) {
             if (!first) {
                 x += 7.0f;
-                drawString(context, "|", x, centerY - FONT_SIZE / 2.0f, (alphaInt << 24) | 0x9B9B9B);
+                drawString(context, "|", x, centerY - FONT_SIZE / 2.0f, HudThemeHelper.getSecondaryTextColor(alphaInt));
                 x += separatorWidth() + 7.0f;
             }
 
-            LexoraIcons.draw(context, LexoraIcons.Icon.MONITOR, x, centerY - ICON_SIZE / 2.0f, ICON_SIZE, (alphaInt << 24) | 0xFFFFFF);
+            LexoraIcons.draw(context, LexoraIcons.Icon.MONITOR, x, centerY - ICON_SIZE / 2.0f, ICON_SIZE, HudThemeHelper.getTextColor(alphaInt));
             x += ICON_SIZE + 4.0f;
 
-            x = drawAnimatedMetric(context, "fps", x, centerY - FONT_SIZE / 2.0f, (alphaInt << 24) | 0xFFFFFF);
+            x = drawAnimatedMetric(context, "fps", x, centerY - FONT_SIZE / 2.0f, HudThemeHelper.getTextColor(alphaInt));
             x += 2.0f;
 
-            drawString(context, "fps", x, centerY - FONT_SIZE / 2.0f, (alphaInt << 24) | 0x9B9B9B);
+            drawString(context, "fps", x, centerY - FONT_SIZE / 2.0f, HudThemeHelper.getSecondaryTextColor(alphaInt));
             x += width("fps");
 
             first = false;
@@ -449,17 +450,17 @@ public class InfoHudRenderer {
         if (showTps) {
             if (!first) {
                 x += 7.0f;
-                drawString(context, "|", x, centerY - FONT_SIZE / 2.0f, (alphaInt << 24) | 0x9B9B9B);
+                drawString(context, "|", x, centerY - FONT_SIZE / 2.0f, HudThemeHelper.getSecondaryTextColor(alphaInt));
                 x += separatorWidth() + 7.0f;
             }
 
-            LexoraIcons.draw(context, LexoraIcons.Icon.GEAR, x, centerY - ICON_SIZE / 2.0f, ICON_SIZE, (alphaInt << 24) | 0xFFFFFF);
+            LexoraIcons.draw(context, LexoraIcons.Icon.GEAR, x, centerY - ICON_SIZE / 2.0f, ICON_SIZE, HudThemeHelper.getTextColor(alphaInt));
             x += ICON_SIZE + 4.0f;
 
-            x = drawAnimatedMetric(context, "tps", x, centerY - FONT_SIZE / 2.0f, (alphaInt << 24) | 0xFFFFFF);
+            x = drawAnimatedMetric(context, "tps", x, centerY - FONT_SIZE / 2.0f, HudThemeHelper.getTextColor(alphaInt));
             x += 2.0f;
 
-            drawString(context, "tps", x, centerY - FONT_SIZE / 2.0f, (alphaInt << 24) | 0x9B9B9B);
+            drawString(context, "tps", x, centerY - FONT_SIZE / 2.0f, HudThemeHelper.getSecondaryTextColor(alphaInt));
             x += width("tps");
 
             first = false;
@@ -479,15 +480,15 @@ public class InfoHudRenderer {
         boolean first = true;
 
         if (showCoords) {
-            LexoraIcons.draw(context, LexoraIcons.Icon.COMPASS, x, state.y + 5.0f, ICON_SIZE, (alphaInt << 24) | 0xFFFFFF);
+            LexoraIcons.draw(context, LexoraIcons.Icon.COMPASS, x, state.y + 5.0f, ICON_SIZE, HudThemeHelper.getTextColor(alphaInt));
             x += ICON_SIZE + 4.0f;
 
             x = drawAnimatedCoordsPart(context, x, y, "x", "x", alphaInt);
-            drawString(context, "|", x, y, (alphaInt << 24) | 0x9B9B9B);
+            drawString(context, "|", x, y, HudThemeHelper.getSecondaryTextColor(alphaInt));
             x += separatorWidth() + 5.0f;
 
             x = drawAnimatedCoordsPart(context, x, y, "y", "y", alphaInt);
-            drawString(context, "|", x, y, (alphaInt << 24) | 0x9B9B9B);
+            drawString(context, "|", x, y, HudThemeHelper.getSecondaryTextColor(alphaInt));
             x += separatorWidth() + 5.0f;
 
             x = drawAnimatedCoordsPart(context, x, y, "z", "z", alphaInt);
@@ -498,16 +499,16 @@ public class InfoHudRenderer {
         if (showBps) {
             if (!first) x += 10.0f;
 
-            LexoraIcons.draw(context, LexoraIcons.Icon.LIGHTNING, x, state.y + 5.0f, ICON_SIZE, (alphaInt << 24) | 0xFFFFFF);
+            LexoraIcons.draw(context, LexoraIcons.Icon.LIGHTNING, x, state.y + 5.0f, ICON_SIZE, HudThemeHelper.getTextColor(alphaInt));
             x += ICON_SIZE + 4.0f;
 
-            drawString(context, "|", x, y, (alphaInt << 24) | 0x9B9B9B);
+            drawString(context, "|", x, y, HudThemeHelper.getSecondaryTextColor(alphaInt));
             x += separatorWidth() + 5.0f;
 
-            x = drawAnimatedMetric(context, "bps", x, y, (alphaInt << 24) | 0xFFFFFF);
+            x = drawAnimatedMetric(context, "bps", x, y, HudThemeHelper.getTextColor(alphaInt));
             x += 2.0f;
 
-            drawString(context, "b/s", x, y, (alphaInt << 24) | 0x9B9B9B);
+            drawString(context, "b/s", x, y, HudThemeHelper.getSecondaryTextColor(alphaInt));
             x += width("b/s");
 
             first = false;
@@ -516,17 +517,17 @@ public class InfoHudRenderer {
         if (showServer) {
             if (!first) x += 10.0f;
 
-            LexoraIcons.draw(context, LexoraIcons.Icon.SIGNAL, x, state.y + 5.0f, ICON_SIZE, (alphaInt << 24) | 0xFFFFFF);
+            LexoraIcons.draw(context, LexoraIcons.Icon.SIGNAL, x, state.y + 5.0f, ICON_SIZE, HudThemeHelper.getTextColor(alphaInt));
             x += ICON_SIZE + 4.0f;
 
-            drawString(context, trimServer(getServerText(mc)), x, y, (alphaInt << 24) | 0xFFFFFF);
+            drawString(context, trimServer(getServerText(mc)), x, y, HudThemeHelper.getTextColor(alphaInt));
         }
     }
 
     private static float drawAnimatedCoordsPart(DrawContext context, float x, float y, String label, String metricKey, int alphaInt) {
-        drawString(context, label, x, y, (alphaInt << 24) | 0x9B9B9B);
+        drawString(context, label, x, y, HudThemeHelper.getSecondaryTextColor(alphaInt));
         x += width(label) + 2.0f;
-        x = drawAnimatedMetric(context, metricKey, x, y, (alphaInt << 24) | 0xFFFFFF);
+        x = drawAnimatedMetric(context, metricKey, x, y, HudThemeHelper.getTextColor(alphaInt));
         x += 6.0f;
         return x;
     }
@@ -555,7 +556,8 @@ public class InfoHudRenderer {
             float nameW = width(getUsername(mc));
             float uuidW = 0.0f;
             if (showUuid) {
-                String siteUid = System.getProperty("lexora.uid", "???");
+                String siteUid = System.getProperty("lexora.uid", com.lexoravisauls.client.badge.LexoraAccount.uuid != null ? com.lexoravisauls.client.badge.LexoraAccount.uuid : "1");
+                if (siteUid == null || siteUid.isEmpty() || siteUid.equals("???")) siteUid = com.lexoravisauls.client.badge.LexoraAccount.uuid != null ? com.lexoravisauls.client.badge.LexoraAccount.uuid : "1";
                 uuidW = 4.0f + width("UID: " + siteUid) * 0.8f;
             }
 
@@ -686,18 +688,11 @@ public class InfoHudRenderer {
 
     // Тот самый метод отрисовки из Delta-стиля!
     private static void drawBackground(DrawContext context, float x, float y, float width, float height, float radius, int alpha) {
-        boolean blurEnabled = LexoraGui.moduleStates.getOrDefault("Info HUD Blur", false);
-        int bgColor = (Math.min(alpha, 160) << 24) | 0x050505;
+    boolean blurEnabled = ClientData.moduleStates.containsKey("Info HUD Blur") ? ClientData.moduleStates.get("Info HUD Blur") : LexoraGui.moduleStates.getOrDefault("Info HUD Blur", false);
+    HudThemeHelper.drawHudPanel(context, x, y, width, height, radius, alpha, blurEnabled);
+}
 
-        if (blurEnabled && alpha > 10) {
-            context.draw(); // <--- ДОБАВИТЬ ЭТО
-            com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(context, x, y, width, height, radius, 15f, bgColor);
-        } else {
-            RoundedRectShader.draw(context, (int)x, (int)y, (int)width, (int)height, radius, bgColor);
-        }
-    }
-
-    private static void drawAnimatedMetricText(DrawContext context, String newText, String oldText, float x, float y, long startTime, int color) {
+private static void drawAnimatedMetricText(DrawContext context, String newText, String oldText, float x, float y, long startTime, int color) {
         float progress = clamp01((System.currentTimeMillis() - startTime) / (float) NUMBER_ANIM_DURATION);
 
         if (oldText == null || oldText.isEmpty() || progress >= 1.0f) {

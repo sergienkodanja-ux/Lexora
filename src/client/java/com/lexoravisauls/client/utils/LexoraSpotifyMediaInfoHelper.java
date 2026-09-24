@@ -39,15 +39,13 @@ public final class LexoraSpotifyMediaInfoHelper {
 
     private static long lastUpdateMs = 0L;
     private static long lastSeenMs = 0L;
-    private static long lastDebugMs = 0L;
 
-    private static final long UPDATE_INTERVAL_MS = 1200L;
+    private static final long UPDATE_INTERVAL_MS = 350L;
     private static final long TTL_MS = 6500L;
 
     /*
      * true = показывать только сессии, где owner содержит spotify.
      * false = сначала ищет Spotify, но если не нашёл — берёт любую playing media session.
-     * Для теста лучше false, чтобы понять, видит ли библиотека вообще музыку.
      */
     private static final boolean STRICT_SPOTIFY_ONLY = false;
 
@@ -61,8 +59,6 @@ public final class LexoraSpotifyMediaInfoHelper {
 
         initialized = true;
         tick();
-
-        System.out.println("[Lexora Music] MediaPlayerInfo helper initialized");
     }
 
     public static LexoraMediaUtils.MediaInfo getCurrentMedia() {
@@ -125,9 +121,13 @@ public final class LexoraSpotifyMediaInfoHelper {
             return false;
         }
 
+        LexoraMediaUtils.resetTrackClock();
+
         MEDIA_EXECUTOR.execute(() -> {
             try {
                 session.next();
+                Thread.sleep(150L);
+                updateMediaAsync();
             } catch (Throwable ignored) {
             }
         });
@@ -142,9 +142,13 @@ public final class LexoraSpotifyMediaInfoHelper {
             return false;
         }
 
+        LexoraMediaUtils.resetTrackClock();
+
         MEDIA_EXECUTOR.execute(() -> {
             try {
                 session.previous();
+                Thread.sleep(150L);
+                updateMediaAsync();
             } catch (Throwable ignored) {
             }
         });
@@ -153,10 +157,6 @@ public final class LexoraSpotifyMediaInfoHelper {
     }
 
     public static boolean seek(long positionMs) {
-        /*
-         * В MediaPlayerInfo 0.1.0 в IMediaSession нет seek-метода.
-         * Прогресс показываем, но перетаскивание полоски через эту библиотеку не поддерживается.
-         */
         return false;
     }
 
@@ -178,11 +178,6 @@ public final class LexoraSpotifyMediaInfoHelper {
                 updateMediaAsync();
             } catch (Throwable throwable) {
                 clearMedia();
-
-                if (System.currentTimeMillis() - lastDebugMs > 3000L) {
-                    lastDebugMs = System.currentTimeMillis();
-                    System.out.println("[Lexora Music] update failed: " + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
-                }
             } finally {
                 UPDATE_LOCK.set(false);
             }
@@ -196,27 +191,13 @@ public final class LexoraSpotifyMediaInfoHelper {
             sessions = MediaPlayerInfo.Instance.getMediaSessions();
         } catch (Throwable throwable) {
             clearMedia();
-
-            if (System.currentTimeMillis() - lastDebugMs > 3000L) {
-                lastDebugMs = System.currentTimeMillis();
-                System.out.println("[Lexora Music] Cannot get media sessions: " + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
-            }
-
             return;
         }
 
         if (sessions == null || sessions.isEmpty()) {
             clearMedia();
-
-            if (System.currentTimeMillis() - lastDebugMs > 3000L) {
-                lastDebugMs = System.currentTimeMillis();
-                System.out.println("[Lexora Music] sessions=0. Spotify/Windows media session not visible.");
-            }
-
             return;
         }
-
-        debugSessions(sessions);
 
         IMediaSession spotifySession = null;
         MediaInfo spotifyMedia = null;
@@ -310,23 +291,38 @@ public final class LexoraSpotifyMediaInfoHelper {
 
         boolean playing = safePlaying(media);
 
-        long position = 0L;
-        long duration = 0L;
+        long rawPos = 0L;
+        long rawDur = 0L;
         byte[] artwork = new byte[0];
 
         try {
-            position = Math.max(0L, media.getPosition());
+            rawPos = Math.max(0L, media.getPosition());
         } catch (Throwable ignored) {
         }
 
         try {
-            duration = Math.max(0L, media.getDuration());
+            rawDur = Math.max(0L, media.getDuration());
         } catch (Throwable ignored) {
         }
 
         try {
             artwork = media.getArtworkPng();
         } catch (Throwable ignored) {
+        }
+
+        long position;
+        long duration;
+
+        // Определяем единицы измерения (секунды vs миллисекунды)
+        if (rawDur > 0L && rawDur < 10000L) {
+            duration = rawDur * 1000L;
+            position = rawPos * 1000L;
+        } else if (rawDur == 0L && rawPos > 0L && rawPos < 10000L) {
+            duration = 0L;
+            position = rawPos * 1000L;
+        } else {
+            duration = rawDur;
+            position = rawPos;
         }
 
         return new Snapshot(
@@ -408,42 +404,6 @@ public final class LexoraSpotifyMediaInfoHelper {
             return media.getPlaying();
         } catch (Throwable ignored) {
             return false;
-        }
-    }
-
-    private static void debugSessions(List<IMediaSession> sessions) {
-        long now = System.currentTimeMillis();
-
-        if (now - lastDebugMs < 3000L) {
-            return;
-        }
-
-        lastDebugMs = now;
-
-        System.out.println("[Lexora Music] sessions=" + sessions.size());
-
-        for (IMediaSession session : sessions) {
-            try {
-                MediaInfo media = session.getMedia();
-
-                if (media == null) {
-                    System.out.println("[Lexora Music] owner=" + session.getOwner() + " media=null");
-                    continue;
-                }
-
-                System.out.println(
-                        "[Lexora Music] owner="
-                                + session.getOwner()
-                                + " title="
-                                + media.getTitle()
-                                + " artist="
-                                + media.getArtist()
-                                + " playing="
-                                + media.getPlaying()
-                );
-            } catch (Throwable throwable) {
-                System.out.println("[Lexora Music] bad session: " + throwable.getClass().getSimpleName());
-            }
         }
     }
 

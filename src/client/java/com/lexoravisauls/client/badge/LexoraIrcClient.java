@@ -119,6 +119,8 @@ public final class LexoraIrcClient {
         UUID   uuid = client.player.getUuid();
         String name = client.player.getName().getString();
         NAME_TO_UUID.put(name, uuid);
+        NAME_TO_UUID.put(name.toLowerCase(), uuid);
+        LexoraModUsers.addIrcUser(uuid, name);
 
         String targetChannel = currentChannel;
         String textToSend    = text;
@@ -198,7 +200,10 @@ public final class LexoraIrcClient {
                                 String name          = object.get("name").getAsString();
                                 String rawText       = object.get("text").getAsString();
 
-                                NAME_TO_UUID.put(name, UUID.fromString(uuidString));
+                                UUID senderUuid = UUID.fromString(uuidString);
+                                NAME_TO_UUID.put(name, senderUuid);
+                                NAME_TO_UUID.put(name.toLowerCase(), senderUuid);
+                                LexoraModUsers.addIrcUser(senderUuid, name);
                                 if (id > lastMessageId) lastMessageId = id;
 
                                 // Свои сообщения уже добавлены при отправке

@@ -2,11 +2,10 @@ package com.lexoravisauls.client.utils;
 
 import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.events.RoundedRectShader;
+import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.gui.MsdfFont;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gl.ShaderProgramKeys;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
@@ -15,11 +14,12 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.TriState;
 import org.joml.Matrix4f;
-import org.joml.Vector3f;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
+import org.lwjgl.opengl.GL30;
 
-import java.awt.Color;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
@@ -32,28 +32,27 @@ public class GPS {
     // =========================================================================
 
     public static final class GpsWaypoint {
-        public final String name;
-        public double x, y, z; // Убрали final, чтобы можно было редактировать в GUI
-        public int color;      // Добавили цвет для кастомизации из меню
+        public String name; // Редактируется из GpsEditorScreen
+        public double x, y, z;
+        public int color;
+        public int iconBackgroundIndex;
 
-        float   smoothAngle  = 0f;
-        double  smoothArrowX = 0, smoothArrowY = 0;
-        boolean smoothInit   = false;
-
-        final long createdAt = System.currentTimeMillis();
+        public final long createdAt = System.currentTimeMillis();
         public boolean fromCallout = false;
 
         public float floatOffset = -45f;
         public float floatAlpha  = 0f;
-
-        public float ringPhase = 0f;
+        public float screenAlpha = 0f;
 
         public GpsWaypoint(String name, double x, double y, double z) {
             this.name = name;
             this.x = x;
             this.y = y;
             this.z = z;
-            this.color = getAccentColor(name); // Цвет по умолчанию с автоопределением ивентов
+            this.iconBackgroundIndex = detectIconIndex(name);
+            this.color = (this.iconBackgroundIndex >= 0 && this.iconBackgroundIndex < MARKER_COLORS.length)
+                    ? MARKER_COLORS[this.iconBackgroundIndex]
+                    : getAccentColor(name);
         }
 
         public boolean calloutExpired() {
@@ -89,18 +88,91 @@ public class GPS {
     //  Textures & Colors
     // =========================================================================
 
-    private static final Identifier RING_TEX = Identifier.of("lexoravisauls", "textures/gui/jump_circles.png");
-    private static final Identifier ARROW_TEXTURE = Identifier.of("lexoravisauls", "textures/gui/gps_arrow.png");
+    public static final Identifier[] MARKER_TEXTURES = {
+            Identifier.of("lexoravisauls", "textures/gui/pin.png"),        // 0: Точка
+            Identifier.of("lexoravisauls", "textures/gui/beacon.png"),     // 1: Маяк
+            Identifier.of("lexoravisauls", "textures/gui/meteor.png"),     // 2: Метеорит
+            Identifier.of("lexoravisauls", "textures/gui/volcano.png"),    // 3: Вулкан
+            Identifier.of("lexoravisauls", "textures/gui/slaughter.png"),  // 4: Резня
+            Identifier.of("lexoravisauls", "textures/gui/chest.png"),      // 5: Сундук
+            Identifier.of("lexoravisauls", "textures/gui/help.png"),       // 6: Хелпа
+            Identifier.of("lexoravisauls", "textures/gui/target.png"),     // 7: Цель
+            Identifier.of("lexoravisauls", "textures/gui/home.png"),       // 8: База
+            Identifier.of("lexoravisauls", "textures/gui/star.png")        // 9: Звезда
+    };
 
-    private static int getAccentColor(String name) {
-        if (name == null) return 0xFF1D9E75;
+    public static final String[] MARKER_NAMES = {
+            "Точка", "Маяк", "Метеорит", "Вулкан", "Резня", "Сундук", "Хелпа", "Цель", "База", "Звезда"
+    };
+
+    public static final int[] MARKER_COLORS = {
+            0xFF10B981, // 0: Точка (Emerald)
+            0xFF8B5CF6, // 1: Маяк (Electric Purple)
+            0xFFF59E0B, // 2: Метеорит (Amber)
+            0xFFEF4444, // 3: Вулкан (Fiery Red)
+            0xFFDC2626, // 4: Резня (Blood Crimson)
+            0xFFEAB308, // 5: Сундук (Gold)
+            0xFFF43F5E, // 6: Хелпа (Neon Rose)
+            0xFF06B6D4, // 7: Цель (Electric Cyan)
+            0xFF3B82F6, // 8: База (Sky Blue)
+            0xFFFBBF24  // 9: Звезда (Golden Yellow)
+    };
+
+    /** Обратная совместимость с редактором */
+    public static final Identifier[] ICON_BACKGROUND_TEXTURES = MARKER_TEXTURES;
+
+    private static final Identifier ARROW_TEX  = Identifier.of("lexoravisauls", "textures/gui/gps_arrow.png");
+    private static final Identifier CIRCLE_TEX = Identifier.of("lexoravisauls", "textures/gui/jump_circles.png");
+
+    public static int detectIconIndex(String name) {
+        if (name == null) return 0;
         String l = name.toLowerCase(Locale.ROOT);
-        if (l.contains("маяк"))                           return 0xFF7F77DD;
-        if (l.contains("метеор"))                         return 0xFFEF9F27;
-        if (l.contains("вулкан"))                         return 0xFFD85A30;
-        if (l.contains("резня") || l.contains("адск"))    return 0xFFE24B4A;
-        if (l.contains("сундук"))                         return 0xFF888780;
-        return 0xFF1D9E75;
+        if (l.contains("маяк")) return 1;
+        if (l.contains("метеор")) return 2;
+        if (l.contains("вулкан")) return 3;
+        if (l.contains("резня") || l.contains("адск") || l.contains("портал")) return 4;
+        if (l.contains("сундук") || l.contains("смерти") || l.contains("аирдроп")) return 5;
+        if (l.contains("хелп") || l.contains("help") || l.contains("callout") || l.contains("sos") || l.contains("спасите")) return 6;
+        if (l.contains("цель") || l.contains("target") || l.contains("пвп") || l.contains("pvp") || l.contains("килл")) return 7;
+        if (l.contains("дом") || l.contains("база") || l.contains("home") || l.contains("base") || l.contains("хата")) return 8;
+        if (l.contains("звезд") || l.contains("star") || l.contains("топ") || l.contains("vip")) return 9;
+        return 0;
+    }
+
+    public static int getAccentColor(String name) {
+        int idx = detectIconIndex(name);
+        if (idx >= 0 && idx < MARKER_COLORS.length) {
+            return MARKER_COLORS[idx];
+        }
+        return 0xFF10B981;
+    }
+
+    // =========================================================================
+    //  Smooth (bilinear + mipmap) icon rendering
+    // =========================================================================
+
+    private static final Set<Identifier> mipmapChecked = new HashSet<>();
+
+    /**
+     * Custom RenderLayer with bilinear filtering + mipmaps enabled.
+     * Replaces RenderLayer::getGuiTextured everywhere GPS marker icons are drawn.
+     */
+    public static RenderLayer getSmoothGuiTextured(Identifier tex) {
+        return RenderLayer.getGuiTextured(tex);
+    }
+
+    public static void ensureLinearFilter(Identifier tex) {
+        if (tex == null || mc == null) return;
+        try {
+            var t = mc.getTextureManager().getTexture(tex);
+            if (t != null) {
+                t.setFilter(true, true);
+                if (mipmapChecked.add(tex)) {
+                    t.bindTexture();
+                    GL30.glGenerateMipmap(GL30.GL_TEXTURE_2D);
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 
     // =========================================================================
@@ -115,22 +187,47 @@ public class GPS {
     private static String pendingEventName     = null;
     private static long   pendingEventExpireAt = 0L;
 
+    // Beyond this distance, the panel is drawn at a fixed close proxy point
+    // along the camera->waypoint ray instead of at the true world position —
+    // otherwise a very far waypoint projects to a tiny/degenerate screen
+    // point (or behind the far plane) instead of a stable on-screen panel.
     private static final double FAR_PROXY_START_DISTANCE  = 95.0;
     private static final double FAR_PROXY_RENDER_DISTANCE = 38.0;
+
+    // Panel geometry, all in screen px (pre-GUI-scale, same space DrawContext/
+    // RoundedRectShader already draw in elsewhere in this file).
+    private static final float PANEL_HEIGHT        = 22f;
+    private static final float PANEL_ICON_SIZE      = 15f;
+    private static final float PANEL_PAD_X          = 7f;
+    private static final float PANEL_PAD_Y          = 3.5f;
+    private static final float PANEL_ICON_TEXT_GAP  = 7f;
+    private static final float PANEL_NAME_SIZE      = 8.5f;
+    private static final float PANEL_DIST_SIZE      = 7.5f;
+    private static final float PANEL_TEXT_LINE_GAP  = 1.5f;
+    private static final float PANEL_BG_ALPHA       = 0.78f;
+
+    // Longest a name is allowed to make the text column at scale==1 before it
+    // gets ellipsized (see ellipsize(...)) — keeps one very long event name
+    // from stretching the panel across a large chunk of the screen. Distance
+    // strings ("123м"/"1.2км") are always short so this only ever clips name.
+    private static final float PANEL_MAX_TEXT_WIDTH = 130f;
+    // NOTE: PANEL_RADIUS is intentionally gone as a constant — the panel's
+    // corner radius is now always half of the panel's ACTUAL height (computed
+    // per-waypoint below), not a fixed value derived from the base
+    // PANEL_HEIGHT. A fixed radius stopped looking "fully rounded" whenever a
+    // tall name+distance text block pushed the real panel height past the
+    // base constant.
 
     // =========================================================================
     //  Patterns
     // =========================================================================
+    // NOTE: the old ".gps set/clear/list" chat-message patterns are gone — that
+    // whole family of manually-typed commands now lives in GpsCommand as a real
+    // "/gps" slash command instead (see handleLocalCommand's javadoc below for
+    // why). The patterns below are UNRELATED: they belong to the auto-GPS
+    // feature that scans SERVER broadcast messages for event names/coords, and
+    // are untouched.
 
-    private static final Pattern GPS_SET_PATTERN = Pattern.compile(
-            "^\\.gps\\s+set\\s+\"([^\"]+)\"(?:\\s+(-?\\d+)(?:\\s+(-?\\d+))?(?:\\s+(-?\\d+))?)?\\s*$",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern GPS_CLEAR_ALL_PATTERN = Pattern.compile(
-            "^\\.gps\\s+clear\\s*$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern GPS_CLEAR_ONE_PATTERN = Pattern.compile(
-            "^\\.gps\\s+clear\\s+\"([^\"]+)\"\\s*$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern GPS_LIST_PATTERN = Pattern.compile(
-            "^\\.gps\\s+list\\s*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern DEATH_CHEST_PATTERN = Pattern.compile(
             "сундук\\s+смерти.*?появится\\s+уже\\s+через\\s+(\\d+)\\s+минут", Pattern.CASE_INSENSITIVE);
     private static final Pattern EVENT_STARTED_PATTERN = Pattern.compile(
@@ -189,36 +286,22 @@ public class GPS {
     //  Commands
     // =========================================================================
 
+    /**
+     * @deprecated The manually-typed ".gps set/clear/list" chat commands this
+     * used to parse via regex are replaced by the real "/gps" Brigadier
+     * command (see GpsCommand) — a raw chat-message interceptor can never give
+     * tab-completion, which was the whole point of the move. Kept as a no-op
+     * (always "not handled", i.e. the message just sends normally) only in
+     * case something outside these files still calls this before sending
+     * chat; find and remove that call site, then delete this method too.
+     */
+    @Deprecated
     public static boolean handleLocalCommand(String rawMessage) {
-        if (mc.player == null || mc.world == null || rawMessage == null) return false;
-        String msg = rawMessage.trim();
-        if (GPS_LIST_PATTERN.matcher(msg).matches())      { printList(); return true; }
-        if (GPS_CLEAR_ALL_PATTERN.matcher(msg).matches()) {
-            clearAll();
-            mc.player.sendMessage(Text.literal("§cВсе GPS метки очищены"), true);
-            return true;
-        }
-        Matcher co = GPS_CLEAR_ONE_PATTERN.matcher(msg);
-        if (co.matches()) {
-            String n = co.group(1).trim();
-            removeWaypoint(n);
-            mc.player.sendMessage(Text.literal("§cМетка §e" + n + " §cудалена"), true);
-            return true;
-        }
-        Matcher set = GPS_SET_PATTERN.matcher(msg);
-        if (!set.matches()) return false;
-        String name = set.group(1).trim();
-        String g2 = set.group(2), g3 = set.group(3), g4 = set.group(4);
-        double x, y, z;
-        if (g2 == null)      { x = mc.player.getX(); y = mc.player.getY(); z = mc.player.getZ(); }
-        else if (g4 == null) { x = Integer.parseInt(g2); y = Math.floor(mc.player.getY()); z = Integer.parseInt(g3); }
-        else                  { x = Integer.parseInt(g2); y = Integer.parseInt(g3); z = Integer.parseInt(g4); }
-        addWaypoint(name, x, y, z);
-        mc.player.sendMessage(Text.literal("§aGPS: §e" + name + " §7[" + (int)x + " " + (int)y + " " + (int)z + "]"), true);
-        return true;
+        return false;
     }
 
-    private static void printList() {
+    /** Package-private so GpsCommand's "/gps list" can call straight into it. */
+    static void printList() {
         if (mc.player == null) return;
         if (waypoints.isEmpty()) {
             mc.player.sendMessage(Text.literal("§7Нет активных GPS метки"), false);
@@ -228,7 +311,7 @@ public class GPS {
         for (GpsWaypoint w : waypoints) {
             double dist = Math.sqrt(Math.pow(w.x - mc.player.getX(), 2) + Math.pow(w.z - mc.player.getZ(), 2));
             MutableText del = Text.literal("§c[x]").styled(s -> s
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, ".gps clear \"" + w.name + "\""))
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/gps clear " + w.name))
                     .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("§cНажми Enter для удаления"))));
             mc.player.sendMessage(Text.literal("").append(del)
                     .append(Text.literal(" §e" + w.name))
@@ -333,116 +416,6 @@ public class GPS {
     }
 
     // =========================================================================
-    //  HUD — статический текст + вращающаяся стрелка
-    // =========================================================================
-
-    public static void renderHud(DrawContext context) {
-        if (mc.player == null || mc.world == null) return;
-        if (!ClientData.moduleStates.getOrDefault("GPS", false)) return;
-        if (waypoints.isEmpty()) return;
-
-        float cx             = context.getScaledWindowWidth()  / 2.0f;
-        float cy             = context.getScaledWindowHeight() / 2.0f;
-        float distFromCenter = ClientData.numSettings.getOrDefault("GPS HUD Distance", 50.0f);
-        float arrowSize      = ClientData.numSettings.getOrDefault("GPS Arrow Size",   20.0f);
-
-        for (GpsWaypoint w : waypoints)
-            renderWaypointHud(context, w, cx, cy, distFromCenter, arrowSize);
-
-        PartyWaypoint.renderHud(context);
-    }
-
-    private static void renderWaypointHud(DrawContext ctx, GpsWaypoint w,
-                                          float cx, float cy,
-                                          float distFromCenter, float arrowSize) {
-        double deltaX   = w.x - mc.player.getX();
-        double deltaZ   = w.z - mc.player.getZ();
-        double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
-
-        float  yaw = mc.player.getYaw();
-        double cos = Math.cos(Math.toRadians(yaw));
-        double sin = Math.sin(Math.toRadians(yaw));
-        double rotY = -(deltaZ * cos - deltaX * sin);
-        double rotX = -(deltaX * cos + deltaZ * sin);
-        if (Math.abs(rotX) < 0.01 && Math.abs(rotY) < 0.01) return;
-
-        float targetAngle = (float)(Math.atan2(rotY, rotX) * 180.0 / Math.PI);
-        if (!w.smoothInit) { w.smoothAngle = targetAngle; w.smoothInit = true; }
-        float diff = targetAngle - w.smoothAngle;
-        while (diff >  180f) diff -= 360f;
-        while (diff < -180f) diff += 360f;
-        w.smoothAngle += diff * 0.3f;
-
-        double tAX = distFromCenter * MathHelper.cos((float)Math.toRadians(targetAngle)) + cx;
-        double tAY = distFromCenter * MathHelper.sin((float)Math.toRadians(targetAngle)) + cy;
-        w.smoothArrowX += (tAX - w.smoothArrowX) * 0.3;
-        w.smoothArrowY += (tAY - w.smoothArrowY) * 0.3;
-
-        float ax = (float)w.smoothArrowX;
-        float ay = (float)w.smoothArrowY;
-
-        // Берем цвет прямо из нашей метки
-        int accent = w.color;
-        float ar = ((accent >> 16) & 0xFF) / 255f;
-        float ag = ((accent >>  8) & 0xFF) / 255f;
-        float ab = ( accent        & 0xFF) / 255f;
-        float blink = w.blinkAlpha();
-
-        ctx.getMatrices().push();
-        ctx.getMatrices().translate(ax, ay, 0f);
-        ctx.getMatrices().multiply(RotationAxis.POSITIVE_Z.rotationDegrees(w.smoothAngle + 90f));
-        ctx.getMatrices().translate(-arrowSize / 2f, -arrowSize / 2f, 0f);
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.setShaderColor(ar, ag, ab, blink);
-        ctx.drawTexture(RenderLayer::getGuiTextured, ARROW_TEXTURE,
-                0, 0, 0f, 0f, (int)arrowSize, (int)arrowSize, (int)arrowSize, (int)arrowSize);
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-        ctx.getMatrices().pop();
-
-        drawHudElements(ctx, w, (float)distance, ax, ay, arrowSize, blink);
-    }
-
-    private static void drawHudElements(DrawContext ctx, GpsWaypoint w, float distance,
-                                        float ax, float ay, float arrowSize, float blink) {
-
-        float nameSize = 7.0f;
-        float distSize = 7.0f;
-        int alphaI = MathHelper.clamp((int)(255 * blink), 0, 255);
-        if (alphaI < 8) return;
-
-        String cleanName = w.name.replaceAll("§[0-9a-fk-or]", "");
-        float nameW = getFont().getWidth(cleanName, nameSize);
-        String distStr = String.format(Locale.US, "%.0fм", distance);
-        float distW = getFont().getWidth(distStr, distSize);
-
-        int accent = w.color; // Берем цвет прямо из метки
-        int shadowA = MathHelper.clamp((int)(alphaI * 0.6f), 0, 200);
-
-        float textGap = 4f;
-
-        float nameX = ax - nameW / 2f;
-        float nameY = ay - (arrowSize / 2f) - nameSize - textGap;
-
-        float distX = ax - distW / 2f;
-        float distY = ay + (arrowSize / 2f) + textGap;
-
-        float stickW = 2.0f;
-        float stickH = 8.0f;
-        float stickX = ax - (arrowSize / 2f) - stickW - 3f;
-        float stickY = ay - stickH / 2f;
-
-        int stickColor = 0xFFFFFFFF;
-        RoundedRectShader.draw(ctx, (int)stickX, (int)stickY, (int)stickW, (int)stickH, 1.0f, (alphaI << 24) | (stickColor & 0xFFFFFF));
-
-        getFont().draw(ctx.getMatrices(), cleanName, nameX + 1f, nameY + 1f, nameSize, (shadowA << 24) | 0x000000);
-        getFont().draw(ctx.getMatrices(), cleanName, nameX, nameY, nameSize, (alphaI << 24) | 0xFFFFFF);
-
-        getFont().draw(ctx.getMatrices(), distStr, distX + 1f, distY + 1f, distSize, (shadowA << 24) | 0x000000);
-        getFont().draw(ctx.getMatrices(), distStr, distX, distY, distSize, (alphaI << 24) | (accent & 0xFFFFFF));
-    }
-
-    // =========================================================================
     //  Tick — регистрировать в ClientModInitializer через ClientTickEvents
     // =========================================================================
 
@@ -450,39 +423,59 @@ public class GPS {
         waypoints.removeIf(GpsWaypoint::calloutExpired);
 
         for (GpsWaypoint w : waypoints) {
-            w.ringPhase   = (w.ringPhase + 0.013f) % 1.0f;
             w.floatOffset += (0f - w.floatOffset) * 0.04f;
             w.floatAlpha  += (1f - w.floatAlpha)  * 0.04f;
         }
     }
 
     // =========================================================================
-    //  2D проекция плавающего текста
+    //  Waypoint panels — THE marker visual. Rounded pill: icon left, name +
+    //  distance stacked right. No arrow, no floor ring, no separate far/near
+    //  text style — this single method replaces every previous visual
+    //  (drawBatchedFloorRing3D, render3D's billboard quads, and
+    //  render3DAsHud/renderFloatingText2D/draw3DFloatingText) entirely.
     // =========================================================================
 
-    public static void render3DAsHud(DrawContext context, Camera camera, float tickDelta) {
+    /**
+     * Call this from your HUD render hook (same call site the old
+     * render3DAsHud used to occupy) — NOT from a WorldRenderEvents hook. Even
+     * though each waypoint panel represents a position in the 3D world, the
+     * panel itself is 2D screen content (RoundedRectShader draws through
+     * DrawContext, not a MatrixStack billboard) — projecting the world
+     * position to a screen point first and drawing a flat rounded pill there
+     * is what RoundedRectShader is built for, and matches how
+     * PartyWaypoint.render3D already draws its own pill/label in this same
+     * codebase.
+     * <p>
+     * Unlike the old render3DAsHud, this does NOT also call
+     * PartyWaypoint.render3D(...) — that's now a separate call site in
+     * LexoravisaulsClient.java, right next to this one, so the two waypoint
+     * systems (GPS vs. party) stay independent instead of one silently
+     * triggering the other.
+     */
+    public static void renderWaypointPanels(DrawContext context, Camera camera, float tickDelta) {
         if (mc.player == null || mc.world == null) return;
-        if (!ClientData.moduleStates.getOrDefault("GPS", false)) return;
-        if (!ClientData.moduleStates.getOrDefault("GPS Show 3D Marker", true)) return;
-
         if (waypoints.isEmpty()) return;
+
+        boolean gpsEnabled = ClientData.moduleStates.getOrDefault("GPS", false);
 
         double px = MathHelper.lerp(tickDelta, mc.player.prevX, mc.player.getX());
         double py = MathHelper.lerp(tickDelta, mc.player.prevY, mc.player.getY());
         double pz = MathHelper.lerp(tickDelta, mc.player.prevZ, mc.player.getZ());
 
-        for (GpsWaypoint w : waypoints)
-            renderFloatingText2D(context, camera, w, px, py, pz);
-
-        PartyWaypoint.render3D(context, camera, tickDelta);
+        for (GpsWaypoint w : waypoints) {
+            if (!w.fromCallout && !gpsEnabled) continue;
+            drawWaypointPanel(context, camera, w, px, py, pz);
+        }
     }
 
-    private static void renderFloatingText2D(DrawContext ctx, Camera camera, GpsWaypoint w, double px, double py, double pz) {
+    private static void drawWaypointPanel(DrawContext ctx, Camera camera, GpsWaypoint w,
+                                          double px, double py, double pz) {
         Vec3d actualPos = new Vec3d(w.x, w.y + 0.3, w.z);
         double dx = actualPos.x - px;
         double dy = actualPos.y - py;
         double dz = actualPos.z - pz;
-        double actualDistance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        double actualDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         Vec3d camPos   = camera.getPos();
         Vec3d toTarget = actualPos.subtract(camPos);
@@ -491,202 +484,169 @@ public class GPS {
         boolean farProxy = actualDistance > FAR_PROXY_START_DISTANCE;
         Vec3d proxyPos = farProxy ? camPos.add(dir.multiply(FAR_PROXY_RENDER_DISTANCE)) : actualPos;
 
-        Vec3d screen = worldToScreen2D(proxyPos, camera);
-        if (screen == null) return;
-
-        String distStr = actualDistance >= 1000
-                ? String.format(Locale.US, "%.1fкм", actualDistance / 1000.0)
-                : String.format(Locale.US, "%.0fм", actualDistance);
-
-        float scale = farProxy
-                ? MathHelper.clamp(1.0f - (float)(actualDistance - FAR_PROXY_START_DISTANCE) / 600.0f, 0.6f, 1.0f)
-                : MathHelper.clamp(1.0f - (float)(actualDistance / 180.0), 0.6f, 1.0f);
-
         float blink = w.blinkAlpha();
+        float alpha = MathHelper.clamp(blink * w.floatAlpha, 0f, 1f);
+        if (alpha < 0.02f) return;
 
-        draw3DFloatingText(ctx, w.name, distStr, (float)screen.x, (float)screen.y, scale, blink, w);
-    }
-
-    private static void draw3DFloatingText(DrawContext ctx, String name, String dist,
-                                           float screenX, float screenY,
-                                           float scale, float blink, GpsWaypoint w) {
-        int accent = w.color; // Цвет напрямую из метки
-
-        float nameSize = 11f * scale;
-        float distSize =  8.5f * scale;
-        float gap      =  3f * scale;
-
-        String cleanName = name.replaceAll("§[0-9a-fk-or]", "");
-
-        float nameW = getFont().getWidth(cleanName, nameSize);
-        float distW = getFont().getWidth(dist, distSize);
-
-        float floatY = w.floatOffset * scale;
-
-        float nameX = screenX - nameW / 2f;
-        float nameY = screenY - nameSize - gap - distSize + floatY;
-        float distX = screenX - distW / 2f;
-        float distY = nameY + nameSize + gap;
-
-        int baseAlpha = MathHelper.clamp((int)(255 * blink * w.floatAlpha), 0, 255);
-        if (baseAlpha < 8) return;
-
-        int shadowA = MathHelper.clamp((int)(baseAlpha * 0.55f), 0, 180);
-
-        getFont().draw(ctx.getMatrices(), cleanName,
-                nameX + 1f, nameY + 1f, nameSize, (shadowA << 24) | 0x000000);
-        getFont().draw(ctx.getMatrices(), dist,
-                distX + 1f, distY + 1f, distSize, (shadowA << 24) | 0x000000);
-
-        getFont().draw(ctx.getMatrices(), cleanName,
-                nameX, nameY, nameSize, (baseAlpha << 24) | 0xFFFFFF);
-        getFont().draw(ctx.getMatrices(), dist,
-                distX, distY, distSize, (baseAlpha << 24) | (accent & 0xFFFFFF));
-
-        float arrowSize = 12f * scale;
-        float arrowX = screenX;
-        float arrowY = distY + distSize + gap + (arrowSize / 2f) + floatY;
-
-        float ar = ((accent >> 16) & 0xFF) / 255f;
-        float ag = ((accent >>  8) & 0xFF) / 255f;
-        float ab = ( accent        & 0xFF) / 255f;
-        float arrowAlpha = MathHelper.clamp(blink * w.floatAlpha, 0f, 1f);
-
-        ctx.getMatrices().push();
-        ctx.getMatrices().translate(arrowX, arrowY, 0f);
-        ctx.getMatrices().multiply(RotationAxis.POSITIVE_Z.rotationDegrees(180f));
-        ctx.getMatrices().translate(-arrowSize / 2f, -arrowSize / 2f, 0f);
-
-        RenderSystem.enableBlend();
-        RenderSystem.setShaderColor(ar, ag, ab, arrowAlpha);
-        ctx.drawTexture(RenderLayer::getGuiTextured, ARROW_TEXTURE, 0, 0, 0f, 0f, (int)arrowSize, (int)arrowSize, (int)arrowSize, (int)arrowSize);
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-        ctx.getMatrices().pop();
-    }
-
-    // =========================================================================
-    //  3D мировой рендер (ОПТИМИЗИРОВАННЫЙ MULTI-LAYER БАТЧИНГ)
-    // =========================================================================
-
-    public static void render3D(MatrixStack matrices, Camera camera, float tickDelta) {
-        if (mc.player == null || mc.world == null) return;
-        if (!ClientData.moduleStates.getOrDefault("GPS", false)) return;
-        if (!ClientData.moduleStates.getOrDefault("GPS Show 3D Marker", true)) return;
-
-        double px = MathHelper.lerp(tickDelta, mc.player.prevX, mc.player.getX());
-        double py = MathHelper.lerp(tickDelta, mc.player.prevY, mc.player.getY());
-        double pz = MathHelper.lerp(tickDelta, mc.player.prevZ, mc.player.getZ());
-
-        for (GpsWaypoint w : waypoints) {
-            double actualDistance = Math.sqrt(Math.pow(w.x - px, 2) + Math.pow(w.y - py, 2) + Math.pow(w.z - pz, 2));
-            if (actualDistance < 80.0) {
-                drawBatchedFloorRing3D(matrices, camera, w, w.blinkAlpha());
-            }
-        }
-    }
-
-    private static void drawBatchedFloorRing3D(MatrixStack matrices, Camera camera, GpsWaypoint w, float blink) {
-        if (mc.world == null) return;
-
-        int accent = w.color & 0xFFFFFF; // Цвет напрямую из метки
-        float r = ((accent >> 16) & 0xFF) / 255f;
-        float g = ((accent >>  8) & 0xFF) / 255f;
-        float b = ( accent        & 0xFF) / 255f;
-
-        float pulse = (float) (Math.sin(w.ringPhase * Math.PI * 2) * 0.5f + 0.5f);
-        float radius = 0.8f + pulse * 0.6f;
-
-        float alpha = MathHelper.clamp(w.floatAlpha * blink * (0.3f + pulse * 0.7f), 0f, 1f);
-        if (alpha < 0.03f) return;
-
-        double floorY = Math.floor(w.y) + 0.02;
-
-        Vec3d camPos = camera.getPos();
-        float relX = (float)(w.x - camPos.x);
-        float relY = (float)(floorY - camPos.y);
-        float relZ = (float)(w.z - camPos.z);
-
-        RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE);
-        RenderSystem.depthMask(false);
-        RenderSystem.setShaderTexture(0, RING_TEX);
-        RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR_TEX_LIGHTMAP);
-
-        matrices.push();
-        matrices.translate(relX, relY, relZ);
-        Matrix4f mat = matrices.peek().getPositionMatrix();
-
-        Tessellator tess = Tessellator.getInstance();
-
-        // --- Слой 1: аура ---
-        BufferBuilder buf1 = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR_TEXTURE_LIGHT);
-        appendGlowQuad(buf1, mat, radius * 1.8f, r, g, b, alpha * 0.15f);
-        BufferRenderer.drawWithGlobalProgram(buf1.end());
-
-        // --- Слой 2: основное кольцо ---
-        BufferBuilder buf2 = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR_TEXTURE_LIGHT);
-        appendGlowQuad(buf2, mat, radius, r, g, b, alpha);
-        BufferRenderer.drawWithGlobalProgram(buf2.end());
-
-        // --- Слой 3: ядро ---
-        BufferBuilder buf3 = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR_TEXTURE_LIGHT);
-        appendGlowQuad(buf3, mat, radius * 0.45f, r, g, b, Math.min(1f, alpha * 2f));
-        BufferRenderer.drawWithGlobalProgram(buf3.end());
-
-        matrices.pop();
-
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-        RenderSystem.depthMask(true);
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableBlend();
-    }
-
-    private static void appendGlowQuad(BufferBuilder buf, Matrix4f mat, float radius, float r, float g, float b, float a) {
-        int cR = MathHelper.clamp((int)(r * 255), 0, 255);
-        int cG = MathHelper.clamp((int)(g * 255), 0, 255);
-        int cB = MathHelper.clamp((int)(b * 255), 0, 255);
-        int cA = MathHelper.clamp((int)(a * 255), 0, 255);
-
-        float[] xs = { -radius, -radius,  radius,  radius };
-        float[] zs = { -radius,  radius,  radius, -radius };
-        float[] us = {  0f,       0f,      1f,      1f    };
-        float[] vs = {  0f,       1f,      1f,      0f    };
-
-        for (int i = 0; i < 4; i++) {
-            buf.vertex(mat, xs[i], 0f, zs[i])
-                    .color(cR, cG, cB, cA)
-                    .texture(us[i], vs[i])
-                    .light(LightmapTextureManager.MAX_LIGHT_COORDINATE);
-        }
-    }
-
-    // =========================================================================
-    //  Projection
-    // =========================================================================
-
-    private static Vec3d worldToScreen2D(Vec3d worldPos, Camera camera) {
-        Vec3d camPos = camera.getPos();
+        // Camera local coordinates
         Vector3f rel = new Vector3f(
-                (float)(worldPos.x - camPos.x),
-                (float)(worldPos.y - camPos.y),
-                (float)(worldPos.z - camPos.z));
+                (float)(proxyPos.x - camPos.x),
+                (float)(proxyPos.y - camPos.y),
+                (float)(proxyPos.z - camPos.z));
         new Quaternionf(camera.getRotation()).conjugate().transform(rel);
-        if (rel.z() >= -0.001f) return null;
 
         float guiW   = mc.getWindow().getScaledWidth();
         float guiH   = mc.getWindow().getScaledHeight();
         float aspect = guiW / guiH;
         float tan    = (float)Math.tan(Math.toRadians(mc.options.getFov().getValue()) * 0.5);
 
-        float ndcX = rel.x() / (-rel.z() * tan * aspect);
-        float ndcY = rel.y() / (-rel.z() * tan);
-        float sx   = (ndcX * 0.5f + 0.5f) * guiW;
-        float sy   = (0.5f - ndcY * 0.5f) * guiH;
+        boolean inFront = rel.z() < -0.05f;
+        float ndcX = inFront ? (rel.x() / (-rel.z() * tan * aspect)) : 0f;
+        float ndcY = inFront ? (rel.y() / (-rel.z() * tan)) : 0f;
 
-        float pad = 60f;
-        sx = MathHelper.clamp(sx, pad, guiW - pad);
-        sy = MathHelper.clamp(sy, pad, guiH - pad);
+        int accent = w.color & 0xFFFFFF;
+        int iconIdx = (w.iconBackgroundIndex >= 0 && w.iconBackgroundIndex < MARKER_TEXTURES.length)
+                ? w.iconBackgroundIndex : 0;
+        Identifier iconTex = MARKER_TEXTURES[iconIdx];
 
-        return new Vec3d(sx, sy, 0);
+        String distStr = actualDistance >= 1000
+                ? String.format(Locale.US, "%.1fкм", actualDistance / 1000.0)
+                : String.format(Locale.US, "%.0fм", actualDistance);
+
+        // Edge-fade: compute spatial visibility gradient
+        float targetAlpha;
+        if (!inFront) {
+            targetAlpha = 0f;
+        } else {
+            float absX = Math.abs(ndcX);
+            float absY = Math.abs(ndcY);
+            // Safe zone: full opacity. Fade zone: linear falloff to 0 at border.
+            float fadeX = absX < 0.76f ? 1f : absX > 0.90f ? 0f : (0.90f - absX) / (0.90f - 0.76f);
+            float fadeY = absY < 0.72f ? 1f : absY > 0.86f ? 0f : (0.86f - absY) / (0.86f - 0.72f);
+            targetAlpha = Math.min(fadeX, fadeY);
+        }
+
+        // Temporal lerp for smooth fade-in / fade-out
+        w.screenAlpha += (targetAlpha - w.screenAlpha) * 0.18f;
+        if (w.screenAlpha < 0.005f) { w.screenAlpha = 0f; return; }
+        if (w.screenAlpha > 0.995f) w.screenAlpha = 1f;
+
+        // Final alpha incorporates appearance fade, blink, and screen edge fade
+        float finalAlpha = alpha * w.screenAlpha;
+        if (finalAlpha < 0.01f) return;
+
+        float sx = (ndcX * 0.5f + 0.5f) * guiW;
+        float sy = (0.5f - ndcY * 0.5f) * guiH;
+        renderOnScreenPanel(ctx, w, sx, sy, actualDistance, dy, distStr, accent, iconTex, finalAlpha, farProxy);
+    }
+
+    private static void renderOnScreenPanel(DrawContext ctx, GpsWaypoint w, float sx, float sy,
+                                           double dist, double dy, String distStr, int accent,
+                                           Identifier iconTex, float alpha, boolean farProxy) {
+        float userScale = LexoraGui.numSettings.getOrDefault("GPS 3D Marker Size", 1.0f);
+        boolean showDistance = ClientData.moduleStates.getOrDefault("GPS Show Distance", true);
+
+        float scale = (farProxy
+                ? MathHelper.clamp(1.0f - (float) (dist - FAR_PROXY_START_DISTANCE) / 600.0f, 0.68f, 1.0f)
+                : MathHelper.clamp(1.0f - (float) (dist / 180.0), 0.72f, 1.0f)) * userScale;
+
+        String rawName = w.name.replaceAll("§[0-9a-fk-or]", "");
+        float maxNameW = PANEL_MAX_TEXT_WIDTH * scale;
+        float nameSize = 8.5f * scale;
+        float distSize = 7.5f * scale;
+        String cleanName = ellipsize(rawName, nameSize, maxNameW);
+
+        // Height arrow indicator if vertical delta is noticeable
+        String heightStr = "";
+        if (dy > 4.0) heightStr = " ▲" + (int)Math.abs(dy);
+        else if (dy < -4.0) heightStr = " ▼" + (int)Math.abs(dy);
+        String fullDist = showDistance ? (distStr + heightStr) : "";
+
+        float nameW = getFont().getWidth(cleanName, nameSize);
+        float distW = showDistance ? getFont().getWidth(fullDist, distSize) : 0f;
+        float textW = Math.max(nameW, distW);
+
+        float iconBoxSize = 18f * scale;
+        float padX = 6.0f * scale;
+        float padY = 4.0f * scale;
+        float gap  = 5.5f * scale;
+
+        float panelH = showDistance ? Math.max(24f * scale, iconBoxSize + padY * 2f) : Math.max(18f * scale, iconBoxSize + padY * 1.5f);
+        float panelW = padX + iconBoxSize + gap + textW + padX + 2f * scale;
+        float radius = 6f * scale;
+
+        float floatY = w.floatOffset * scale;
+        float panelX = sx - panelW / 2f;
+        float panelY = sy - panelH / 2f + floatY;
+
+        int alphaI = MathHelper.clamp((int) (255 * alpha), 0, 255);
+        if (alphaI < 6) return;
+
+        // Clean sleek glass vertical gradient background (no darkened outline or shadow)
+        int topBg = (((int) (225 * alpha)) << 24) | 0x1A1926;
+        int botBg = (((int) (235 * alpha)) << 24) | 0x100F18;
+        RoundedRectShader.drawVerticalGradient(ctx, panelX, panelY, panelW, panelH, radius, topBg, botBg);
+
+        // Subtle accent outline border (clean and bright, not dark)
+        int borderA = (int) ((50 + (w.fromCallout ? 30 : 0)) * alpha);
+        int borderCol = (borderA << 24) | (accent & 0xFFFFFF);
+        RoundedRectShader.drawOutline(ctx, panelX, panelY, panelW, panelH, radius, 0.5f, borderCol);
+
+        // Icon (clean direct rendering with bilinear filtering — no dark box container or rim)
+        float iconX = panelX + padX;
+        float iconY = panelY + (panelH - iconBoxSize) / 2f;
+
+        ensureLinearFilter(iconTex);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShaderColor(1f, 1f, 1f, alpha);
+        ctx.drawTexture(GPS::getSmoothGuiTextured, iconTex,
+                Math.round(iconX), Math.round(iconY), 0f, 0f,
+                Math.round(iconBoxSize), Math.round(iconBoxSize),
+                Math.round(iconBoxSize), Math.round(iconBoxSize));
+        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+
+        // Typography on the right
+        float textX = iconX + iconBoxSize + gap;
+        if (showDistance) {
+            float textBlockH = nameSize + 2.0f * scale + distSize;
+            float nameY = panelY + (panelH - textBlockH) / 2f;
+            float distY = nameY + nameSize + 2.0f * scale;
+
+            int shadowA = MathHelper.clamp((int) (alphaI * 0.6f), 0, 180);
+            getFont().draw(ctx.getMatrices(), cleanName, textX + 0.6f, nameY + 0.6f, nameSize, (shadowA << 24) | 0x000000);
+            getFont().draw(ctx.getMatrices(), cleanName, textX, nameY, nameSize, (alphaI << 24) | 0xFFEDEDF2);
+
+            getFont().draw(ctx.getMatrices(), fullDist, textX + 0.6f, distY + 0.6f, distSize, (shadowA << 24) | 0x000000);
+            getFont().draw(ctx.getMatrices(), fullDist, textX, distY, distSize, (alphaI << 24) | (accent & 0xFFFFFF));
+        } else {
+            float nameY = panelY + (panelH - nameSize) / 2f;
+            int shadowA = MathHelper.clamp((int) (alphaI * 0.6f), 0, 180);
+            getFont().draw(ctx.getMatrices(), cleanName, textX + 0.6f, nameY + 0.6f, nameSize, (shadowA << 24) | 0x000000);
+            getFont().draw(ctx.getMatrices(), cleanName, textX, nameY, nameSize, (alphaI << 24) | 0xFFEDEDF2);
+        }
+    }
+
+
+
+    /**
+     * 3D in-world rendering (3D свечение отключено по запросу пользователя)
+     */
+    public static void render3D(MatrixStack matrices, Camera camera, float tickDelta) {
+        // 3D свечение и лучи в мире отключены
+    }
+
+    private static String ellipsize(String text, float fontSize, float maxWidth) {
+        if (getFont().getWidth(text, fontSize) <= maxWidth) {
+            return text;
+        }
+        String ellipsis = "...";
+        for (int len = text.length() - 1; len > 0; len--) {
+            String candidate = text.substring(0, len) + ellipsis;
+            if (getFont().getWidth(candidate, fontSize) <= maxWidth) {
+                return candidate;
+            }
+        }
+        return ellipsis;
     }
 }

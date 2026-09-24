@@ -27,6 +27,14 @@ import java.util.Map;
 
 @Mixin(InGameHud.class)
 public class MixinInGameHud {
+    @Inject(method = "renderVignetteOverlay", at = @At("HEAD"), cancellable = true)
+    private void onRenderVignette(DrawContext context, net.minecraft.entity.Entity entity, CallbackInfo ci) {
+        if (com.lexoravisauls.client.modules.Optimization.isFastHud()) {
+            ci.cancel();
+        }
+    }
+
+
 
     @Shadow @Final private PlayerListHud playerListHud;
     private float animHotbarSlot = -1;
@@ -35,6 +43,14 @@ public class MixinInGameHud {
     //  ФИКС БЛЮРА: ГЛОБАЛЬНЫЙ ЗАХВАТ ЭКРАНА ДО ОТРИСОВКИ ИНТЕРФЕЙСА
     //  Это навсегда убирает баг с клонированием текста и иконок в блюре!
     // =====================================================================
+    @Inject(method = "renderCrosshair", at = @At("HEAD"), cancellable = true)
+    private void onRenderCrosshair(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+        if (com.lexoravisauls.client.core.ClientData.moduleStates.getOrDefault("Crosshair", false)) {
+            ci.cancel();
+            com.lexoravisauls.client.events.CrosshairRenderer.render(context, tickCounter);
+        }
+    }
+
     @Inject(method = "render", at = @At("HEAD"))
     private void onRenderCapture(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         try {

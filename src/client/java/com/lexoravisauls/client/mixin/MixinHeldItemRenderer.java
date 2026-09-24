@@ -1,5 +1,6 @@
 package com.lexoravisauls.client.mixin;
 
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.modules.VMAnimations;
 import com.lexoravisauls.client.utils.HandShaderCopy;
@@ -16,24 +17,38 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.ModelTransformationMode;
 import net.minecraft.item.consume.UseAction;
 import net.minecraft.util.Arm;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.MathHelper;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(HeldItemRenderer.class)
-public class MixinHeldItemRenderer {
+public abstract class MixinHeldItemRenderer {
+
+    @Shadow
+    public abstract void renderItem(
+            LivingEntity entity,
+            ItemStack item,
+            ModelTransformationMode modelTransformationMode,
+            boolean leftHanded,
+            MatrixStack matrices,
+            VertexConsumerProvider vertexConsumers,
+            int light
+    );
 
     @Unique
     private static boolean lexora$handShaderActive = false;
@@ -46,6 +61,28 @@ public class MixinHeldItemRenderer {
 
     @Unique
     private static final long lexora$TARGET_HIT_HOLD_MS = 2500L;
+
+    // ── Динамика поворота камеры и шлейфа для шейдера огня/дыма ─────
+    @Unique
+    private static float lexora$lastYaw = 0.0f;
+
+    @Unique
+    private static float lexora$lastPitch = 0.0f;
+
+    @Unique
+    private static float lexora$camVelX = 0.0f;
+
+    @Unique
+    private static float lexora$camVelY = 0.0f;
+
+    @Unique
+    private static float lexora$trailDecay = 0.0f;
+
+    @Unique
+    private static float lexora$trailDirX = 0.0f;
+
+    @Unique
+    private static float lexora$trailDirY = 0.0f;
 
     /*
      * Мини-фикс бага, когда предмет на 1 кадр становится огромным
@@ -77,21 +114,27 @@ public class MixinHeldItemRenderer {
 
     @Unique
     private boolean lexora$isVmEnabled() {
-        return LexoraGui.moduleStates.getOrDefault("View Model", false)
-                || LexoraGui.moduleStates.getOrDefault("ViewModel", false);
+        return ClientData.moduleStates.getOrDefault("View Model",
+                LexoraGui.moduleStates.getOrDefault("View Model", false))
+                || ClientData.moduleStates.getOrDefault("ViewModel",
+                LexoraGui.moduleStates.getOrDefault("ViewModel", false));
     }
 
     @Unique
     private boolean lexora$isStandardMode() {
-        String mode = LexoraGui.modeSettings.getOrDefault("VM Anim", "Standard").trim();
+        String mode = ClientData.modeSettings.getOrDefault("VM Anim",
+                LexoraGui.modeSettings.getOrDefault("VM Anim", "Standard")).trim();
         return mode.equalsIgnoreCase("Standard") || mode.equalsIgnoreCase("Стандарт");
     }
 
     @Unique
     private boolean lexora$isTargetHitMode() {
-        return LexoraGui.moduleStates.getOrDefault("VM Target Hit", false)
-                || LexoraGui.moduleStates.getOrDefault("Target Hit VM", false)
-                || LexoraGui.moduleStates.getOrDefault("Target Hit Anim", false);
+        return ClientData.moduleStates.getOrDefault("VM Target Hit",
+                LexoraGui.moduleStates.getOrDefault("VM Target Hit", false))
+                || ClientData.moduleStates.getOrDefault("Target Hit VM",
+                LexoraGui.moduleStates.getOrDefault("Target Hit VM", false))
+                || ClientData.moduleStates.getOrDefault("Target Hit Anim",
+                LexoraGui.moduleStates.getOrDefault("Target Hit Anim", false));
     }
 
     @Unique
@@ -346,13 +389,75 @@ public class MixinHeldItemRenderer {
         return true;
     }
 
+    /**
+     * Возвращает цвет пламени в зависимости от выбранной темы в Lexora GUI
+     */
+    @Unique
+    private static float[] lexora$getThemeOrFlameColor() {
+        String colorMode = LexoraGui.modeSettings.getOrDefault("Hand Color Mode", "Theme").trim();
+        if (colorMode.equalsIgnoreCase("Custom") || colorMode.equalsIgnoreCase("Свой цвет")) {
+            float[] custom = ClientData.colorSettings.get("Hand Custom Color");
+            if (custom == null) {
+                custom = LexoraGui.colorSettings.get("Hand Custom Color");
+            }
+            if (custom != null && custom.length >= 3) {
+                int rgb = java.awt.Color.HSBtoRGB(custom[0], custom[1], custom[2]);
+                return new float[]{
+                        ((rgb >> 16) & 0xFF) / 255.0f,
+                        ((rgb >> 8) & 0xFF) / 255.0f,
+                        (rgb & 0xFF) / 255.0f
+                };
+            }
+        }
+
+        // Режим Theme / Клиент цвет
+        float[] themeHsv = ClientData.colorSettings.get("Theme Color 1");
+        if (themeHsv == null) {
+            themeHsv = LexoraGui.colorSettings.get("Theme Color 1");
+        }
+        if (themeHsv != null && themeHsv.length >= 3) {
+            int rgb = java.awt.Color.HSBtoRGB(themeHsv[0], themeHsv[1], themeHsv[2]);
+            return new float[]{
+                    ((rgb >> 16) & 0xFF) / 255.0f,
+                    ((rgb >> 8) & 0xFF) / 255.0f,
+                    (rgb & 0xFF) / 255.0f
+            };
+        }
+
+        String theme = LexoraGui.modeSettings.getOrDefault("Theme", "Purple").trim();
+
+        if (theme.equalsIgnoreCase("Red") || theme.equalsIgnoreCase("Красный")) {
+            return new float[]{1.0f, 0.20f, 0.20f};
+        } else if (theme.equalsIgnoreCase("Blue") || theme.equalsIgnoreCase("Синий")) {
+            return new float[]{0.15f, 0.55f, 1.0f};
+        } else if (theme.equalsIgnoreCase("Green") || theme.equalsIgnoreCase("Зеленый")) {
+            return new float[]{0.20f, 0.95f, 0.35f};
+        } else if (theme.equalsIgnoreCase("Orange") || theme.equalsIgnoreCase("Оранжевый") || theme.equalsIgnoreCase("Fire")) {
+            return new float[]{1.0f, 0.45f, 0.12f};
+        } else if (theme.equalsIgnoreCase("Gold") || theme.equalsIgnoreCase("Золотой")) {
+            return new float[]{1.0f, 0.80f, 0.15f};
+        } else if (theme.equalsIgnoreCase("Rainbow") || theme.equalsIgnoreCase("Радуга")) {
+            float hue = (System.currentTimeMillis() % 4000L) / 4000.0f;
+            int rgb = MathHelper.hsvToRgb(hue, 0.85f, 1.0f);
+            return new float[]{
+                    ((rgb >> 16) & 0xFF) / 255.0f,
+                    ((rgb >> 8) & 0xFF) / 255.0f,
+                    (rgb & 0xFF) / 255.0f
+            };
+        }
+
+        // По умолчанию: неоново-фиолетовый стиль Lexora
+        return new float[]{0.65f, 0.25f, 1.0f};
+    }
+
     @Inject(
             method = "renderFirstPersonItem",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/client/util/math/MatrixStack;push()V",
                     shift = At.Shift.AFTER
-            )
+            ),
+            cancellable = true
     )
     private void lexora$applyCustomVm(
             AbstractClientPlayerEntity player,
@@ -390,69 +495,42 @@ public class MixinHeldItemRenderer {
             targetHitActive = lexora$updateTargetHitState(swingProgress);
         }
 
+        // Применяем смещения положения рук из GUI (Right/Left Hand X/Y/Z)
         if (lexora$shouldApplyOffsets(player, hand, item, arm)) {
             VMAnimations.applyGuiOffsets(matrices, arm);
         }
 
         boolean allowCustomAnimationNow = !targetHitGate || targetHitActive;
 
-        if (lexora$shouldApplyCustomAnimation(player, hand, item, arm) && allowCustomAnimationNow) {
-            VMAnimations.handleSwing(matrices, arm, swingProgress);
-        }
-    }
+        if (allowCustomAnimationNow && VMAnimations.shouldApplyAnimation(player, hand, item, arm)) {
+            String mode = ClientData.modeSettings.getOrDefault("VM Anim",
+                    LexoraGui.modeSettings.getOrDefault("VM Anim", "Standard")).trim();
 
-    @Inject(method = "applySwingOffset", at = @At("HEAD"), cancellable = true)
-    private void lexora$blockSwingOffset(
-            MatrixStack matrices,
-            Arm arm,
-            float swingProgress,
-            CallbackInfo ci
-    ) {
-        if (lexora$shouldCancelVanillaForArm(arm)) {
-            ci.cancel();
-        }
-    }
+            boolean applied = VMAnimations.applyCustomAnimation(matrices, mode, swingProgress, arm);
+            if (applied) {
+                boolean isRightArm = arm == Arm.RIGHT;
+                int i = isRightArm ? 1 : -1;
 
-    @Inject(method = "applyEquipOffset", at = @At("HEAD"), cancellable = true)
-    private void lexora$blockEquipOffset(
-            MatrixStack matrices,
-            Arm arm,
-            float equipProgress,
-            CallbackInfo ci
-    ) {
-        MinecraftClient mc = MinecraftClient.getInstance();
+                // Базовая позиция руки первого лица
+                matrices.translate(i * 0.56F, -0.52F, -0.72F);
 
-        if (mc.player != null) {
-            Hand hand = lexora$getHandForArm(arm);
-            ItemStack stack = hand == Hand.MAIN_HAND ? mc.player.getMainHandStack() : mc.player.getOffHandStack();
+                // Отрисовка предмета в руке
+                if (!item.isEmpty()) {
+                    this.renderItem(
+                            player,
+                            item,
+                            isRightArm ? ModelTransformationMode.FIRST_PERSON_RIGHT_HAND : ModelTransformationMode.FIRST_PERSON_LEFT_HAND,
+                            !isRightArm,
+                            matrices,
+                            vertexConsumers,
+                            light
+                    );
+                }
 
-            lexora$updateItemPopFix(hand, stack);
-
-            /*
-             * Второй маленький кусок фикса:
-             * на первый кадр смены предмета не отменяем ванильный equip offset.
-             */
-            if (lexora$shouldBlockOneFramePop(hand, equipProgress)) {
-                return;
+                // Закрываем матричный стек и отменяем ванильную обработку
+                matrices.pop();
+                ci.cancel();
             }
-        }
-
-        if (lexora$shouldCancelVanillaForArm(arm)) {
-            ci.cancel();
-        }
-    }
-
-    @Inject(method = "swingArm", at = @At("HEAD"), cancellable = true)
-    private void lexora$blockSwingArm(
-            float swingProgress,
-            float equipProgress,
-            MatrixStack matrices,
-            int armX,
-            Arm arm,
-            CallbackInfo ci
-    ) {
-        if (lexora$shouldCancelVanillaForArm(arm)) {
-            ci.cancel();
         }
     }
 
@@ -530,14 +608,41 @@ public class MixinHeldItemRenderer {
             return;
         }
 
+        float dYaw = 0.0f;
+        float dPitch = 0.0f;
+
+        // ── Мягкая инерция камеры для подсветки при разворотах ──
+        if (mc.player != null) {
+            float curYaw = mc.player.getYaw();
+            float curPitch = mc.player.getPitch();
+
+            dYaw = MathHelper.wrapDegrees(curYaw - lexora$lastYaw);
+            dPitch = curPitch - lexora$lastPitch;
+            lexora$lastYaw = curYaw;
+            lexora$lastPitch = curPitch;
+
+            // Плавное накопление скорости мыши:
+            // Мышь вправо -> dYaw > 0 -> targetVelX > 0 (в шейдере подсветка уходит влево)
+            // Мышь влево -> dYaw < 0 -> targetVelX < 0 (в шейдере подсветка уходит вправо)
+            float targetVelX = MathHelper.clamp(dYaw * 0.08f, -1.2f, 1.2f);
+            float targetVelY = MathHelper.clamp(dPitch * 0.08f, -1.2f, 1.2f);
+
+            lexora$camVelX += (targetVelX - lexora$camVelX) * 0.30f;
+            lexora$camVelY += (targetVelY - lexora$camVelY) * 0.30f;
+        }
+
         int prevProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
         int prevActiveTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        int prevFBO = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
 
         GL13.glActiveTexture(GL13.GL_TEXTURE0);
         int prevTex0 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
 
         GL13.glActiveTexture(GL13.GL_TEXTURE1);
         int prevTex1 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+
+        GL13.glActiveTexture(GL13.GL_TEXTURE2);
+        int prevTex2 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
 
         int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
         int prevVBO = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
@@ -552,21 +657,23 @@ public class MixinHeldItemRenderer {
         ShaderUtil activeShader = LexoraShaders.getCurrentHandShader();
 
         if (activeShader != null && activeShader.isValid()) {
+            float time = (System.currentTimeMillis() % 100000L) / 1000.0f;
+            float glowPercent = LexoraGui.numSettings.getOrDefault("Hand Glow %", 35.0f);
+            float fireStrength = LexoraGui.numSettings.getOrDefault("Fire Strength", 1.0f);
+            float fireSpeed = LexoraGui.numSettings.getOrDefault("Fire Speed", 1.0f);
+
+            float glow = Math.max(0.0f, Math.min(2.5f, (glowPercent / 100.0f) * 1.5f * fireStrength));
+            float width = (float) mc.getWindow().getFramebufferWidth();
+            float height = (float) mc.getWindow().getFramebufferHeight();
+            float[] flameCol = lexora$getThemeOrFlameColor();
+
             activeShader.bind();
 
             int currentProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
 
             if (currentProgram == activeShader.getProgramID() && currentProgram != 0) {
-                float time = (System.currentTimeMillis() % 100000L) / 1000.0f;
-                float glowPercent = LexoraGui.numSettings.getOrDefault("Hand Glow %", 35.0f);
-                float glow = Math.max(0.0f, Math.min(1.0f, (glowPercent / 100.0f) * 1.8f));
-
                 activeShader.setUniform1f("time", time);
-                activeShader.setUniform2f(
-                        "resolution",
-                        mc.getWindow().getFramebufferWidth(),
-                        mc.getWindow().getFramebufferHeight()
-                );
+                activeShader.setUniform2f("resolution", width, height);
 
                 GL13.glActiveTexture(GL13.GL_TEXTURE0);
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, beforeTex);
@@ -583,28 +690,39 @@ public class MixinHeldItemRenderer {
                     activeShader.setUniform1f("snowIntensity", 2.5f);
                     activeShader.setUniform1f("snowSpeed", 1.5f);
                 } else if (activeShader == LexoraShaders.smokeShader) {
-                    activeShader.setUniform3f("smokeColor", 0.7f, 0.2f, 1.0f);
+                    activeShader.setUniform3f("smokeColor", flameCol[0], flameCol[1], flameCol[2]);
                     activeShader.setUniform1f("smokeIntensity", 3.0f);
                 } else if (activeShader == LexoraShaders.stripesShader) {
-                    activeShader.setUniform3f("stripesColor1", 1.0f, 0.1f, 0.1f);
+                    activeShader.setUniform3f("stripesColor1", flameCol[0], flameCol[1], flameCol[2]);
                     activeShader.setUniform3f("stripesColor2", 0.1f, 0.0f, 0.0f);
                     activeShader.setUniform1f("stripesWidth", 15.0f);
                     activeShader.setUniform1f("stripesSpeed", 8.0f);
                 } else if (activeShader == LexoraShaders.solidShader) {
-                    activeShader.setUniform3f("customColor1", 0.0f, 0.8f, 1.0f);
+                    activeShader.setUniform3f("customColor1", flameCol[0], flameCol[1], flameCol[2]);
                     activeShader.setUniform3f("customColor2", 1.0f, 0.0f, 0.8f);
+                } else if (activeShader == LexoraShaders.fireShader) {
+                    activeShader.setUniform3f("flameColor", flameCol[0], flameCol[1], flameCol[2]);
+                    activeShader.setUniform1f("fireStrength", fireStrength);
+                    activeShader.setUniform1f("fireSpeed", fireSpeed);
+                    activeShader.setUniform2f("camOffset", lexora$camVelX, lexora$camVelY);
                 }
 
-                HandShaderRenderer.render(activeShader);
+                HandShaderRenderer.drawPerfectQuad();
             }
 
             activeShader.unbind();
         }
 
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prevFBO);
+        RenderSystem.viewport(0, 0, mc.getWindow().getFramebufferWidth(), mc.getWindow().getFramebufferHeight());
+
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, prevVBO);
         GL30.glBindVertexArray(prevVAO);
 
         GL20.glUseProgram(prevProgram);
+
+        GL13.glActiveTexture(GL13.GL_TEXTURE2);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTex2);
 
         GL13.glActiveTexture(GL13.GL_TEXTURE1);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTex1);

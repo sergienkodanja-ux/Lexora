@@ -10,10 +10,16 @@ public class AutoSprint {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null) return;
 
+        // Блокируем автоспринт при инвентарном свапе
+        if (ItemSwap.shouldSuppressMovement()) {
+            return;
+        }
+
         if (mc.options.forwardKey.isPressed()
                 && !mc.player.isSneaking()
                 && !mc.player.horizontalCollision) {
             mc.player.setSprinting(true);
+            mc.options.sprintKey.setPressed(true);
         }
     }
 }

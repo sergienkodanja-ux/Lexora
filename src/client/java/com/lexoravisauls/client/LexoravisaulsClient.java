@@ -7,8 +7,6 @@ import com.lexoravisauls.client.badge.LexoraExternalPresence;
 import com.lexoravisauls.client.badge.LexoraIrcClient;
 import com.lexoravisauls.client.core.BindManager;
 import com.lexoravisauls.client.core.ClientData;
-import com.lexoravisauls.client.cosmetics.HornsFeatureRenderer;
-import com.lexoravisauls.client.cosmetics.WingsFeatureRenderer;
 import com.lexoravisauls.client.emotion.AnimationLoader;
 import com.lexoravisauls.client.emotion.EmotionManager;
 import com.lexoravisauls.client.emotion.RadialMenuScreen;
@@ -105,7 +103,12 @@ public class LexoravisaulsClient implements ClientModInitializer {
         TaksaEvents.register();
         TotemSoundManager.init();
         EmotionManager.init();
-
+        com.lexoravisauls.client.cosmetic.CosmeticManager.getInstance().init();
+        RoundedRectShader.register();
+        LexoraSkyRenderer.ensureRegistered();
+        LexoraSessionMonitor.register();
+        GpsCommand.register();
+        com.lexoravisauls.client.modules.virtualdesktop.VirtualDesktopCommand.register();
 
         ClientData.moduleBinds.putIfAbsent("Lexora IRC", GLFW.GLFW_KEY_UNKNOWN);
 
@@ -132,17 +135,18 @@ public class LexoravisaulsClient implements ClientModInitializer {
             ShiftTap.tick();
             FastSwap.tick();
             ItemScroller.tick();
-            RoundedRectShader.register();
             PvPSave.tick();
             Zoom.tick(client);
+            com.lexoravisauls.client.modules.EngineOptimizer.tick();
             AuraParticles.tick();
             MotionClones.tick();
             TapeMouse.tick(client);
             com.lexoravisauls.client.gui.modern.ModernClickGui.HolyWorldJoiner.tick();
-            LexoraSessionMonitor.register();
             HitIndicatorRenderer.onTick(client);
             TotemSoundManager.tick(client);
             RadialMenuModule.tick();
+            com.lexoravisauls.client.modules.weather.WeatherFX.tick();
+            com.lexoravisauls.client.modules.virtualdesktop.VirtualDesktopManager.getInstance().tick(client);
 
 
 
@@ -182,11 +186,6 @@ public class LexoravisaulsClient implements ClientModInitializer {
                 NotifManager.tick(client);
             }
 
-            // Фоновое обновление кэша аксессуаров (раз в 5 сек по таймеру внутри)
-            if (client.player != null) {
-                com.lexoravisauls.client.cosmetics.CosmeticsManager.onClientTick(client.player.getName().getString());
-            }
-
             handleHudDragging(client);
         });
 
@@ -203,8 +202,6 @@ public class LexoravisaulsClient implements ClientModInitializer {
                 }
             }
 
-
-
             float tickDelta = tickCounter.getTickDelta(true);
 
             PredictionRenderer.renderHud(context, tickDelta);
@@ -214,21 +211,11 @@ public class LexoravisaulsClient implements ClientModInitializer {
             ExtraHudsRenderer.render(context, tickDelta);
             InfoHudRenderer.render(context, tickDelta);
             SaturationHudRenderer.render(context, tickCounter.getTickDelta(true));
-            GPS.renderHud(context);
             ScoreboardHudRenderer.render(context, tickDelta);
-            GPS.render3DAsHud(context, MinecraftClient.getInstance().gameRenderer.getCamera(), tickCounter.getTickDelta(true));
+            GPS.renderWaypointPanels(context, MinecraftClient.getInstance().gameRenderer.getCamera(), tickCounter.getTickDelta(true));
+            PartyWaypoint.render3D(context, MinecraftClient.getInstance().gameRenderer.getCamera(), tickCounter.getTickDelta(true));
             HitIndicatorRenderer.renderHud(context, tickDelta);
             TntHudRenderer.render(context, tickDelta);
-        });
-
-        // Регистрация кастомного рендера крыльев, рогов, демонических рожков и копья
-        LivingEntityFeatureRendererRegistrationCallback.EVENT.register((entityType, entityRenderer, registrationHelper, context) -> {
-            if (entityRenderer instanceof PlayerEntityRenderer playerRenderer) {
-                registrationHelper.register(new WingsFeatureRenderer(playerRenderer));
-                registrationHelper.register(new HornsFeatureRenderer(playerRenderer));
-                registrationHelper.register(new com.lexoravisauls.client.cosmetics.HornAccessoryFeatureRenderer(playerRenderer));
-                registrationHelper.register(new com.lexoravisauls.client.cosmetics.SpearFeatureRenderer(playerRenderer));
-            }
         });
 
         WorldRenderEvents.LAST.register(context -> {
@@ -236,22 +223,20 @@ public class LexoravisaulsClient implements ClientModInitializer {
             float tickDelta = context.tickCounter().getTickDelta(true);
             net.minecraft.util.math.Vec3d camPos = context.camera().getPos();
 
+            com.lexoravisauls.client.modules.weather.WeatherFX.render(context.matrixStack(), context.camera(), context.projectionMatrix(), tickDelta);
             HitWave.render(context.matrixStack(), context.camera());
             TargetESPRenderer.render(context.matrixStack(), context.camera(), tickDelta);
             JumpCircleRenderer.render(context.matrixStack(), context.camera(), tickDelta);
             PredictionRenderer.render(context.matrixStack(), context.camera(), tickDelta);
             ParticleSystem.render(context.matrixStack(), context.camera(), tickDelta);
             CustomHitbox.render(context.matrixStack(), context.camera(), tickDelta);
+            com.lexoravisauls.client.events.BlockOverlayRenderer.render(context.matrixStack(), context.camera(), tickDelta);
             TrailManager.onRender(context.matrixStack(), context.camera(), tickDelta);
             FtHelper.render(context.matrixStack(), context.camera(), tickDelta);
             AuraParticles.render(context.matrixStack(), context.camera(), tickDelta);
-            GPS.render3D(context.matrixStack(), context.camera(), tickDelta);
             MotionClones.render(context.matrixStack(), context.camera(), tickDelta);
-        });
-
-        // Очистка кэша аксессуаров при отключении от сервера
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-            com.lexoravisauls.client.cosmetics.CosmeticsManager.clearCache();
+            GPS.render3D(context.matrixStack(), context.camera(), tickDelta);
+            com.lexoravisauls.client.modules.virtualdesktop.VirtualDesktopRenderer.render(context.matrixStack(), context.camera(), context.consumers(), tickDelta);
         });
     }
 

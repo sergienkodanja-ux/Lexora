@@ -157,11 +157,14 @@ java {
     if (JavaVersion.current() < javaVersion) {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
+}
 
-    withSourcesJar()
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}" }
     }
@@ -216,5 +219,67 @@ publishing {
         }
     }
     repositories {
+    }
+}
+
+tasks.register('generateSplashTextures') {
+    doLast {
+        def fontFile = file('src/main/resources/assets/lexoravisauls/font/sfui.ttf')
+        def baseFont = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, fontFile)
+
+        // 1. title_lexora.png
+        def titleFont = baseFont.deriveFont(java.awt.Font.PLAIN, 72f)
+        def tempImg = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        def tempG = tempImg.createGraphics()
+        tempG.setFont(titleFont)
+        def fm = tempG.getFontMetrics()
+        def text = "lexora."
+        int tw = fm.stringWidth(text)
+        int th = fm.getHeight()
+        int asc = fm.getAscent()
+        tempG.dispose()
+
+        int pad = 8
+        int imgW = tw + pad * 2
+        int imgH = th + pad * 2
+        def titleImg = new java.awt.image.BufferedImage(imgW, imgH, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        def g = titleImg.createGraphics()
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+        g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        g.setFont(titleFont)
+        g.setColor(java.awt.Color.WHITE)
+        g.drawString(text, pad, pad + asc)
+        g.dispose()
+
+        def titleOut = file('src/main/resources/assets/lexoravisauls/textures/gui/title_lexora.png')
+        titleOut.parentFile.mkdirs()
+        javax.imageio.ImageIO.write(titleImg, 'PNG', titleOut)
+        println("Generated title_lexora.png: ${imgW}x${imgH}")
+
+        // 2. digits.png (0-9 and %)
+        int cellW = 32
+        int cellH = 44
+        def digitsFont = baseFont.deriveFont(java.awt.Font.PLAIN, 32f)
+        def digitsImg = new java.awt.image.BufferedImage(cellW * 11, cellH, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        def dg = digitsImg.createGraphics()
+        dg.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+        dg.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        dg.setFont(digitsFont)
+        dg.setColor(java.awt.Color.WHITE)
+        def dfm = dg.getFontMetrics()
+        def dasc = dfm.getAscent()
+
+        String[] chars = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "%"]
+        for (int i = 0; i < chars.length; i++) {
+            int cw = dfm.stringWidth(chars[i])
+            int cx = i * cellW + (cellW - cw) / 2
+            int cy = (cellH - dfm.getHeight()) / 2 + dasc
+            dg.drawString(chars[i], cx, cy)
+        }
+        dg.dispose()
+
+        def digitsOut = file('src/main/resources/assets/lexoravisauls/textures/gui/digits.png')
+        javax.imageio.ImageIO.write(digitsImg, 'PNG', digitsOut)
+        println("Generated digits.png: ${cellW * 11}x${cellH}")
     }
 }

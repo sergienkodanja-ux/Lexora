@@ -1,17 +1,19 @@
 package com.lexoravisauls.client.modules;
 
+import com.lexoravisauls.client.core.BindManager;
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.utils.NotifManager;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
+import org.lwjgl.glfw.GLFW;
 
 public class ElytraSwap {
 
@@ -24,17 +26,42 @@ public class ElytraSwap {
     private static boolean wasKeyPressed          = false;
     private static boolean isHotbarSwap           = false;
     private static boolean needReturnOldChestItem = false;
+    private static String  targetItemName         = "";
+
+    // Дебаг выключен
+    private static final boolean DEBUG = false;
+
+    private static void debug(String msg) {
+    }
 
     public static void tick() {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.interactionManager == null || mc.getNetworkHandler() == null) return;
 
-        if (!LexoraGui.moduleStates.getOrDefault("Elytra Swap", false)) { resetState(); return; }
+        boolean isEnabled = ClientData.moduleStates.getOrDefault("Elytra Swap", false)
+                || LexoraGui.moduleStates.getOrDefault("Elytra Swap", false);
 
-        int     bindKey   = LexoraGui.numSettings.getOrDefault("Elytra Swap Action", -1f).intValue();
-        boolean isPressed = bindKey != -1 && InputUtil.isKeyPressed(mc.getWindow().getHandle(), bindKey);
+        if (!isEnabled) {
+            resetState();
+            return;
+        }
 
-        if (isPressed && !wasKeyPressed && step == 0 && mc.currentScreen == null) {
+        int bindKey = BindManager.getStoredBindValue("Elytra Swap Action");
+        if (bindKey == GLFW.GLFW_KEY_UNKNOWN || bindKey == -1) {
+            bindKey = ClientData.moduleBinds.getOrDefault("Elytra Swap Action", GLFW.GLFW_KEY_UNKNOWN);
+        }
+
+        boolean isPressed = bindKey != GLFW.GLFW_KEY_UNKNOWN && bindKey != -1 && mc.getWindow() != null
+                && BindManager.isBindDown(mc.getWindow().getHandle(), bindKey);
+
+        // ── Нажатие клавиши → инициализация ──────────────────
+        if (isPressed && !wasKeyPressed && step == 0) {
+            // Блокируем если открыт чужой экран (сундук, верстак и т.д.)
+            if (mc.currentScreen != null && !(mc.currentScreen instanceof InventoryScreen)) {
+                wasKeyPressed = isPressed;
+                return;
+            }
+
             if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                 wasKeyPressed = isPressed;
                 return;
@@ -53,35 +80,54 @@ public class ElytraSwap {
 
             if (targetSlot != -1) {
                 ItemStack targetStack = mc.player.playerScreenHandler.getSlot(targetSlot).getStack();
-                String actualName = targetStack.getName().getString()
+                targetItemName = targetStack.getName().getString()
                         .replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", "").trim();
-                if (actualName.isEmpty()) actualName = targetStack.getItem().getName().getString();
+                if (targetItemName.isEmpty()) targetItemName = targetStack.getItem().getName().getString();
 
-                NotifManager.show("Свапнул на " + actualName, "Успешно!", NotifManager.NotifType.SUCCESS);
+                debug("Цель: slot=" + targetSlot + " (" + targetItemName + ")");
 
                 if (targetSlot >= 36 && targetSlot <= 44) {
+                    // ─── ХОТБАР: interactItem на бегу ───
                     isHotbarSwap       = true;
                     previousHotbarSlot = mc.player.getInventory().selectedSlot;
-                    step               = 1;
+                    int targetHotbarIdx = targetSlot - 36;
+
+                    if (targetHotbarIdx == previousHotbarSlot) {
+                        step = 10; // Уже в руке
+                    } else {
+                        step = 1;
+                    }
+                    delayTimer = 0;
                 } else {
+                    // ─── ИНВЕНТАРЬ: открыть инв → свап → закрыть ───
                     isHotbarSwap           = false;
                     needReturnOldChestItem = !mc.player.playerScreenHandler.getSlot(CHEST_SLOT).getStack().isEmpty();
-                    step                   = 9; // начинаем со сброса спринта
+                    step                   = 20;
+                    delayTimer             = 0;
+                    debug("Инвентарь: needReturn=" + needReturnOldChestItem);
                 }
-                delayTimer = 0;
+            } else {
+                debug("§cЭлитра/Нагрудник не найдены!");
+                NotifManager.show("Элитра/Нагрудник не найдены!", "Ошибка", NotifManager.NotifType.ERROR);
             }
         }
 
         wasKeyPressed = isPressed;
-        if (step == 0) return;
-        if (delayTimer > 0) { delayTimer--; return; }
 
-        if (isHotbarSwap) handleHotbarSwap(mc);
-        else              handleInventorySwap(mc);
+        // ── Обработка стадий ─────────────────────────────────
+        if (step > 0) {
+            if (delayTimer > 0) {
+                delayTimer--;
+                return;
+            }
+
+            if (isHotbarSwap) handleHotbarSwap(mc);
+            else              handleInventorySwap(mc);
+        }
     }
 
     // =========================================================================
-    //  Хотбар — без инвентаря (interactItem)
+    //  Хотбар — без открытия инвентаря (interactItem на бегу)
     // =========================================================================
 
     private static void handleHotbarSwap(MinecraftClient mc) {
@@ -90,23 +136,37 @@ public class ElytraSwap {
                 int idx = targetSlot - 36;
                 mc.player.getInventory().selectedSlot = idx;
                 mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(idx));
-                step = 2; delayTimer = 2;
+                delayTimer = 1;
+                step = 2;
+                debug("Хотбар: select slot " + idx);
             }
             case 2 -> {
                 mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-                step = 3; delayTimer = 2;
+                delayTimer = 1;
+                step = 3;
+                debug("Хотбар: interactItem");
             }
             case 3 -> {
                 mc.player.getInventory().selectedSlot = previousHotbarSlot;
                 mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(previousHotbarSlot));
+                debug("Хотбар: select back " + previousHotbarSlot);
+                sendSuccessNotif();
                 resetState();
             }
+            case 10 -> {
+                mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+                debug("Прямой interactItem");
+                sendSuccessNotif();
+                resetState();
+            }
+            default -> resetState();
         }
     }
 
     // =========================================================================
-    //  Инвентарь — оригинальная логика, добавлен сброс спринта (шаг 9)
-    //  перед открытием инвентаря чтобы AC не ругался
+    //  Инвентарь: ОТКРЫТЬ → СВАП → ЗАКРЫТЬ (как в ItemSwap/Pulse)
+    //  Открытие инвентаря само естественно сбрасывает спринт.
+    //  Максимально быстро: 1 тик на фазу.
     // =========================================================================
 
     private static void handleInventorySwap(MinecraftClient mc) {
@@ -114,43 +174,67 @@ public class ElytraSwap {
 
         switch (step) {
 
-            // ── Шаг 9: сброс спринта ─────────────────────────────────────────
-            case 9 -> {
-                mc.getNetworkHandler().sendPacket(
-                        new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                mc.player.setSprinting(false);
-                step = 10; delayTimer = 1;
-            }
-
-            // ── Шаг 10: открываем инвентарь ──────────────────────────────────
-            case 10 -> {
-                mc.getNetworkHandler().sendPacket(
-                        new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.OPEN_INVENTORY));
-                step = 11; delayTimer = 2;
-            }
-
-            // ── Шаг 11: берём нужный предмет с курсор ────────────────────────
-            case 11 -> {
-                mc.interactionManager.clickSlot(syncId, targetSlot, 0, SlotActionType.PICKUP, mc.player);
-                step = 12; delayTimer = 1;
-            }
-
-            // ── Шаг 12: кладём в слот нагрудника ─────────────────────────────
-            case 12 -> {
-                mc.interactionManager.clickSlot(syncId, CHEST_SLOT, 0, SlotActionType.PICKUP, mc.player);
-                step = needReturnOldChestItem ? 13 : 14;
+            // ── Фаза 1: открываем инвентарь ──────────────────────────────────
+            case 20 -> {
+                if (!(mc.currentScreen instanceof InventoryScreen)) {
+                    mc.setScreen(new InventoryScreen(mc.player));
+                }
+                debug("Открыл InventoryScreen");
                 delayTimer = 1;
+                step = 21;
             }
 
-            // ── Шаг 13: возвращаем старую вещь обратно ───────────────────────
-            case 13 -> {
-                mc.interactionManager.clickSlot(syncId, targetSlot, 0, SlotActionType.PICKUP, mc.player);
-                step = 14; delayTimer = 1;
+            // ── Фаза 2: берём нужный предмет на курсор ───────────────────────
+            case 21 -> {
+                if (mc.currentScreen instanceof InventoryScreen) {
+                    debug("clickSlot PICKUP: slot=" + targetSlot);
+                    mc.interactionManager.clickSlot(syncId, targetSlot, 0, SlotActionType.PICKUP, mc.player);
+                    delayTimer = 1;
+                    step = 22;
+                } else {
+                    debug("§cИнвентарь закрылся — отмена");
+                    resetState();
+                }
             }
 
-            // ── Шаг 14: закрываем инвентарь ──────────────────────────────────
-            case 14 -> {
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(syncId));
+            // ── Фаза 3: кладём в слот нагрудника (слот 6) ─────────────────────
+            case 22 -> {
+                if (mc.currentScreen instanceof InventoryScreen) {
+                    debug("clickSlot PICKUP: chest slot " + CHEST_SLOT);
+                    mc.interactionManager.clickSlot(syncId, CHEST_SLOT, 0, SlotActionType.PICKUP, mc.player);
+                    if (needReturnOldChestItem) {
+                        delayTimer = 1;
+                        step = 23;
+                    } else {
+                        delayTimer = 1;
+                        step = 24;
+                    }
+                } else {
+                    debug("§cИнвентарь закрылся — отмена");
+                    resetState();
+                }
+            }
+
+            // ── Фаза 4: возвращаем старую вещь обратно в слот ────────────────
+            case 23 -> {
+                if (mc.currentScreen instanceof InventoryScreen) {
+                    debug("clickSlot PICKUP: return old item to slot " + targetSlot);
+                    mc.interactionManager.clickSlot(syncId, targetSlot, 0, SlotActionType.PICKUP, mc.player);
+                    delayTimer = 1;
+                    step = 24;
+                } else {
+                    debug("§cИнвентарь закрылся — отмена");
+                    resetState();
+                }
+            }
+
+            // ── Фаза 5: закрываем инвентарь и завершаем ──────────────────────
+            case 24 -> {
+                if (mc.currentScreen instanceof InventoryScreen) {
+                    mc.setScreen(null);
+                }
+                debug("Закрыл InventoryScreen");
+                sendSuccessNotif();
                 resetState();
             }
 
@@ -159,19 +243,31 @@ public class ElytraSwap {
     }
 
     // =========================================================================
-    //  Публичный метод для AutoSprint
+    //  Публичные методы
     // =========================================================================
 
-    /** true пока идёт свап — AutoSprint паузирует спринт в это время */
-    public static boolean isSwapping() { return step != 0; }
+    public static boolean isSwapping() {
+        return step != 0;
+    }
+
+    public static boolean shouldSuppressMovement() {
+        return false;
+    }
 
     // =========================================================================
     //  Helpers
     // =========================================================================
 
+    private static void sendSuccessNotif() {
+        NotifManager.show("Свапнул на " + targetItemName, "Успешно!", NotifManager.NotifType.SUCCESS);
+    }
+
     private static void resetState() {
-        step = 0; delayTimer = 0; targetSlot = -1;
-        previousHotbarSlot = -1; isHotbarSwap = false;
+        step = 0;
+        delayTimer = 0;
+        targetSlot = -1;
+        previousHotbarSlot = -1;
+        isHotbarSwap = false;
         needReturnOldChestItem = false;
     }
 

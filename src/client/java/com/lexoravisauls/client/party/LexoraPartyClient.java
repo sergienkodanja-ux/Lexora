@@ -3,6 +3,9 @@ package com.lexoravisauls.client.party;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.lexoravisauls.client.utils.CalloutManager;
+import com.lexoravisauls.client.utils.GPS;
+import com.lexoravisauls.client.utils.PartyWaypoint;
 import com.lexoravisauls.client.utils.NotifManager;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
@@ -15,7 +18,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Lexora Party Client — HTTP-логика взаимодействия с party.php на lexoravisuals.fun
@@ -71,7 +76,9 @@ public final class LexoraPartyClient {
             // Авто-отклоняем уведомление если истекло
             if (LexoraPartyManager.activeInviteNotif != null &&
                     LexoraPartyManager.activeInviteNotif.expired()) {
+                var expiredNotif = LexoraPartyManager.activeInviteNotif;
                 LexoraPartyManager.activeInviteNotif = null;
+                respondToRequest(client, expiredNotif.requesterUuid, false);
             }
         });
     }
@@ -175,6 +182,15 @@ public final class LexoraPartyClient {
                 if (notif != null && notif.requesterUuid.equals(targetUuid)) {
                     LexoraPartyManager.activeInviteNotif = null;
                 }
+                // Если есть ещё заявки в очереди, показываем следующую
+                if (LexoraPartyManager.activeInviteNotif == null && !LexoraPartyManager.pendingRequests.isEmpty()) {
+                    var next = LexoraPartyManager.pendingRequests.get(0);
+                    LexoraPartyManager.activeInviteNotif = new LexoraPartyManager.PartyInviteNotif(
+                            next.name, next.uuid, LexoraPartyManager.partyCode,
+                            () -> respondToRequest(client, next.uuid, true),
+                            () -> respondToRequest(client, next.uuid, false)
+                    );
+                }
             });
         });
     }
@@ -259,10 +275,14 @@ public final class LexoraPartyClient {
                     JsonObject json = JsonParser.parseString(resp).getAsJsonObject();
                     JsonArray arr   = json.has("requests") ? json.getAsJsonArray("requests") : new JsonArray();
 
+                    Set<String> serverUuids = new HashSet<>();
+                    boolean addedNew = false;
+
                     for (int i = 0; i < arr.size(); i++) {
                         JsonObject req  = arr.get(i).getAsJsonObject();
                         String reqUuid  = req.get("uuid").getAsString();
                         String reqName  = req.get("name").getAsString();
+                        serverUuids.add(reqUuid);
 
                         // Уже есть в списке?
                         boolean alreadyHave = LexoraPartyManager.pendingRequests
@@ -272,26 +292,35 @@ public final class LexoraPartyClient {
                             LexoraPartyManager.pendingRequests.add(
                                     new LexoraPartyManager.PendingRequest(reqUuid, reqName)
                             );
-
-                            // Показываем Dynamic Island уведомление (первый в очереди)
-                            if (LexoraPartyManager.activeInviteNotif == null) {
-                                LexoraPartyManager.activeInviteNotif =
-                                        new LexoraPartyManager.PartyInviteNotif(
-                                                reqName, reqUuid, LexoraPartyManager.partyCode,
-                                                // onAccept
-                                                () -> respondToRequest(client, reqUuid, true),
-                                                // onDecline
-                                                () -> respondToRequest(client, reqUuid, false)
-                                        );
-
-                                // Звуковой сигнал
-                                if (client.player != null) {
-                                    client.player.playSound(
-                                            SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), 1.0f, 1.0f
-                                    );
-                                }
-                            }
+                            addedNew = true;
                         }
+                    }
+
+                    // Удаляем локальные заявки, которых больше нет на сервере
+                    LexoraPartyManager.pendingRequests.removeIf(r -> !serverUuids.contains(r.uuid));
+                    if (LexoraPartyManager.activeInviteNotif != null &&
+                            !serverUuids.contains(LexoraPartyManager.activeInviteNotif.requesterUuid)) {
+                        LexoraPartyManager.activeInviteNotif = null;
+                    }
+
+                    // Звуковой сигнал при новой заявке
+                    if (addedNew && client.player != null) {
+                        client.player.playSound(
+                                SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), 1.0f, 1.0f
+                        );
+                    }
+
+                    // Показываем Dynamic Island уведомление (первый в очереди)
+                    if (LexoraPartyManager.activeInviteNotif == null && !LexoraPartyManager.pendingRequests.isEmpty()) {
+                        var first = LexoraPartyManager.pendingRequests.get(0);
+                        LexoraPartyManager.activeInviteNotif =
+                                new LexoraPartyManager.PartyInviteNotif(
+                                        first.name, first.uuid, LexoraPartyManager.partyCode,
+                                        // onAccept
+                                        () -> respondToRequest(client, first.uuid, true),
+                                        // onDecline
+                                        () -> respondToRequest(client, first.uuid, false)
+                                );
                     }
                 } catch (Exception ignored) {}
             });
@@ -364,5 +393,51 @@ public final class LexoraPartyClient {
                     System.err.println("[LexoraParty] Ошибка сети: " + e.getMessage());
                     return null;
                 });
+    }
+
+    // ==============================================================
+    // Отправка сигнала хелпы в пати (Единая точка вызова с кулдауном)
+    // ==============================================================
+    private static long lastHelpSendMs = 0L;
+    private static final long HELP_COOLDOWN_MS = 2500L;
+
+    public static void sendPartyHelp() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player == null) return;
+
+        if (!LexoraPartyManager.inParty()) {
+            NotifManager.show("Пати", "Вы не состоите в пати!", NotifManager.NotifType.ERROR);
+            if (mc.player != null) {
+                mc.player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BASS.value(), 1.0f, 0.6f);
+            }
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastHelpSendMs < HELP_COOLDOWN_MS) {
+            long sec = (HELP_COOLDOWN_MS - (now - lastHelpSendMs) + 999) / 1000;
+            NotifManager.show("Хелпа", "Подождите " + sec + " сек!", NotifManager.NotifType.WARNING);
+            return;
+        }
+        lastHelpSendMs = now;
+
+        double x = mc.player.getX();
+        double y = mc.player.getY();
+        double z = mc.player.getZ();
+        String myName = mc.player.getName().getString();
+
+        // 1. Фиксируем свою метку в анти-эхо фильтре
+        CalloutManager.recordPartyMark(myName, x, z);
+
+        // 2. Отправляем сигнал сопартийцам (CalloutManager передаёт координаты и активирует Dynamic Island)
+        CalloutManager.sendCallout();
+
+        // 3. Ставим ровно одну локальную GPS-метку себе на экран
+        GPS.addCalloutWaypoint("Моя метка (Хелпа)", x, y, z);
+
+        if (mc.player != null) {
+            mc.player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), 1.0f, 1.2f);
+        }
+        NotifManager.show("Хелпа в пати", "Метка помощи отправлена!", NotifManager.NotifType.SUCCESS);
     }
 }

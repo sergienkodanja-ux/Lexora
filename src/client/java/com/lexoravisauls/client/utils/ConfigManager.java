@@ -91,6 +91,8 @@ public class ConfigManager {
             positions.addProperty("islandY", DynamicIslandRenderer.islandY);
 
             // Основные худы из HudManager
+            positions.addProperty("infoX", HudManager.infoX);
+            positions.addProperty("infoY", HudManager.infoY);
             positions.addProperty("targetX", HudManager.targetX);
             positions.addProperty("targetY", HudManager.targetY);
             positions.addProperty("keybindsX", HudManager.keybindsX);
@@ -207,6 +209,8 @@ public class ConfigManager {
                 if (positions.has("tntX")) HudManager.tntX = positions.get("tntX").getAsInt();
                 if (positions.has("tntY")) HudManager.tntY = positions.get("tntY").getAsInt();
                 // Основные худы из HudManager
+                if (positions.has("infoX")) HudManager.infoX = positions.get("infoX").getAsInt();
+                if (positions.has("infoY")) HudManager.infoY = positions.get("infoY").getAsInt();
                 if (positions.has("targetX")) HudManager.targetX = positions.get("targetX").getAsInt();
                 if (positions.has("targetY")) HudManager.targetY = positions.get("targetY").getAsInt();
                 if (positions.has("keybindsX")) HudManager.keybindsX = positions.get("keybindsX").getAsInt();

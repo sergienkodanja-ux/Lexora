@@ -1,7 +1,6 @@
 package com.lexoravisauls.client.events;
 
 import com.lexoravisauls.client.gui.LexoraGui;
-import com.lexoravisauls.client.utils.ShaderUtil;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgramKeys;
@@ -9,88 +8,26 @@ import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL13;
-import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL30;
 
 import java.awt.Color;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class CustomHitbox {
 
-    private static ShaderUtil nebulaShader;
-    private static ShaderUtil waterShader;
-    private static ShaderUtil flameShader;
-
-    private static int vaoID = -1;
-    private static int vboID = -1;
-
-    private static void ensureBuffers() {
-        if (vaoID == -1) {
-            vaoID = GL30.glGenVertexArrays();
-        }
-        if (vboID == -1) {
-            vboID = GL15.glGenBuffers();
-        }
-    }
-
-    private static void drawPerfectShaderBox(MatrixStack matrices, Box box) {
-        ensureBuffers();
-
-        float x1 = (float) box.minX, y1 = (float) box.minY, z1 = (float) box.minZ;
-        float x2 = (float) box.maxX, y2 = (float) box.maxY, z2 = (float) box.maxZ;
-
-        float[] vertices = {
-                // front
-                x1, y1, z2,  x2, y1, z2,  x2, y2, z2,   x1, y1, z2,  x2, y2, z2,  x1, y2, z2,
-                // back
-                x2, y1, z1,  x1, y1, z1,  x1, y2, z1,   x2, y1, z1,  x1, y2, z1,  x2, y2, z1,
-                // left
-                x1, y1, z1,  x1, y1, z2,  x1, y2, z2,   x1, y1, z1,  x1, y2, z2,  x1, y2, z1,
-                // right
-                x2, y1, z2,  x2, y1, z1,  x2, y2, z1,   x2, y1, z2,  x2, y2, z1,  x2, y2, z2,
-                // top
-                x1, y2, z2,  x2, y2, z2,  x2, y2, z1,   x1, y2, z2,  x2, y2, z1,  x1, y2, z1,
-                // bottom
-                x1, y1, z1,  x2, y1, z1,  x2, y1, z2,   x1, y1, z1,  x2, y1, z2,  x1, y1, z2
-        };
-
-        Matrix4f stackMat = matrices.peek().getPositionMatrix();
-        for (int i = 0; i < vertices.length; i += 3) {
-            float x = vertices[i];
-            float y = vertices[i + 1];
-            float z = vertices[i + 2];
-
-            vertices[i]     = stackMat.m00() * x + stackMat.m10() * y + stackMat.m20() * z + stackMat.m30();
-            vertices[i + 1] = stackMat.m01() * x + stackMat.m11() * y + stackMat.m21() * z + stackMat.m31();
-            vertices[i + 2] = stackMat.m02() * x + stackMat.m12() * y + stackMat.m22() * z + stackMat.m32();
-        }
-
-        int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
-        int prevVBO = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
-
-        GL30.glBindVertexArray(vaoID);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
-
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, vertices, GL15.GL_DYNAMIC_DRAW);
-        GL20.glEnableVertexAttribArray(0);
-        GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 0, 0L);
-
-        GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 36);
-
-        GL20.glDisableVertexAttribArray(0);
-
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, prevVBO);
-        GL30.glBindVertexArray(prevVAO);
-    }
+    // Плавная анимация появления/исчезновения хитбокса сущностей
+    private static final Map<UUID, Float> animProgress = new HashMap<>();
 
     public static void render(MatrixStack matrices, Camera camera, float tickDelta) {
         if (!LexoraGui.moduleStates.getOrDefault("Custom Hitboxes", false)) return;
@@ -98,142 +35,326 @@ public class CustomHitbox {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.world == null || mc.player == null) return;
 
-        // ОГРАНИЧЕНИЕ ПО ЦЕЛИ: рисуем хитбокс только той сущности, на которую
-        // игрок реально смотрит через стандартный raycast прицела (crosshairTarget).
-        // Raycast у самого Minecraft прерывается на непрозрачных блоках/стенах,
-        // поэтому если между игроком и противником есть преграда — этот блок
-        // просто не сработает, и хитбокс не нарисуется. Это та же логика,
-        // что используется в TargetESPRenderer для подсветки цели.
-        if (mc.crosshairTarget == null || mc.crosshairTarget.getType() != HitResult.Type.ENTITY) return;
-
-        Entity entity = ((EntityHitResult) mc.crosshairTarget).getEntity();
-        if (entity == mc.player || entity.isInvisible()) return;
-
-        boolean shouldRender = false;
-        if (entity instanceof PlayerEntity && LexoraGui.moduleStates.getOrDefault("HB Players", true)) shouldRender = true;
-        else if (entity instanceof ItemEntity && LexoraGui.moduleStates.getOrDefault("HB Items", false)) shouldRender = true;
-        else if (entity instanceof HostileEntity && LexoraGui.moduleStates.getOrDefault("HB Mobs", false)) shouldRender = true;
-
-        if (!shouldRender) return;
-
-        if (nebulaShader == null) nebulaShader = new ShaderUtil("nebula.vsh", "nebula.fsh");
-        if (waterShader == null) waterShader = new ShaderUtil("water.vsh", "water.fsh");
-        if (flameShader == null) flameShader = new ShaderUtil("flame.vsh", "flame.fsh");
-
         String style = LexoraGui.modeSettings.getOrDefault("Hitbox Style", "Solid");
+        String colorMode = LexoraGui.modeSettings.getOrDefault("Hitbox Color Mode", "Custom");
+        float alphaSetting = LexoraGui.numSettings.getOrDefault("Hitbox Alpha", 0.45f);
+        float lineWidth = LexoraGui.numSettings.getOrDefault("Hitbox Line Width", 2.0f);
+        float maxRange = LexoraGui.numSettings.getOrDefault("HB Range", 32.0f);
+        boolean targetOnly = LexoraGui.moduleStates.getOrDefault("HB Only Target", false);
+        boolean hurtPulse = LexoraGui.moduleStates.getOrDefault("HB Hurt Pulse", true);
+        boolean renderPlayers = LexoraGui.moduleStates.getOrDefault("HB Players", true);
+        boolean renderMobs = LexoraGui.moduleStates.getOrDefault("HB Mobs", false);
+        boolean renderItems = LexoraGui.moduleStates.getOrDefault("HB Items", false);
 
-        float[] hsv = LexoraGui.colorSettings.getOrDefault("Hitbox Color", new float[]{0f, 1f, 1f});
-        int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
-        float r = ((rgb >> 16) & 0xFF) / 255f;
-        float g = ((rgb >> 8) & 0xFF) / 255f;
-        float b = (rgb & 0xFF) / 255f;
-        float alpha = LexoraGui.numSettings.getOrDefault("Hitbox Alpha", 0.5f);
+        Entity crossTarget = null;
+        if (mc.crosshairTarget != null && mc.crosshairTarget.getType() == HitResult.Type.ENTITY) {
+            crossTarget = ((EntityHitResult) mc.crosshairTarget).getEntity();
+        }
 
         Vec3d cameraPos = camera.getPos();
+        float time = (System.currentTimeMillis() % 100000L) / 1000f;
 
-        matrices.push();
-        try {
-            double x = entity.prevX + (entity.getX() - entity.prevX) * tickDelta - cameraPos.x;
-            double y = entity.prevY + (entity.getY() - entity.prevY) * tickDelta - cameraPos.y;
-            double z = entity.prevZ + (entity.getZ() - entity.prevZ) * tickDelta - cameraPos.z;
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity == mc.player) continue;
+            if (entity.isRemoved()) continue;
+            if (entity.isInvisible()) continue;
 
-            matrices.translate(x, y, z);
+            boolean typeValid = false;
+            if (entity instanceof PlayerEntity && renderPlayers) typeValid = true;
+            else if ((entity instanceof HostileEntity || entity instanceof MobEntity) && renderMobs) typeValid = true;
+            else if (entity instanceof ItemEntity && renderItems) typeValid = true;
 
-            Box box = entity.getBoundingBox().offset(-entity.getX(), -entity.getY(), -entity.getZ());
+            if (!typeValid) continue;
+
+            double distSq = entity.squaredDistanceTo(mc.player);
+            if (distSq > maxRange * maxRange) continue;
+
+            UUID id = entity.getUuid();
+            boolean isTarget = (entity == crossTarget);
+
+            float currentAnim = animProgress.getOrDefault(id, 0.0f);
+            if (targetOnly) {
+                currentAnim = isTarget ? Math.min(1.0f, currentAnim + 0.15f) : Math.max(0.0f, currentAnim - 0.15f);
+            } else {
+                currentAnim = Math.min(1.0f, currentAnim + 0.15f);
+            }
+            animProgress.put(id, currentAnim);
+
+            if (currentAnim <= 0.01f) continue;
+
+            // Вычисление цвета
+            float r, g, b;
+            if (colorMode.equals("Theme")) {
+                int themeRgb = LexoraGui.getThemeColor(0);
+                r = ((themeRgb >> 16) & 0xFF) / 255f;
+                g = ((themeRgb >> 8) & 0xFF) / 255f;
+                b = (themeRgb & 0xFF) / 255f;
+            } else if (colorMode.equals("Health") && entity instanceof LivingEntity living) {
+                float hpPercent = Math.max(0.0f, Math.min(1.0f, living.getHealth() / Math.max(1.0f, living.getMaxHealth())));
+                if (hpPercent > 0.5f) {
+                    float t = (hpPercent - 0.5f) * 2.0f;
+                    r = 1.0f - t;
+                    g = 1.0f;
+                    b = 0.1f;
+                } else {
+                    float t = hpPercent * 2.0f;
+                    r = 1.0f;
+                    g = t;
+                    b = 0.1f;
+                }
+            } else if (colorMode.equals("Rainbow")) {
+                float hue = (time * 0.2f + (entity.getId() % 10) * 0.1f) % 1.0f;
+                int rgb = Color.HSBtoRGB(hue, 0.85f, 1.0f);
+                r = ((rgb >> 16) & 0xFF) / 255f;
+                g = ((rgb >> 8) & 0xFF) / 255f;
+                b = (rgb & 0xFF) / 255f;
+            } else {
+                float[] hsv = LexoraGui.colorSettings.getOrDefault("Hitbox Color", new float[]{280f / 360f, 1f, 1f});
+                int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
+                r = ((rgb >> 16) & 0xFF) / 255f;
+                g = ((rgb >> 8) & 0xFF) / 255f;
+                b = (rgb & 0xFF) / 255f;
+            }
+
+            // Реакция на получение урона (красная вспышка)
+            if (hurtPulse && entity instanceof LivingEntity living && living.hurtTime > 0) {
+                float hurtFactor = living.hurtTime / 10.0f;
+                r = MathHelper.lerp(hurtFactor, r, 1.0f);
+                g = MathHelper.lerp(hurtFactor, g, 0.15f);
+                b = MathHelper.lerp(hurtFactor, b, 0.15f);
+            }
+
+            float finalAlpha = alphaSetting * currentAnim;
+
+            // Точные координаты с субпиксельной интерполяцией
+            double lerpX = MathHelper.lerp(tickDelta, entity.prevX, entity.getX()) - cameraPos.x;
+            double lerpY = MathHelper.lerp(tickDelta, entity.prevY, entity.getY()) - cameraPos.y;
+            double lerpZ = MathHelper.lerp(tickDelta, entity.prevZ, entity.getZ()) - cameraPos.z;
+
+            Box bb = entity.getBoundingBox();
+            float hw = (float) (bb.getLengthX() * 0.5);
+            float h = (float) bb.getLengthY();
+            float hd = (float) (bb.getLengthZ() * 0.5);
+
+            float x1 = -hw, y1 = 0.0f, z1 = -hd;
+            float x2 = hw, y2 = h, z2 = hd;
+
+            matrices.push();
+            matrices.translate(lerpX, lerpY, lerpZ);
 
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.enableDepthTest();
+            RenderSystem.depthMask(false);
             RenderSystem.disableCull();
-            // ВАЖНО: depthMask(true), а не false. С true бокс честно пишет
-            // свою глубину в depth buffer, поэтому геометрия мира (стены,
-            // блоки), отрисованная до этого момента кадра, нормально
-            // перекрывает полупрозрачный бокс — никакого просвечивания
-            // сквозь препятствия.
-            RenderSystem.depthMask(true);
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-
-            if (style.equals("Solid")) {
-                RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
-                drawSolidBox(matrices, box, r, g, b, alpha);
-            } else {
-                ShaderUtil currentShader = nebulaShader;
-                if (style.equals("Water")) currentShader = waterShader;
-                else if (style.equals("Flame")) currentShader = flameShader;
-
-                if (currentShader != null && currentShader.isValid()) {
-                    int prevProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
-                    int prevActiveTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-                    int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
-                    int prevVBO = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
-
-                    currentShader.bind();
-
-                    if (GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0) {
-                        currentShader.setUniform3f("u_Color", r, g, b);
-                        currentShader.setUniform1f("u_Alpha", alpha);
-                        currentShader.setUniform1f("u_Time", (System.currentTimeMillis() % 100000L) / 1000f);
-                        currentShader.setUniform2f(
-                                "u_Resolution",
-                                mc.getWindow().getFramebufferWidth(),
-                                mc.getWindow().getFramebufferHeight()
-                        );
-
-                        currentShader.setUniformMatrix4f("u_ProjMat", RenderSystem.getProjectionMatrix());
-                        currentShader.setUniformMatrix4f("u_ModelViewMat", RenderSystem.getModelViewMatrix());
-
-                        drawPerfectShaderBox(matrices, box);
-                    }
-
-                    currentShader.unbind();
-
-                    GL20.glUseProgram(prevProgram);
-                    GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, prevVBO);
-                    GL30.glBindVertexArray(prevVAO);
-                    GL13.glActiveTexture(prevActiveTexture);
-
-                    RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-                }
-            }
-
             RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
-            drawBoxOutline(matrices, box, r, g, b, 1.0f);
 
-        } finally {
-            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-            RenderSystem.depthMask(true);
-            RenderSystem.enableCull();
-            RenderSystem.enableDepthTest();
-            RenderSystem.disableBlend();
-            matrices.pop();
+            try {
+                if (style.equals("Solid")) {
+                    drawSolidBox(matrices, x1, y1, z1, x2, y2, z2, r, g, b, finalAlpha);
+                    drawBoxOutline(matrices, x1, y1, z1, x2, y2, z2, r, g, b, Math.min(1.0f, finalAlpha * 2.0f + 0.3f), lineWidth);
+                } else if (style.equals("Nebula")) {
+                    drawNebulaBox(matrices, x1, y1, z1, x2, y2, z2, r, g, b, finalAlpha, time);
+                    drawBoxOutline(matrices, x1, y1, z1, x2, y2, z2, r, g, b, Math.min(1.0f, finalAlpha * 2.0f + 0.25f), lineWidth);
+                } else {
+                    // Flame (Плазма / Огонь)
+                    drawFlameBox(matrices, x1, y1, z1, x2, y2, z2, r, g, b, finalAlpha, time);
+                    drawBoxOutline(matrices, x1, y1, z1, x2, y2, z2, Math.min(1f, r + 0.2f), Math.min(1f, g + 0.2f), b, Math.min(1.0f, finalAlpha * 2.0f + 0.3f), lineWidth);
+                }
+            } finally {
+                matrices.pop();
+            }
         }
 
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+        // Восстановление глобальных состояний рендера
         RenderSystem.depthMask(true);
         RenderSystem.enableCull();
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
-        RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
+        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
     }
 
-    private static void drawBoxOutline(MatrixStack matrices, Box box, float r, float g, float b, float a) {
+    private static void drawSolidBox(MatrixStack matrices, float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b, float a) {
         Matrix4f matrix = matrices.peek().getPositionMatrix();
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+        BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
 
-        float x1 = (float) box.minX, y1 = (float) box.minY, z1 = (float) box.minZ;
-        float x2 = (float) box.maxX, y2 = (float) box.maxY, z2 = (float) box.maxZ;
+        // Front
+        buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a);
 
+        // Back
+        buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a);
+
+        // Left
+        buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a);
+
+        // Right
+        buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a);
+
+        // Top
+        buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a);
+
+        // Bottom
+        buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a);
+        buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a);
+        buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a);
+
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+    }
+
+    private static void drawFlameBox(MatrixStack matrices, float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b, float a, float time) {
+        Matrix4f matrix = matrices.peek().getPositionMatrix();
+        BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+
+        // Плавная динамическая пульсация пламени
+        float flameFlicker1 = (float) (Math.sin(time * 4.5f) * 0.2f + 0.8f);
+        float flameFlicker2 = (float) (Math.cos(time * 3.8f + 1.2f) * 0.2f + 0.8f);
+        float flameFlicker3 = (float) (Math.sin(time * 5.2f + 2.4f) * 0.2f + 0.8f);
+        float flameFlicker4 = (float) (Math.cos(time * 4.1f + 3.6f) * 0.2f + 0.8f);
+
+        // Основание (горячее, яркое ядро пламени)
+        float baseR = Math.min(1.0f, r + 0.3f);
+        float baseG = Math.min(1.0f, g + 0.2f);
+        float baseB = b * 0.8f;
+        float baseAlpha = Math.min(1.0f, a * 1.1f);
+
+        // Верх (языки пламени, плавно затухающие и колышущиеся)
+        float topR = r;
+        float topG = g * 0.85f;
+        float topB = b * 0.6f;
+        float topA1 = a * 0.35f * flameFlicker1;
+        float topA2 = a * 0.35f * flameFlicker2;
+        float topA3 = a * 0.35f * flameFlicker3;
+        float topA4 = a * 0.35f * flameFlicker4;
+
+        // Front (x1..x2, y1..y2, z2)
+        buffer.vertex(matrix, x1, y1, z2).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x2, y1, z2).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x2, y2, z2).color(topR, topG, topB, topA2);
+        buffer.vertex(matrix, x1, y2, z2).color(topR, topG, topB, topA1);
+
+        // Back (x2..x1, y1..y2, z1)
+        buffer.vertex(matrix, x2, y1, z1).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x1, y1, z1).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x1, y2, z1).color(topR, topG, topB, topA4);
+        buffer.vertex(matrix, x2, y2, z1).color(topR, topG, topB, topA3);
+
+        // Left (x1, y1..y2, z1..z2)
+        buffer.vertex(matrix, x1, y1, z1).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x1, y1, z2).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x1, y2, z2).color(topR, topG, topB, topA1);
+        buffer.vertex(matrix, x1, y2, z1).color(topR, topG, topB, topA4);
+
+        // Right (x2, y1..y2, z2..z1)
+        buffer.vertex(matrix, x2, y1, z2).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x2, y1, z1).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x2, y2, z1).color(topR, topG, topB, topA3);
+        buffer.vertex(matrix, x2, y2, z2).color(topR, topG, topB, topA2);
+
+        // Top
+        float avgTopA = (topA1 + topA2 + topA3 + topA4) * 0.25f;
+        buffer.vertex(matrix, x1, y2, z2).color(topR, topG, topB, avgTopA);
+        buffer.vertex(matrix, x2, y2, z2).color(topR, topG, topB, avgTopA);
+        buffer.vertex(matrix, x2, y2, z1).color(topR, topG, topB, avgTopA);
+        buffer.vertex(matrix, x1, y2, z1).color(topR, topG, topB, avgTopA);
+
+        // Bottom
+        buffer.vertex(matrix, x1, y1, z1).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x2, y1, z1).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x2, y1, z2).color(baseR, baseG, baseB, baseAlpha);
+        buffer.vertex(matrix, x1, y1, z2).color(baseR, baseG, baseB, baseAlpha);
+
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+    }
+
+    private static void drawNebulaBox(MatrixStack matrices, float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b, float a, float time) {
+        Matrix4f matrix = matrices.peek().getPositionMatrix();
+        BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+
+        // Космические гармоники по 4 углам
+        float w1 = (float) (Math.sin(time * 1.8f) * 0.35f + 0.65f);
+        float w2 = (float) (Math.cos(time * 2.2f + 1.0f) * 0.35f + 0.65f);
+        float w3 = (float) (Math.sin(time * 1.5f + 2.0f) * 0.35f + 0.65f);
+        float w4 = (float) (Math.cos(time * 2.6f + 3.0f) * 0.35f + 0.65f);
+
+        // Цвета вершин: красивый космический градиент (индиго, фиолетовый, бирюзовый, неоновый)
+        float c1R = Math.min(1.0f, r * w1 + 0.15f), c1G = g * w1, c1B = Math.min(1.0f, b * w1 + 0.25f), c1A = a * (0.5f + 0.5f * w1);
+        float c2R = r * w2, c2G = Math.min(1.0f, g * w2 + 0.15f), c2B = Math.min(1.0f, b * w2 + 0.35f), c2A = a * (0.5f + 0.5f * w2);
+        float c3R = Math.min(1.0f, r * w3 + 0.25f), c3G = Math.min(1.0f, g * w3 + 0.1f), c3B = b * w3, c3A = a * (0.5f + 0.5f * w3);
+        float c4R = r * w4, c4G = g * w4, c4B = Math.min(1.0f, b * w4 + 0.3f), c4A = a * (0.5f + 0.5f * w4);
+
+        // Front
+        buffer.vertex(matrix, x1, y1, z2).color(c1R, c1G, c1B, c1A);
+        buffer.vertex(matrix, x2, y1, z2).color(c2R, c2G, c2B, c2A);
+        buffer.vertex(matrix, x2, y2, z2).color(c3R, c3G, c3B, c3A);
+        buffer.vertex(matrix, x1, y2, z2).color(c4R, c4G, c4B, c4A);
+
+        // Back
+        buffer.vertex(matrix, x2, y1, z1).color(c2R, c2G, c2B, c2A);
+        buffer.vertex(matrix, x1, y1, z1).color(c1R, c1G, c1B, c1A);
+        buffer.vertex(matrix, x1, y2, z1).color(c4R, c4G, c4B, c4A);
+        buffer.vertex(matrix, x2, y2, z1).color(c3R, c3G, c3B, c3A);
+
+        // Left
+        buffer.vertex(matrix, x1, y1, z1).color(c1R, c1G, c1B, c1A);
+        buffer.vertex(matrix, x1, y1, z2).color(c1R, c1G, c1B, c1A);
+        buffer.vertex(matrix, x1, y2, z2).color(c4R, c4G, c4B, c4A);
+        buffer.vertex(matrix, x1, y2, z1).color(c4R, c4G, c4B, c4A);
+
+        // Right
+        buffer.vertex(matrix, x2, y1, z2).color(c2R, c2G, c2B, c2A);
+        buffer.vertex(matrix, x2, y1, z1).color(c2R, c2G, c2B, c2A);
+        buffer.vertex(matrix, x2, y2, z1).color(c3R, c3G, c3B, c3A);
+        buffer.vertex(matrix, x2, y2, z2).color(c3R, c3G, c3B, c3A);
+
+        // Top
+        buffer.vertex(matrix, x1, y2, z2).color(c4R, c4G, c4B, c4A * 0.8f);
+        buffer.vertex(matrix, x2, y2, z2).color(c3R, c3G, c3B, c3A * 0.8f);
+        buffer.vertex(matrix, x2, y2, z1).color(c3R, c3G, c3B, c3A * 0.8f);
+        buffer.vertex(matrix, x1, y2, z1).color(c4R, c4G, c4B, c4A * 0.8f);
+
+        // Bottom
+        buffer.vertex(matrix, x1, y1, z1).color(c1R, c1G, c1B, c1A * 0.6f);
+        buffer.vertex(matrix, x2, y1, z1).color(c2R, c2G, c2B, c2A * 0.6f);
+        buffer.vertex(matrix, x2, y1, z2).color(c2R, c2G, c2B, c2A * 0.6f);
+        buffer.vertex(matrix, x1, y1, z2).color(c1R, c1G, c1B, c1A * 0.6f);
+
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+    }
+
+    private static void drawBoxOutline(MatrixStack matrices, float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b, float a, float width) {
+        Matrix4f matrix = matrices.peek().getPositionMatrix();
+        BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+
+        // Bottom rectangle
         buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a);
         buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a);
         buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a); buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a);
         buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a); buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a);
 
+        // Top rectangle
         buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a);
         buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a);
         buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a); buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a);
         buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a); buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a);
 
+        // Pillars
         buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a);
         buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a);
         buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a); buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a);
@@ -242,56 +363,7 @@ public class CustomHitbox {
         BufferRenderer.drawWithGlobalProgram(buffer.end());
     }
 
-    private static void drawSolidBox(MatrixStack matrices, Box box, float r, float g, float b, float a) {
-        Matrix4f matrix = matrices.peek().getPositionMatrix();
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-
-        float x1 = (float) box.minX, y1 = (float) box.minY, z1 = (float) box.minZ;
-        float x2 = (float) box.maxX, y2 = (float) box.maxY, z2 = (float) box.maxZ;
-
-        buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a); buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a);
-        buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a); buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a);
-
-        buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a);
-        buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a);
-
-        buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a);
-        buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a); buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a);
-
-        buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a);
-        buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a); buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a);
-
-        buffer.vertex(matrix, x1, y2, z1).color(r, g, b, a); buffer.vertex(matrix, x1, y2, z2).color(r, g, b, a);
-        buffer.vertex(matrix, x2, y2, z2).color(r, g, b, a); buffer.vertex(matrix, x2, y2, z1).color(r, g, b, a);
-
-        buffer.vertex(matrix, x1, y1, z1).color(r, g, b, a); buffer.vertex(matrix, x2, y1, z1).color(r, g, b, a);
-        buffer.vertex(matrix, x2, y1, z2).color(r, g, b, a); buffer.vertex(matrix, x1, y1, z2).color(r, g, b, a);
-
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
-    }
-
     public static void cleanup() {
-        if (nebulaShader != null) {
-            nebulaShader.delete();
-            nebulaShader = null;
-        }
-        if (waterShader != null) {
-            waterShader.delete();
-            waterShader = null;
-        }
-        if (flameShader != null) {
-            flameShader.delete();
-            flameShader = null;
-        }
-
-        if (vboID != -1) {
-            GL15.glDeleteBuffers(vboID);
-            vboID = -1;
-        }
-        if (vaoID != -1) {
-            GL30.glDeleteVertexArrays(vaoID);
-            vaoID = -1;
-        }
+        animProgress.clear();
     }
 }

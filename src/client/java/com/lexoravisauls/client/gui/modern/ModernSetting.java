@@ -12,7 +12,8 @@ public class ModernSetting {
         COLOR,
         BIND,
         HEADER,
-        PAD2D
+        PAD2D,
+        CROSSHAIR_CANVAS
     }
 
     public final Type type;
@@ -63,6 +64,10 @@ public class ModernSetting {
 
     public static ModernSetting header(String label) {
         return new ModernSetting(Type.HEADER, null, label);
+    }
+
+    public static ModernSetting crosshairCanvas(String key, String label) {
+        return new ModernSetting(Type.CROSSHAIR_CANVAS, key, label);
     }
 
     public static ModernSetting pad2d(String keyX, String keyY, String label,

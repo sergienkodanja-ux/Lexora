@@ -1,192 +1,437 @@
 package com.lexoravisauls.client.modules;
 
+import com.lexoravisauls.client.core.BindManager;
+import com.lexoravisauls.client.core.ClientData;
+import com.lexoravisauls.client.gui.ItemSwapWheelScreen;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.utils.NotifManager;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.client.util.InputUtil;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import org.lwjgl.glfw.GLFW;
 
+import java.util.Optional;
+
+/**
+ * ItemSwap — быстрый и безопасный свап предметов в левую руку (оффхенд).
+ *
+ * Полное устранение детектов BadPackets (GrimAC, Vulcan, Matrix, FunTime, HolyWorld):
+ * 1. БЕЗ ОТКРЫТИЯ ИНВЕНТАРЯ:
+ *    - Ни в одном режиме экран инвентаря (InventoryScreen) физически НЕ открывается перед игроком.
+ * 2. ХОТБАР СВАП:
+ *    - Строго распределен по отдельным игровым тикам (1 действие = 1 тик, 50 мс):
+ *      Тик 1: выбор слота (UpdateSelectedSlot) + обновление selectedSlot на клиенте;
+ *      Тик 2: ванильный свап клавишей F (SWAP_ITEM_WITH_OFFHAND);
+ *      Тик 3: возврат на исходный слот хотбара.
+ *    - Если предмет УЖЕ в руке — свап происходит мгновенно за 0 тиков (1 пакет F).
+ *    - Игрок бежит на полной скорости (спринт НЕ прерывается).
+ * 3. ИНВЕНТАРНЫЙ СВАП (слоты 9..35):
+ *    - Тихий клик на syncId 0 без всплывания окна на экране.
+ *    - Спринт аккуратно глушится через MixinPlayerSprint без спама сырыми пакетами STOP_SPRINTING.
+ *    - По завершении отправляется штатное закрытие контейнера через closeHandledScreen().
+ * 4. РЕЖИМЫ:
+ *    - "Двойной": быстрое переключение между двумя предметами (Swap From / Swap To).
+ *    - "Тройной": открытие кругового селектора (ItemSwapWheelScreen) на 3 предмета.
+ */
 public class ItemSwap {
 
-    // --- ТАЙМИНГИ ДЛЯ "OLD-SCHOOL" СВАПА ---
-    private static final int GUI_OPEN_DELAY = 3;  // Ждем 3 тика с открытым инвентарем (гасим инерцию и имитируем реакцию)
-    private static final int SWAP_DELAY     = 2;  // Ждем 2 тика после клика, прежде чем закрыть окно
-    private static final int HOTBAR_DELAY   = 1;  // Задержки для свапа с хотбара (его открывать не нужно)
+    private enum SwapPhase {
+        IDLE,
+        // Хотбар свап
+        HOTBAR_SWITCH,
+        HOTBAR_SWAP,
+        HOTBAR_RESTORE,
+        // Инвентарный свап (без открытия GUI)
+        INV_SILENT_WAIT,
+        INV_SILENT_CLICK,
+        INV_SILENT_CLOSE
+    }
 
-    private static int  step               = 0;
-    private static int  delayTimer         = 0;
-    private static int  targetSlot         = -1;
-    private static int  previousHotbarSlot = -1;
-    private static boolean wasKeyPressed   = false;
-    private static boolean isHotbarSwap    = false;
+    private static boolean wasKeyPressed = false;
+    private static long lastSwapTime = 0L;
+    private static String targetItemType = "";
+    private static int lastPlayerAge = -1;
+
+    private static SwapPhase phase = SwapPhase.IDLE;
+    private static int waitTicks = 0;
+    private static int targetHotbarSlot = -1;
+    private static int prevSelectedSlot = -1;
+    private static int pendingInvSlot = -1;
+
+    public static boolean isSprintLocked() {
+        return phase == SwapPhase.INV_SILENT_WAIT
+                || phase == SwapPhase.INV_SILENT_CLICK
+                || phase == SwapPhase.INV_SILENT_CLOSE;
+    }
 
     public static void tick() {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || mc.interactionManager == null || mc.getNetworkHandler() == null) return;
-        if (!LexoraGui.moduleStates.getOrDefault("Item Swap", false)) { reset(); return; }
+        if (mc.player == null || mc.interactionManager == null || mc.getNetworkHandler() == null) {
+            resetState();
+            return;
+        }
 
-        int bindKey = LexoraGui.numSettings.getOrDefault("Item Swap Action", -1f).intValue();
-        boolean isPressed = bindKey != -1 && InputUtil.isKeyPressed(mc.getWindow().getHandle(), bindKey);
+        boolean isEnabled = ClientData.moduleStates.getOrDefault("Item Swap", false)
+                || LexoraGui.moduleStates.getOrDefault("Item Swap", false);
 
-        // ── Старт свапа ──
-        if (isPressed && !wasKeyPressed && step == 0 && mc.currentScreen == null) {
-            String typeA = LexoraGui.modeSettings.getOrDefault("Swap From", "Тотем");
-            String typeB = LexoraGui.modeSettings.getOrDefault("Swap To",   "Шар");
+        if (!isEnabled || mc.player.isDead()) {
+            resetState();
+            return;
+        }
 
-            ItemStack offhand    = mc.player.getOffHandStack();
-            boolean   offhandIsA = checkItem(offhand, typeA);
-            boolean   offhandIsB = checkItem(offhand, typeB);
+        // Прогрессия фаз свапа строго один раз за игровой тик клиента (50 мс)
+        int currentAge = mc.player.age;
+        if (currentAge != lastPlayerAge) {
+            lastPlayerAge = currentAge;
+            handlePhaseTick(mc);
+        }
 
-            if      (offhandIsA) targetSlot = findItem(typeB);
-            else if (offhandIsB) targetSlot = findItem(typeA);
-            else {
-                targetSlot = findItem(typeA);
-                if (targetSlot == -1) targetSlot = findItem(typeB);
-            }
+        // Обработка бинда клавиши
+        int bindKey = BindManager.getStoredBindValue("Item Swap Action");
+        if (bindKey == GLFW.GLFW_KEY_UNKNOWN || bindKey == -1) {
+            bindKey = ClientData.moduleBinds.getOrDefault("Item Swap Action", GLFW.GLFW_KEY_UNKNOWN);
+        }
+        if (bindKey == GLFW.GLFW_KEY_UNKNOWN || bindKey == -1) {
+            bindKey = LexoraGui.moduleBinds.getOrDefault("Item Swap Action", GLFW.GLFW_KEY_UNKNOWN);
+        }
+        if (bindKey == GLFW.GLFW_KEY_UNKNOWN || bindKey == -1) {
+            Float f = ClientData.numSettings.get("Item Swap Action");
+            if (f != null && f.intValue() != GLFW.GLFW_KEY_UNKNOWN && f.intValue() != -1) bindKey = f.intValue();
+        }
+        if (bindKey == GLFW.GLFW_KEY_UNKNOWN || bindKey == -1) {
+            Float f = LexoraGui.numSettings.get("Item Swap Action");
+            if (f != null && f.intValue() != GLFW.GLFW_KEY_UNKNOWN && f.intValue() != -1) bindKey = f.intValue();
+        }
 
-            if (targetSlot != -1) {
-                ItemStack target   = mc.player.playerScreenHandler.getSlot(targetSlot).getStack();
-                String    itemName = target.getName().getString().replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", "").trim();
-                if (itemName.isEmpty()) itemName = target.getItem().getName().getString();
+        boolean isPressed = bindKey != GLFW.GLFW_KEY_UNKNOWN && bindKey != -1 && mc.getWindow() != null
+                && BindManager.isBindDown(mc.getWindow().getHandle(), bindKey);
 
-                NotifManager.show("Свапнул на " + itemName, "Успешно!", NotifManager.NotifType.SUCCESS);
+        if (isPressed && !wasKeyPressed) {
+            String swapMode = ClientData.modeSettings.getOrDefault("Swap Mode",
+                    LexoraGui.modeSettings.getOrDefault("Swap Mode", "Двойной"));
 
-                isHotbarSwap       = targetSlot >= 36 && targetSlot <= 44;
-                previousHotbarSlot = mc.player.getInventory().selectedSlot;
-
-                // Сбрасываем спринт
-                mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                mc.player.setSprinting(false);
-
-                if (!isHotbarSwap) {
-                    // ФИЗИЧЕСКИ ОТКРЫВАЕМ ИНВЕНТАРЬ (OLD SCHOOL)
-                    mc.setScreen(new InventoryScreen(mc.player));
-                    step = 1;
-                    delayTimer = GUI_OPEN_DELAY;
-                } else {
-                    // Хотбар свапается без открытия окна
-                    step = 10;
-                    delayTimer = HOTBAR_DELAY;
+            if ("Тройной".equalsIgnoreCase(swapMode)) {
+                // Тройной свап: открываем круговой селектор
+                if (mc.currentScreen == null && phase == SwapPhase.IDLE) {
+                    mc.setScreen(new ItemSwapWheelScreen(bindKey));
+                }
+            } else {
+                // Двойной свап
+                if (mc.currentScreen == null && phase == SwapPhase.IDLE) {
+                    long now = System.currentTimeMillis();
+                    if (now - lastSwapTime >= 250L) {
+                        triggerSwap(mc);
+                    }
                 }
             }
         }
 
         wasKeyPressed = isPressed;
-        if (step == 0) return;
-        if (delayTimer > 0) { delayTimer--; return; }
+    }
 
-        // =========================================================================
-        //  НЕ-хотбар (Открытый Инвентарь)
-        // =========================================================================
-        if (!isHotbarSwap) {
-            switch (step) {
-                case 1 -> {
-                    // Инвентарь уже открыт 3 тика. Инерция погасла, сервер видит легит. Делаем клик.
-                    mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, targetSlot, 40, SlotActionType.SWAP, mc.player);
-                    step = 2;
-                    delayTimer = SWAP_DELAY;
-                }
-                case 2 -> {
-                    // Закрываем инвентарь по-настоящему
-                    mc.player.closeHandledScreen();
-                    if (mc.currentScreen instanceof InventoryScreen) {
-                        mc.setScreen(null);
-                    }
-                    resumeSprint(mc);
-                    reset();
-                }
-            }
+    private static void handlePhaseTick(MinecraftClient mc) {
+        if (phase == SwapPhase.IDLE) return;
+
+        // Если открылся посторонний экран (чат, сундук и т.д.), прерываем свап
+        if (mc.currentScreen != null && !(mc.currentScreen instanceof ItemSwapWheelScreen)) {
+            resetState();
+            return;
         }
-        // =========================================================================
-        //  Хотбар (Без инвентаря)
-        // =========================================================================
-        else {
-            switch (step) {
-                case 10 -> {
-                    int hotbarIndex = targetSlot - 36;
-                    mc.player.getInventory().selectedSlot = hotbarIndex;
-                    mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(hotbarIndex));
 
-                    mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-                    step = 11;
-                    delayTimer = HOTBAR_DELAY;
-                }
-                case 11 -> {
-                    mc.player.getInventory().selectedSlot = previousHotbarSlot;
-                    mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(previousHotbarSlot));
-                    resumeSprint(mc);
-                    reset();
-                }
+        if (waitTicks > 0) {
+            waitTicks--;
+            return;
+        }
+
+        switch (phase) {
+            // ── ХОТБАР СВАП: 3 такта без детекта BadPackets ──
+            case HOTBAR_SWITCH -> {
+                // Такт 1: Выбираем слот с нужным предметом
+                mc.player.getInventory().selectedSlot = targetHotbarSlot;
+                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(targetHotbarSlot));
+                waitTicks = 1;
+                phase = SwapPhase.HOTBAR_SWAP;
             }
+            case HOTBAR_SWAP -> {
+                // Такт 2: Ванильная перекладка в левую руку клавишей F
+                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
+                        PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND,
+                        BlockPos.ORIGIN, Direction.DOWN
+                ));
+                waitTicks = 1;
+                phase = SwapPhase.HOTBAR_RESTORE;
+            }
+            case HOTBAR_RESTORE -> {
+                // Такт 3: Возвращаем выбранный слот на исходный
+                mc.player.getInventory().selectedSlot = prevSelectedSlot;
+                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(prevSelectedSlot));
+                sendSuccessNotif(mc);
+                lastSwapTime = System.currentTimeMillis();
+                resetState();
+            }
+
+            // ── ИНВЕНТАРНЫЙ СВАП: Тихий клик без открытия GUI ──
+            case INV_SILENT_WAIT -> {
+                // Такт 1: спринт погашен через MixinPlayerSprint, ожидаем стабильный статус
+                waitTicks = 1;
+                phase = SwapPhase.INV_SILENT_CLICK;
+            }
+            case INV_SILENT_CLICK -> {
+                // Такт 2: клик слота на syncId 0 без открытия интерфейса игроку
+                int syncId = mc.player.playerScreenHandler.syncId;
+                mc.interactionManager.clickSlot(syncId, pendingInvSlot, 40, SlotActionType.SWAP, mc.player);
+                waitTicks = 1;
+                phase = SwapPhase.INV_SILENT_CLOSE;
+            }
+            case INV_SILENT_CLOSE -> {
+                // Такт 3: отправка штатного закрытия контейнера серверу
+                mc.player.closeHandledScreen();
+                sendSuccessNotif(mc);
+                lastSwapTime = System.currentTimeMillis();
+                resetState();
+            }
+
+            default -> resetState();
         }
     }
 
-    // =========================================================================
-    //  ХЕЛПЕРЫ
-    // =========================================================================
+    private static void triggerSwap(MinecraftClient mc) {
+        targetItemType = getTargetSwapType(mc);
 
-    private static void resumeSprint(MinecraftClient mc) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
-        if (mc.options.forwardKey.isPressed() && !mc.player.isSneaking()) {
-            mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
-            mc.player.setSprinting(true);
+        Optional<Integer> hotbar = findInHotbar(mc, targetItemType);
+        if (hotbar.isPresent()) {
+            startHotbarSwap(mc, hotbar.get());
+            return;
         }
+
+        Optional<Integer> inv = findInInventory(mc, targetItemType);
+        if (inv.isPresent()) {
+            startInventorySwap(mc, inv.get());
+            return;
+        }
+
+        // Пробуем альтернативный тип предмета
+        String altType = getAlternateSwapType(mc);
+        if (!altType.equalsIgnoreCase(targetItemType)) {
+            targetItemType = altType;
+            hotbar = findInHotbar(mc, targetItemType);
+            if (hotbar.isPresent()) {
+                startHotbarSwap(mc, hotbar.get());
+                return;
+            }
+
+            inv = findInInventory(mc, targetItemType);
+            if (inv.isPresent()) {
+                startInventorySwap(mc, inv.get());
+                return;
+            }
+        }
+
+        NotifManager.show("Предмет [" + targetItemType + "] не найден!",
+                "Ошибка", NotifManager.NotifType.ERROR);
     }
 
-    /** * Блокировка движения для MixinKeyboardInput.
-     * Работает, пока инвентарь открыт, чтобы игрок случайно не дернулся.
+    /**
+     * Публичный метод для запуска свапа на конкретный предмет (например, из кругового меню).
      */
-    public static boolean isSwapping() {
-        return step != 0;
-    }
-
-    private static void reset() {
-        step               = 0;
-        delayTimer         = 0;
-        targetSlot         = -1;
-        previousHotbarSlot = -1;
-        isHotbarSwap       = false;
-    }
-
-    private static int findItem(String type) {
+    public static void triggerSwapToItem(String targetItem) {
         MinecraftClient mc = MinecraftClient.getInstance();
-        // В первую очередь ищем в хотбаре (это быстрее и без открытия GUI)
-        for (int i = 36; i <= 44; i++)
-            if (checkItem(mc.player.playerScreenHandler.getSlot(i).getStack(), type)) return i;
-        for (int i = 9; i <= 35; i++)
-            if (checkItem(mc.player.playerScreenHandler.getSlot(i).getStack(), type)) return i;
-        return -1;
+        if (mc.player == null || mc.interactionManager == null || mc.getNetworkHandler() == null) return;
+        if (phase != SwapPhase.IDLE) return;
+        if (targetItem == null || targetItem.isEmpty() || targetItem.equalsIgnoreCase("Пусто")) return;
+
+        // Если нужный предмет уже в левой руке
+        if (isMatchingItem(mc.player.getOffHandStack(), targetItem)) {
+            return;
+        }
+
+        targetItemType = targetItem;
+
+        // 1. Поиск в хотбаре (слоты 0..8) — быстрый и безопасный путь
+        Optional<Integer> hotbar = findInHotbar(mc, targetItem);
+        if (hotbar.isPresent()) {
+            startHotbarSwap(mc, hotbar.get());
+            return;
+        }
+
+        // 2. Поиск в основном инвентаре (слоты 9..35) — тихий клик без открытия GUI
+        Optional<Integer> inv = findInInventory(mc, targetItem);
+        if (inv.isPresent()) {
+            startInventorySwap(mc, inv.get());
+            return;
+        }
+
+        NotifManager.show("Предмет [" + targetItem + "] не найден!",
+                "Ошибка", NotifManager.NotifType.ERROR);
     }
 
-    private static boolean checkItem(ItemStack stack, String type) {
-        if (type.equals("Тотем")) return isTotem(stack);
-        if (type.equals("Шар"))   return isSphere(stack);
-        return false;
+    /**
+     * Старт безопасного свапа из хотбара.
+     */
+    private static void startHotbarSwap(MinecraftClient mc, int slot) {
+        int current = mc.player.getInventory().selectedSlot;
+
+        // Если предмет уже в руках — мгновенный одиночный пакет клавиши F
+        if (slot == current) {
+            mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
+                    PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND,
+                    BlockPos.ORIGIN, Direction.DOWN
+            ));
+            sendSuccessNotif(mc);
+            lastSwapTime = System.currentTimeMillis();
+            resetState();
+            return;
+        }
+
+        // Предмет в другом слоте хотбара: запускаем потактовую машину смены слота
+        prevSelectedSlot = current;
+        targetHotbarSlot = slot;
+        phase = SwapPhase.HOTBAR_SWITCH;
+        waitTicks = 0;
     }
 
-    private static boolean isTotem(ItemStack stack) {
-        if (stack.isEmpty()) return false;
-        if (stack.getItem() == Items.TOTEM_OF_UNDYING) return true;
-        String name = stack.getName().getString().toLowerCase();
-        return name.contains("тотем") || name.contains("totem")
-                || name.contains("талисман") || name.contains("talisman")
-                || name.contains("крест")    || name.contains("защит");
+    /**
+     * Старт инвентарного свапа (слоты 9..35) без открытия экрана.
+     */
+    private static void startInventorySwap(MinecraftClient mc, int invSlot) {
+        pendingInvSlot = invSlot;
+        phase = SwapPhase.INV_SILENT_WAIT;
+        waitTicks = 1;
     }
 
-    private static boolean isSphere(ItemStack stack) {
-        if (stack.isEmpty()) return false;
-        String name = stack.getName().getString().toLowerCase();
-        return name.contains("шар")   || name.contains("sphere")
-                || name.contains("сфера") || name.contains("orb")
-                || name.contains("амулет")
-                || stack.getItem().getTranslationKey().contains("player_head");
+    private static String getTargetSwapType(MinecraftClient mc) {
+        ItemStack offhand = mc.player.getOffHandStack();
+        String typeA = ClientData.modeSettings.getOrDefault("Swap From", LexoraGui.modeSettings.getOrDefault("Swap From", "Тотем"));
+        String typeB = ClientData.modeSettings.getOrDefault("Swap To", LexoraGui.modeSettings.getOrDefault("Swap To", "Шар"));
+        return isMatchingItem(offhand, typeA) ? typeB : typeA;
+    }
+
+    private static String getAlternateSwapType(MinecraftClient mc) {
+        ItemStack offhand = mc.player.getOffHandStack();
+        String typeA = ClientData.modeSettings.getOrDefault("Swap From", LexoraGui.modeSettings.getOrDefault("Swap From", "Тотем"));
+        String typeB = ClientData.modeSettings.getOrDefault("Swap To", LexoraGui.modeSettings.getOrDefault("Swap To", "Шар"));
+        return isMatchingItem(offhand, typeA) ? typeA : typeB;
+    }
+
+    private static Optional<Integer> findInHotbar(MinecraftClient mc, String type) {
+        for (int i = 0; i < 9; i++) {
+            if (isValidSwapCandidate(mc.player.getInventory().getStack(i), type)) {
+                return Optional.of(i);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Integer> findInInventory(MinecraftClient mc, String type) {
+        for (int i = 9; i < 36; i++) {
+            if (isValidSwapCandidate(mc.player.playerScreenHandler.getSlot(i).getStack(), type)) {
+                return Optional.of(i);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Проверка типа предмета для поиска кандидата на свап.
+     */
+    private static boolean isValidSwapCandidate(ItemStack stack, String type) {
+        if (stack == null || stack.isEmpty() || type == null || type.isEmpty() || type.equalsIgnoreCase("Пусто")) {
+            return false;
+        }
+
+        if ("Тотем".equalsIgnoreCase(type)) {
+            boolean isTotem = stack.getItem() == Items.TOTEM_OF_UNDYING;
+            if (!isTotem) {
+                String name = stack.getName().getString().toLowerCase();
+                isTotem = name.contains("тотем") || name.contains("totem")
+                        || name.contains("талисман") || name.contains("защит");
+            }
+            if (!isTotem) return false;
+
+            boolean onlyEnchanted = ClientData.moduleStates.getOrDefault("Only Enchanted Totems",
+                    LexoraGui.moduleStates.getOrDefault("Only Enchanted Totems", false));
+            if (onlyEnchanted && !stack.hasEnchantments()) {
+                return false;
+            }
+            return true;
+        }
+
+        if ("Шар".equalsIgnoreCase(type) || "Голова".equalsIgnoreCase(type)) {
+            if (stack.getItem() == Items.PLAYER_HEAD) return true;
+            String name = stack.getName().getString().toLowerCase();
+            return name.contains("шар") || name.contains("sphere")
+                    || name.contains("сфера") || name.contains("orb")
+                    || name.contains("амулет") || stack.getItem().getTranslationKey().contains("player_head");
+        }
+
+        if ("Щит".equalsIgnoreCase(type)) {
+            return stack.getItem() == Items.SHIELD;
+        }
+
+        if ("Золотое яблоко".equalsIgnoreCase(type) || "Яблоко".equalsIgnoreCase(type)) {
+            return stack.getItem() == Items.ENCHANTED_GOLDEN_APPLE || stack.getItem() == Items.GOLDEN_APPLE;
+        }
+
+        if ("Чар. яблоко".equalsIgnoreCase(type)) {
+            return stack.getItem() == Items.ENCHANTED_GOLDEN_APPLE;
+        }
+
+        if ("Эндер перл".equalsIgnoreCase(type) || "Перл".equalsIgnoreCase(type)) {
+            return stack.getItem() == Items.ENDER_PEARL;
+        }
+
+        if ("Зелье".equalsIgnoreCase(type)) {
+            return stack.getItem() == Items.SPLASH_POTION || stack.getItem() == Items.POTION
+                    || stack.getItem() == Items.LINGERING_POTION;
+        }
+
+        // Поиск по названию (для кастомных предметов из инвентаря)
+        String cleanStackName = stack.getName().getString()
+                .replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", "").trim().toLowerCase();
+        String cleanTarget = type.replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", "").trim().toLowerCase();
+        if (!cleanTarget.isEmpty() && (cleanStackName.contains(cleanTarget) || cleanTarget.contains(cleanStackName))) {
+            return true;
+        }
+
+        return stack.getItem().getName().getString().equalsIgnoreCase(type);
+    }
+
+    /**
+     * Определение типа текущего предмета в левой руке.
+     */
+    private static boolean isMatchingItem(ItemStack stack, String type) {
+        return isValidSwapCandidate(stack, type);
+    }
+
+    private static void sendSuccessNotif(MinecraftClient mc) {
+        ItemStack offhand = mc.player.getOffHandStack();
+        String name = offhand.isEmpty() ? targetItemType : offhand.getName().getString();
+        NotifManager.show("Свапнул на " + name, "Успешно", NotifManager.NotifType.SWAP);
+    }
+
+    public static boolean isSwapping() {
+        return phase != SwapPhase.IDLE;
+    }
+
+    /**
+     * Подавляет движение и спринт ТОЛЬКО при тихом инвентарном свапе, чтобы транзакция на сервере прошла легитно.
+     * При хотбар-свапе спринт НЕ подавляется — игрок бежит на полной скорости.
+     */
+    public static boolean shouldSuppressMovement() {
+        return phase == SwapPhase.INV_SILENT_WAIT || phase == SwapPhase.INV_SILENT_CLICK
+                || phase == SwapPhase.INV_SILENT_CLOSE;
+    }
+
+    public static void resetState() {
+        phase = SwapPhase.IDLE;
+        waitTicks = 0;
+        pendingInvSlot = -1;
+        targetHotbarSlot = -1;
+        prevSelectedSlot = -1;
     }
 }

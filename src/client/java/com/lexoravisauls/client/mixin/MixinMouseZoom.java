@@ -18,6 +18,10 @@ public class MixinMouseZoom {
     @Inject(method = "onMouseScroll", at = @At("HEAD"), cancellable = true)
     private void lexora$handleZoomScroll(long window, double horizontal, double vertical, CallbackInfo ci) {
         if (client.currentScreen != null) return;
+        if (com.lexoravisauls.client.modules.virtualdesktop.VirtualDesktopManager.handleMouseScroll(vertical)) {
+            ci.cancel();
+            return;
+        }
         if (Zoom.onScroll(vertical)) {
             ci.cancel();
         }

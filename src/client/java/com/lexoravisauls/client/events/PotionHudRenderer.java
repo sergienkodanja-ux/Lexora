@@ -111,8 +111,8 @@ public class PotionHudRenderer {
         drawPanel(context, x, y, WIDTH, HEIGHT, alphaInt);
 
         // Вернул иконку! (замени POTION на свое название из Enum, если оно отличается)
-        LexoraIcons.draw(context, LexoraIcons.Icon.POTION, x + 6, y + 6, 9.0f, (alphaInt << 24) | 0xFFFFFF);
-        drawString(context, "Potions", x + 18, y + 6.5f, 8.0f, (alphaInt << 24) | 0xFFFFFF);
+        LexoraIcons.draw(context, LexoraIcons.Icon.POTION, x + 6, y + 6, 9.0f, HudThemeHelper.getTextColor(alphaInt));
+        drawString(context, "Potions", x + 18, y + 6.5f, 8.0f, HudThemeHelper.getTextColor(alphaInt));
 
         float currentY = y + 24;
         for (StatusEffectInstance effect : effectsToRender) {
@@ -122,10 +122,10 @@ public class PotionHudRenderer {
             }
 
             String name = getEffectName(effect);
-            drawString(context, name, x + 26, currentY + 1, 7.5f, (alphaInt << 24) | 0xEEEEEE);
+            drawString(context, name, x + 26, currentY + 1, 7.5f, HudThemeHelper.getTextColor(alphaInt));
 
             String duration = getDurationString(effect);
-            drawString(context, duration, x + WIDTH - 8 - width(duration, 7.5f), currentY + 1, 7.5f, (alphaInt << 24) | 0xAAAAAA);
+            drawString(context, duration, x + WIDTH - 8 - width(duration, 7.5f), currentY + 1, 7.5f, HudThemeHelper.getSecondaryTextColor(alphaInt));
 
             currentY += 18;
         }
@@ -141,18 +141,11 @@ public class PotionHudRenderer {
     // =========================================================================
 
     public static void drawPanel(DrawContext context, float x, float y, float width, float height, int alpha) {
-        boolean blurEnabled = LexoraGui.moduleStates.getOrDefault("Potions Blur", true);
-        int bgColor = (Math.min(alpha, 160) << 24) | 0x050505;
+    boolean blurEnabled = isModuleEnabled("Potions Blur", true);
+    HudThemeHelper.drawHudPanel(context, x, y, width, height, 6f, alpha, blurEnabled);
+}
 
-        if (blurEnabled && alpha > 10) {
-            context.draw(); // <--- ДОБАВИТЬ ЭТО
-            com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(context, x, y, width, height, 6f, 15f, bgColor);
-        } else {
-            drawSmoothRect(context, (int)x, (int)y, (int)width, (int)height, 6f, bgColor);
-        }
-    }
-
-    public static String getEffectName(StatusEffectInstance effect) {
+public static String getEffectName(StatusEffectInstance effect) {
         try {
             String baseName = effect.getEffectType().value().getName().getString();
             int amp = effect.getAmplifier();

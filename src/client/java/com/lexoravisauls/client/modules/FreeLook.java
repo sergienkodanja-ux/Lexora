@@ -1,9 +1,10 @@
 package com.lexoravisauls.client.modules;
 
+import com.lexoravisauls.client.core.BindManager;
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.Perspective;
-import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
 
 public class FreeLook {
@@ -14,30 +15,41 @@ public class FreeLook {
     private static boolean wasPressed = false;
     private static Perspective previousPerspective = Perspective.FIRST_PERSON;
 
+    public static boolean emotionRequestsFreeLook = false;
+    private static boolean activatedByEmotion = false;
+
+    public static int getFreeLookBindKey() {
+        int bindKey = BindManager.getStoredBindValue("Free Look Action");
+        if (bindKey == GLFW.GLFW_KEY_UNKNOWN || bindKey == -1) {
+            bindKey = ClientData.moduleBinds.getOrDefault("Free Look Action", GLFW.GLFW_KEY_UNKNOWN);
+        }
+        return bindKey;
+    }
+
     public static void tick() {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null) return;
+        if (mc.player == null || mc.getWindow() == null) return;
 
-        if (!LexoraGui.moduleStates.getOrDefault("Free Look", false)) {
-            reset(mc);
-            return;
-        }
+        boolean moduleEnabled = ClientData.moduleStates.getOrDefault("Free Look", false)
+                || LexoraGui.moduleStates.getOrDefault("Free Look", false);
 
-        // Получаем бинд
-        int bindKey = LexoraGui.numSettings.getOrDefault("Free Look Action", -1f).intValue();
+        int bindKey = getFreeLookBindKey();
+        boolean keyHeld = moduleEnabled && bindKey != GLFW.GLFW_KEY_UNKNOWN && bindKey != -1
+                && mc.currentScreen == null && isBindPressed(mc, bindKey);
 
-        // ИСПРАВЛЕНИЕ: Используем наш БЕЗОПАСНЫЙ метод проверки кнопок
-        boolean isPressed = bindKey != -1 && mc.currentScreen == null && isBindPressed(mc, bindKey);
+        boolean isPressed = keyHeld || emotionRequestsFreeLook;
+        boolean thisActivationIsFromEmotion = !keyHeld && emotionRequestsFreeLook;
 
         if (isPressed && !wasPressed) {
-            // Включаем обзор
             isPerspective = true;
+            activatedByEmotion = thisActivationIsFromEmotion;
             cameraYaw = mc.player.getYaw();
             cameraPitch = mc.player.getPitch();
             previousPerspective = mc.options.getPerspective();
             mc.options.setPerspective(Perspective.THIRD_PERSON_BACK);
+        } else if (isPressed && wasPressed) {
+            activatedByEmotion = thisActivationIsFromEmotion;
         } else if (!isPressed && wasPressed) {
-            // Выключаем обзор
             reset(mc);
         }
         wasPressed = isPressed;
@@ -50,34 +62,9 @@ public class FreeLook {
         }
     }
 
-    // 🔥 БЕЗОПАСНЫЙ МЕТОД ПРОВЕРКИ (Убирает лаги и ошибку -1002) 🔥
     private static boolean isBindPressed(MinecraftClient mc, int key) {
-        if (key == -1) return false;
+        if (key == GLFW.GLFW_KEY_UNKNOWN || key == -1) return false;
         long window = mc.getWindow().getHandle();
-
-        try {
-            if (key < 0) {
-                int mouseButton = Math.abs(key);
-
-                // Переводим -1002 в нормальный индекс кнопки мыши
-                if (mouseButton >= 100) {
-                    mouseButton -= 100;
-                } else {
-                    mouseButton -= 1;
-                }
-
-                // GLFW поддерживает только мыши от 0 до 7 (защита от краша)
-                if (mouseButton >= 0 && mouseButton <= 7) {
-                    return GLFW.glfwGetMouseButton(window, mouseButton) == GLFW.GLFW_PRESS;
-                }
-                return false;
-            }
-
-            // Если это обычная кнопка клавиатуры (положительное число)
-            return InputUtil.isKeyPressed(window, key);
-
-        } catch (Exception e) {
-            return false;
-        }
+        return BindManager.isBindDown(window, key);
     }
-}
+}

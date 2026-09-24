@@ -1,6 +1,7 @@
 package com.lexoravisauls.client.utils;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.SimpleFramebuffer;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 
@@ -9,6 +10,11 @@ public class HandShaderCopy {
     private static int afterTex = -1;
     private static int lastWidth = -1;
     private static int lastHeight = -1;
+
+    private static SimpleFramebuffer maskFbo = null;
+    private static SimpleFramebuffer trailFboA = null;
+    private static SimpleFramebuffer trailFboB = null;
+    private static boolean pingPong = false;
 
     private static int createTexture(int width, int height) {
         int tex = GL11.glGenTextures();
@@ -48,6 +54,13 @@ public class HandShaderCopy {
 
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTex);
 
+        maskFbo = new SimpleFramebuffer(width, height, false);
+        trailFboA = new SimpleFramebuffer(width, height, false);
+        trailFboB = new SimpleFramebuffer(width, height, false);
+        maskFbo.clear();
+        trailFboA.clear();
+        trailFboB.clear();
+
         lastWidth = width;
         lastHeight = height;
     }
@@ -86,6 +99,22 @@ public class HandShaderCopy {
         return afterTex;
     }
 
+    public static SimpleFramebuffer getMaskFbo() {
+        return maskFbo;
+    }
+
+    public static SimpleFramebuffer getCurrentTrailFbo() {
+        return pingPong ? trailFboB : trailFboA;
+    }
+
+    public static SimpleFramebuffer getNextTrailFbo() {
+        return pingPong ? trailFboA : trailFboB;
+    }
+
+    public static void swapTrailFbos() {
+        pingPong = !pingPong;
+    }
+
     public static void cleanup() {
         if (beforeTex != -1) {
             GL11.glDeleteTextures(beforeTex);
@@ -95,6 +124,21 @@ public class HandShaderCopy {
         if (afterTex != -1) {
             GL11.glDeleteTextures(afterTex);
             afterTex = -1;
+        }
+
+        if (maskFbo != null) {
+            maskFbo.delete();
+            maskFbo = null;
+        }
+
+        if (trailFboA != null) {
+            trailFboA.delete();
+            trailFboA = null;
+        }
+
+        if (trailFboB != null) {
+            trailFboB.delete();
+            trailFboB = null;
         }
 
         lastWidth = -1;

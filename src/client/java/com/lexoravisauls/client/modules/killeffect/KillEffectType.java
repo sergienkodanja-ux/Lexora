@@ -8,7 +8,9 @@ package com.lexoravisauls.client.modules.killeffect;
 public enum KillEffectType {
 
     SOUL_ASCENSION("Soul Ascension", new SoulAscensionEffect()),
-    VOID_COLLAPSE("Void Collapse", new VoidCollapseEffect());
+    COSMIC_SINGULARITY("Cosmic Singularity", new CosmicSingularityEffect()),
+    DIVINE_WRATH("Divine Wrath", new DivineWrathEffect()),
+    BLOOD_NOVA("Blood Nova", new BloodNovaEffect());
 
     private final String displayName;
     private final KillEffect<?> effect;

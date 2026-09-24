@@ -103,25 +103,21 @@ final class KillEffectDisappearWatcher {
             // jump then vanish" signature as an ender-pearl escape. Position
             // data alone can't tell them apart; a loot drop can.
             boolean itemsDropped = itemsDroppedNear(client.world, last.pos);
+            boolean wasHitRecently = com.lexoravisauls.client.utils.AttackManager.wasRecentlyHitByMe(id, 6000L);
+
             if (itemsDropped) {
-                KillEffectManager.debug(last.player.getName().getString()
-                        + ": vanished at " + last.health + " HP, items dropped nearby — confirmed kill");
-                KillEffectManager.trigger(last.player, last.player.getRecentDamageSource());
+                KillEffectManager.triggerAt(last.player, last.pos.x, last.pos.y, last.pos.z, last.player.getRecentDamageSource());
                 continue;
             }
 
-            if (last.justTeleported) {
-                KillEffectManager.debug(last.player.getName().getString()
-                        + ": vanished right after a big position jump, no items — treating as an escape, not a kill");
+            if (last.justTeleported && !wasHitRecently) {
                 continue;
             }
 
             boolean lowHealth = last.health > 0.0f && last.health <= LOW_HP_THRESHOLD;
-            if (lowHealth) {
-                KillEffectManager.debug(last.player.getName().getString()
-                        + ": vanished at " + last.health + " HP, no jump, no items — heuristic kill");
+            if (lowHealth || wasHitRecently) {
                 DamageSource source = last.player.getRecentDamageSource();
-                KillEffectManager.trigger(last.player, source);
+                KillEffectManager.triggerAt(last.player, last.pos.x, last.pos.y, last.pos.z, source);
             }
         }
     }

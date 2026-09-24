@@ -11,6 +11,7 @@ import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.client.render.entity.state.EntityRenderState;
+import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.EquipmentSlot;
@@ -29,22 +30,20 @@ import java.util.UUID;
 /**
  * A frozen, motionless copy of the victim's own skin appears half-transparent
  * over the death spot, standing level, and drifts upward while spinning
- * gently, fading out. Bare — no armor, no held items, no nametag. Renders
- * through walls/terrain, matching the other two effects.
+ * gently, fading out. Bare — no armor, no held items, no nametag.
  * <p>
- * Every frame: re-clears equipment, re-asserts the hidden-nametag team
- * membership, and re-captures the render state fresh from OUR OWN throwaway
- * ghost entity — redundant on purpose, see git history for why.
- * <p>
- * Transparency: LivingEntityRenderer#getRenderLayer takes a `translucent`
- * boolean that's the real, official switch between the normal and
- * translucent render layer (see RenderLayerGhostMixin) — forced to true only
- * for the exact duration of this render() call via KillEffectGhostState.
+ * Uses an ISOLATED BufferAllocator / VertexConsumerProvider.Immediate so that
+ * Minecraft's global entity consumer is NEVER flushed prematurely or drawn with
+ * alpha < 1, which previously caused dropped items and surrounding entities
+ * to become transparent.
  */
 public class SoulAscensionEffect implements KillEffect<SoulAscensionEffect.State> {
 
     private static final String HIDDEN_NAMETAG_TEAM = "lexora_hide_nametag";
     private static int nextFakeId = -200000;
+
+    private static final BufferAllocator GHOST_ALLOCATOR = new BufferAllocator(262144);
+    private static final VertexConsumerProvider.Immediate GHOST_CONSUMERS = VertexConsumerProvider.immediate(GHOST_ALLOCATOR);
 
     @Override
     public State onStart(LivingEntity victim, double x, double y, double z, Random random) {
@@ -96,9 +95,10 @@ public class SoulAscensionEffect implements KillEffect<SoulAscensionEffect.State
         matrices.translate(state.x - camPos.x, state.y + riseY - camPos.y, state.z - camPos.z);
         matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(angle));
 
-        RenderSystem.disableDepthTest(); // render through walls/terrain, matching the other two effects
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(false);
         RenderSystem.setShaderColor(1f, 1f, 1f, alpha);
 
         EntityRenderDispatcher dispatcher = MinecraftClient.getInstance().getEntityRenderDispatcher();
@@ -106,25 +106,46 @@ public class SoulAscensionEffect implements KillEffect<SoulAscensionEffect.State
 
         KillEffectGhostState.RENDERING = true;
         try {
-            renderFresh(renderer, state.ghost, matrices, consumers);
-            // Force this geometry to actually draw NOW instead of sitting
-            // queued in the shared buffer until something else (like a
-            // second ghost) happens to trigger a flush later. That deferred-
-            // flush behavior is exactly what made a ghost only "become"
-            // transparent once a second one spawned — its translucent-layer
-            // geometry was queued correctly but never actually drawn until
-            // something else forced the buffer to flush.
-            if (consumers instanceof VertexConsumerProvider.Immediate immediate) {
-                immediate.draw();
-            }
+            renderFresh(renderer, state.ghost, matrices, GHOST_CONSUMERS);
+            GHOST_CONSUMERS.draw();
         } finally {
             KillEffectGhostState.RENDERING = false;
+            RenderSystem.depthMask(true);
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+            RenderSystem.disableBlend();
         }
 
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-        RenderSystem.disableBlend();
-        RenderSystem.enableDepthTest();
         matrices.pop();
+
+        // 1. Custom GLSL Ethereal Soul Outline Shader (Subtle silhouette contour, 2x lighter)
+        if (alpha > 0.02f) {
+            KillEffectShaders.renderSpiritAura(matrices, camera,
+                    state.x - camPos.x, state.y + riseY + 1.0 - camPos.y, state.z - camPos.z,
+                    1.9f, 2.4f,
+                    ageWithDelta * 0.05f, progress, alpha,
+                    0.25f, 0.85f, 1.0f, 0.65f, 0.35f, 1.0f);
+
+            KillEffectDraw.beginGlow(true);
+
+            // 2. Solid 3D Nimb with mass (exact form from NimbRenderer, static, no animation)
+            double haloY = state.y + riseY + 2.05 - camPos.y;
+            KillEffectDraw.drawSolidNimb(matrices,
+                    state.x - camPos.x, haloY, state.z - camPos.z,
+                    0.38f, 0.028f, 0.022f,
+                    1.0f, 0.88f, 0.28f, alpha * 0.95f);
+
+            // 3. Ground departure ripple ring at the spot of death
+            float groundWave = (progress * 1.5f) % 1.0f;
+            float groundR = groundWave * 1.5f;
+            float groundA = (1.0f - groundWave) * alpha * 0.5f;
+            KillEffectDraw.drawRing(matrices,
+                    state.x - camPos.x, state.y - camPos.y + 0.02, state.z - camPos.z,
+                    groundR, 0.04f,
+                    0.0f, 0.0f, 0.0f,
+                    0.25f, 0.8f, 1.0f, groundA, 36);
+
+            KillEffectDraw.endGlow();
+        }
     }
 
     private static void hideNameTag(LivingEntity ghost, String fakeName) {

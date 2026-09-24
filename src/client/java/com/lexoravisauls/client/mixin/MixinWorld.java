@@ -1,5 +1,6 @@
 package com.lexoravisauls.client.mixin;
 
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.Vec3d;
@@ -12,30 +13,40 @@ import java.awt.Color;
 @Mixin(ClientWorld.class)
 public class MixinWorld {
 
-    // 🔥 ФИКС: В 1.21.4 метод getSkyColor возвращает int (Integer), а не Vec3d!
     @Inject(method = "getSkyColor", at = @At("HEAD"), cancellable = true)
     private void onGetSkyColor(Vec3d cameraPos, float tickDelta, CallbackInfoReturnable<Integer> cir) {
-        if (!LexoraGui.moduleStates.getOrDefault("World Customizer", false)) return;
-        if (!LexoraGui.moduleStates.getOrDefault("Sky Customizer", true)) return;
+        boolean worldCustomizer = ClientData.moduleStates.getOrDefault("World Customizer",
+                LexoraGui.moduleStates.getOrDefault("World Customizer", false));
+        if (!worldCustomizer) return;
 
-        String skyType = LexoraGui.modeSettings.getOrDefault("Sky Type", "Standard");
+        boolean skyCustomizer = ClientData.moduleStates.getOrDefault("Sky Customizer",
+                LexoraGui.moduleStates.getOrDefault("Sky Customizer", true));
+        if (!skyCustomizer) return;
+
+        String skyType = ClientData.modeSettings.getOrDefault("Sky Type",
+                LexoraGui.modeSettings.getOrDefault("Sky Type", "Standard"));
 
         // Шейдерные режимы — чёрный фон, шейдер рисует всё сам
         if (!skyType.equals("Standard")) {
-            cir.setReturnValue(0x000000);
+            cir.setReturnValue(0xFF000000);
             return;
         }
 
         // Standard — обычная логика цвета
+        String colorMode = ClientData.modeSettings.getOrDefault("Sky Color Mode",
+                LexoraGui.modeSettings.getOrDefault("Sky Color Mode", "Theme"));
+
         float[] hsv;
-        if (LexoraGui.modeSettings.getOrDefault("Sky Color Mode", "Theme").equals("Theme")) {
-            int rgb = LexoraGui.getGuiThemeColor();
+        if (colorMode.equalsIgnoreCase("Theme")) {
+            int rgb = LexoraGui.getThemeColor(0f);
             hsv = Color.RGBtoHSB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, null);
         } else {
-            hsv = LexoraGui.colorSettings.getOrDefault("Custom Sky Color", new float[]{0.6f, 1f, 1f});
+            hsv = ClientData.colorSettings.getOrDefault("Custom Sky Color",
+                    ClientData.colorSettings.getOrDefault("Sky Custom Color",
+                    LexoraGui.colorSettings.getOrDefault("Custom Sky Color", new float[]{0.6f, 1f, 1f})));
         }
 
         int rgb = Color.HSBtoRGB(hsv[0], hsv[1], hsv[2]);
-        cir.setReturnValue(rgb & 0xFFFFFF);
+        cir.setReturnValue(0xFF000000 | (rgb & 0xFFFFFF));
     }
 }

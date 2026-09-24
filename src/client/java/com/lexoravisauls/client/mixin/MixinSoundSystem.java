@@ -7,12 +7,12 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.client.sound.SoundSystem;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.random.Random;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -20,19 +20,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(SoundSystem.class)
 public abstract class MixinSoundSystem {
 
-    @Shadow public abstract void play(SoundInstance sound);
-
     private boolean isPlayingCustomSound = false;
 
     @Inject(method = "play(Lnet/minecraft/client/sound/SoundInstance;)V", at = @At("HEAD"), cancellable = true)
     private void onPlaySound(SoundInstance sound, CallbackInfo ci) {
         if (sound == null || isPlayingCustomSound) return;
 
-        Identifier soundId = null;
+        Identifier soundId;
         try {
             soundId = sound.getId();
         } catch (Exception e) {
-            ci.cancel();
             return;
         }
 
@@ -40,48 +37,66 @@ public abstract class MixinSoundSystem {
 
         if (soundId.getNamespace().equals("minecraft") && soundId.getPath().equals("item.totem.use")) {
 
-            if (LexoraGui.moduleStates.getOrDefault("Particles", false) &&
-                    LexoraGui.moduleStates.getOrDefault("Part. Totem", true)) {
+            // Безопасный спавн партиклов
+            try {
+                if (LexoraGui.moduleStates.getOrDefault("Particles", false) &&
+                        LexoraGui.moduleStates.getOrDefault("Part. Totem", true)) {
 
-                MinecraftClient mc = MinecraftClient.getInstance();
-                if (mc.world != null) {
-                    net.minecraft.entity.player.PlayerEntity closest = mc.world.getClosestPlayer(sound.getX(), sound.getY(), sound.getZ(), 3.0, false);
-                    if (closest != null) {
-                        ParticleSystem.spawnCustomTotemEffect(closest);
-                    } else if (mc.player != null) {
-                        ParticleSystem.spawnCustomTotemEffect(mc.player);
+                    MinecraftClient mc = MinecraftClient.getInstance();
+                    if (mc != null && mc.world != null) {
+                        net.minecraft.entity.player.PlayerEntity closest = mc.world.getClosestPlayer(sound.getX(), sound.getY(), sound.getZ(), 3.0, false);
+                        if (closest != null) {
+                            ParticleSystem.spawnCustomTotemEffect(closest);
+                        } else if (mc.player != null) {
+                            ParticleSystem.spawnCustomTotemEffect(mc.player);
+                        }
                     }
                 }
-            }
+            } catch (Exception ignored) {}
 
             SoundEvent customEvent = TotemSoundManager.getReplacementEvent();
-            if (customEvent != SoundEvents.ITEM_TOTEM_USE) {
-                ci.cancel();
+            if (customEvent != null && customEvent != SoundEvents.ITEM_TOTEM_USE) {
+                MinecraftClient mc = MinecraftClient.getInstance();
 
-                try {
-                    PositionedSoundInstance customSound = new PositionedSoundInstance(
-                            customEvent,
-                            sound.getCategory(),
-                            TotemSoundManager.getReplacementVolume(sound.getVolume()),
-                            TotemSoundManager.getReplacementPitch(sound.getPitch()),
-                            Random.create(),
-                            sound.getX(),
-                            sound.getY(),
-                            sound.getZ()
-                    );
+                if (mc != null && mc.getSoundManager() != null) {
+                    // Отменяем стандартный звук тотема
+                    ci.cancel();
 
-                    // Играем ЧЕРЕЗ SoundManager, а не this.play() напрямую.
-                    // this.play() = SoundSystem.play() — низкоуровневый метод, который
-                    // ожидает, что проверка "звук существует / не пустой" уже сделана
-                    // выше по стеку. SoundManager.play() эту проверку делает сам и на
-                    // пустой/битый SoundEvent пишет warning вместо NPE — именно поэтому
-                    // превью в GUI не крашилось, а тут крашилось.
-                    isPlayingCustomSound = true;
-                    MinecraftClient.getInstance().getSoundManager().play(customSound);
-                } catch (Exception e) {
-                    System.err.println("[LexoraVisuals] Totem sound replace failed: " + e);
-                } finally {
-                    isPlayingCustomSound = false;
+                    try {
+                        // Безопасное получение координат и категории без обращения к sound.getVolume()/getPitch()
+                        double x = 0, y = 0, z = 0;
+                        SoundCategory category = SoundCategory.PLAYERS;
+
+                        try {
+                            x = sound.getX();
+                            y = sound.getY();
+                            z = sound.getZ();
+                            if (sound.getCategory() != null) {
+                                category = sound.getCategory();
+                            }
+                        } catch (Exception ignored) {}
+
+                        // Создаем кастомный звук без рискованных вызовов getVolume() у ванильного sound
+                        PositionedSoundInstance customSound = new PositionedSoundInstance(
+                                customEvent.id(),
+                                category,
+                                TotemSoundManager.getReplacementVolume(1.0f),
+                                TotemSoundManager.getReplacementPitch(1.0f),
+                                Random.create(),
+                                false,
+                                0,
+                                SoundInstance.AttenuationType.LINEAR,
+                                x, y, z,
+                                false
+                        );
+
+                        isPlayingCustomSound = true;
+                        mc.getSoundManager().play(customSound);
+                    } catch (Exception e) {
+                        System.err.println("[LexoraVisuals] Totem sound replace failed: " + e.getMessage());
+                    } finally {
+                        isPlayingCustomSound = false;
+                    }
                 }
             }
         }

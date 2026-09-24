@@ -5,8 +5,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.lexoravisauls.client.auth.AuthManager;
+import com.lexoravisauls.client.modules.FreeLook;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.Perspective;
 import net.minecraft.entity.player.PlayerEntity;
 
 import java.net.URI;
@@ -34,7 +37,7 @@ public class EmotionManager {
             if (client.world == null) return;
 
             tickCounter++;
-            if (tickCounter >= 15) {
+            if (tickCounter >= 30) {
                 tickCounter = 0;
                 pollEmotions();
             }
@@ -42,24 +45,43 @@ public class EmotionManager {
             cleanupExpired();
             checkSelfMovementInterrupt(client);
         });
+
+        // ЗАЩИТА ОТ ЗАЛИПАНИЯ КАМЕРЫ: END_CLIENT_TICK выше прерывается на client.world == null,
+        // значит если игрок дисконнектнется во время активной эмоции (playingEmotions не пуст),
+        // cleanupExpired()/checkSelfMovementInterrupt() больше не вызовутся и savedPerspective
+        // не восстановится сама — камера так и останется в 3rd person даже после выхода на сервер-лист.
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            restorePerspectiveIfNeeded();
+            playingEmotions.clear();
+            movementCheckActive = false;
+        });
     }
 
     private static void cleanupExpired() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        String myIgn = mc.getSession() != null ? mc.getSession().getUsername() : null;
+
         long now = System.currentTimeMillis();
         Iterator<Map.Entry<String, ActiveEmotion>> it = playingEmotions.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, ActiveEmotion> entry = it.next();
+            String player = entry.getKey();
             ActiveEmotion active = entry.getValue();
 
             LexoraAnimation anim = AnimationLoader.getAnimation(active.animationId);
             if (anim == null) {
                 it.remove();
+                if (player.equals(myIgn)) restorePerspectiveIfNeeded();
                 continue;
             }
 
             float elapsedSeconds = (now - active.startTime) / 1000f;
             if (!anim.isLoop && elapsedSeconds > (anim.length + 0.25f)) {
                 it.remove();
+                // Восстанавливаем камеру ТОЛЬКО если это была НАША собственная эмоция —
+                // playingEmotions хранит эмоции всех видимых игроков одновременно,
+                // удаление чужой записи не должно трогать нашу локальную перспективу
+                if (player.equals(myIgn)) restorePerspectiveIfNeeded();
             }
         }
     }
@@ -123,6 +145,17 @@ public class EmotionManager {
             movementCheckActive = true;
         }
 
+        // FREE LOOK НА ВРЕМЯ ЭМОЦИИ: если игрок сейчас в FIRST_PERSON, просим FreeLook
+        // включить обзор от 3-го лица со свободным вращением камеры мышью (не поворачивая
+        // персонажа) — так видно свою анимацию, но управление обзором остаётся удобным.
+        // Если игрок УЖЕ в каком-то виде 3rd person (сам включил, или уже идёт emotionный
+        // free look от предыдущей эмоции) — НЕ трогаем вообще, оставляем его выбор как есть.
+        // Реальное решение "кто победит" (эта эмоция или, например, зажатый игроком свой
+        // Free Look bind) принимает сам FreeLook.tick() — см. приоритет там.
+        if (mc.options.getPerspective() == Perspective.FIRST_PERSON) {
+            FreeLook.emotionRequestsFreeLook = true;
+        }
+
         if (AuthManager.sessionToken == null || AuthManager.sessionToken.isEmpty()) {
             return;
         }
@@ -147,6 +180,19 @@ public class EmotionManager {
     private static double movementStartX, movementStartY, movementStartZ;
     private static boolean movementCheckActive = false;
     private static final double MOVEMENT_THRESHOLD = 0.15;
+
+    // Сохранённая перспектива на момент старта СВОЕЙ эмоции — null означает "сейчас не сохранена"
+    // (либо эмоция не идёт, либо уже восстановлена). Восстанавливаем именно то, что было ДО
+    // эмоции, а не жёстко FIRST_PERSON, чтобы не выдёргивать игрока из 3rd person, если он уже
+    // был там до того как начал эмоцию.
+    private static void restorePerspectiveIfNeeded() {
+        // Больше НЕ трогаем mc.options.setPerspective() напрямую — этим занимается
+        // FreeLook.tick() сам, у него уже есть корректная previousPerspective и защита
+        // от рывка камеры при смене владельца (см. activatedByEmotion в FreeLook.java).
+        // Здесь только снимаем наш запрос; на следующем тике FreeLook сам увидит, что
+        // ни клавиша не зажата, ни эмоционный запрос не активен, и сделает reset() сам.
+        FreeLook.emotionRequestsFreeLook = false;
+    }
 
     private static final Map<String, Long> recentlyCancelled = new HashMap<>();
     private static final long CANCEL_GRACE_MS = 2000;
@@ -179,6 +225,13 @@ public class EmotionManager {
 
         MinecraftClient mc = MinecraftClient.getInstance();
         String myIgn = mc.getSession() != null ? mc.getSession().getUsername() : null;
+
+        // Восстанавливаем камеру только если это была НАША эмоция — та же проверка,
+        // что уже стоит ниже для сетевого запроса, но нужна раньше самого return
+        if (myIgn != null && myIgn.equals(ign)) {
+            restorePerspectiveIfNeeded();
+        }
+
         if (myIgn == null || !myIgn.equals(ign)) return;
         if (AuthManager.sessionToken == null || AuthManager.sessionToken.isEmpty()) return;
 
@@ -199,17 +252,36 @@ public class EmotionManager {
         }
     }
 
+    private static volatile boolean isPolling = false;
+
     private static void pollEmotions() {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.world == null) return;
+        if (mc.world == null || mc.player == null) return;
+        if (isPolling) return;
+
+        // Если на сервере нет других пользователей мода — не опрашиваем сайт
+        if (!com.lexoravisauls.client.badge.LexoraModUsers.hasOtherModUsersOnServer()) {
+            return;
+        }
 
         StringBuilder visiblePlayers = new StringBuilder();
+        String myIgn = mc.getSession() != null ? mc.getSession().getUsername() : null;
+
+        // Опрашиваем ТОЛЬКО реальных пользователей Lexora в зоне видимости (до 64 блоков)
         for (PlayerEntity player : mc.world.getPlayers()) {
-            visiblePlayers.append(player.getName().getString()).append(",");
+            String pName = player.getName().getString();
+            if (myIgn != null && myIgn.equalsIgnoreCase(pName)) continue; // себя опрашивать не нужно
+
+            if (com.lexoravisauls.client.badge.LexoraModUsers.hasName(pName)) {
+                if (player.squaredDistanceTo(mc.player) <= 4096.0) { // 64 * 64 блока
+                    visiblePlayers.append(pName).append(",");
+                }
+            }
         }
 
         if (visiblePlayers.isEmpty()) return;
 
+        isPolling = true;
         long now = System.currentTimeMillis();
         recentlyCancelled.entrySet().removeIf(e -> now - e.getValue() > CANCEL_GRACE_MS);
 
@@ -223,39 +295,44 @@ public class EmotionManager {
                     .build();
 
             HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenAccept(response -> {
-                        if (response.statusCode() == 200) {
-                            try {
-                                JsonArray array = JsonParser.parseString(response.body()).getAsJsonArray();
-                                mc.execute(() -> {
-                                    for (JsonElement element : array) {
-                                        JsonObject obj = element.getAsJsonObject();
-                                        String player = obj.get("ign").getAsString();
-                                        String anim = obj.get("anim").getAsString();
-                                        long start = obj.get("start").getAsLong();
+                    .whenComplete((response, error) -> {
+                        isPolling = false;
+                        if (error != null || response == null || response.statusCode() != 200) {
+                            return;
+                        }
+                        try {
+                            JsonArray array = JsonParser.parseString(response.body()).getAsJsonArray();
+                            mc.execute(() -> {
+                                for (JsonElement element : array) {
+                                    JsonObject obj = element.getAsJsonObject();
+                                    String player = obj.get("ign").getAsString();
+                                    String anim = obj.get("anim").getAsString();
+                                    long start = obj.get("start").getAsLong();
 
-                                        Long cancelledAt = recentlyCancelled.get(player);
-                                        if (cancelledAt != null && (now - cancelledAt) <= CANCEL_GRACE_MS) {
-                                            continue;
+                                    Long cancelledAt = recentlyCancelled.get(player);
+                                    if (cancelledAt != null && (now - cancelledAt) <= CANCEL_GRACE_MS) {
+                                        continue;
+                                    }
+
+                                    if (!anim.equals("none")) {
+                                        ActiveEmotion current = playingEmotions.get(player);
+                                        if (current == null || !current.animationId.equals(anim)) {
+                                            playingEmotions.put(player, new ActiveEmotion(anim, start));
                                         }
-
-                                        if (!anim.equals("none")) {
-                                            ActiveEmotion current = playingEmotions.get(player);
-                                            // ФИКС СБОЯ 0.75s: Если анимация УЖЕ идет и совпадает — НЕ перезаписываем startTime!
-                                            if (current == null || !current.animationId.equals(anim)) {
-                                                playingEmotions.put(player, new ActiveEmotion(anim, start));
-                                            }
-                                        } else {
-                                            playingEmotions.remove(player);
+                                    } else {
+                                        playingEmotions.remove(player);
+                                        if (player.equals(mc.getSession() != null ? mc.getSession().getUsername() : null)) {
+                                            restorePerspectiveIfNeeded();
                                         }
                                     }
-                                });
-                            } catch (Exception e) {
-                                System.out.println("[Lexora Emotions] JSON Parse error");
-                            }
+                                }
+                            });
+                        } catch (Exception e) {
+                            // Игнорируем ошибки парсинга
                         }
                     });
         } catch (Exception e) {
+            isPolling = false;
             e.printStackTrace();
         }
     }

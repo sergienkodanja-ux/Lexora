@@ -1,5 +1,6 @@
 package com.lexoravisauls.client.events;
 
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.HudManager;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.gui.MsdfFont;
@@ -38,14 +39,11 @@ public class TargetHudRenderer {
 
     // Геометрия лица
     private static final float FACE_PAD  = 6f;
-    private static final float FACE_SIZE = HEIGHT - (FACE_PAD * 2); // 26px
+    private static final float FACE_SIZE = HEIGHT - (FACE_PAD * 2); // 34px
 
     // Правая колонка (текст и ХП)
-    private static final float RIGHT_X  = FACE_PAD + FACE_SIZE + 8f; // 40px
-    private static final float RIGHT_W  = WIDTH - RIGHT_X - 6f;      // 109px
-
-    // Полоса здоровья (Уменьшена в 2 раза)
-    private static final float BAR_H    = 3f;
+    private static final float RIGHT_X  = FACE_PAD + FACE_SIZE + 8f;
+    private static final float RIGHT_W  = WIDTH - RIGHT_X - 6f;
 
     // Панель используемого предмета
     private static final int   USING_SIZE  = 24;
@@ -90,7 +88,7 @@ public class TargetHudRenderer {
     private static final Identifier TEX_GENSHIN = Identifier.of("lexoravisauls", "textures/particle/genshin.png");
     private static final Identifier TEX_HEART   = Identifier.of("lexoravisauls", "textures/particle/heart1.png");
 
-    // Иконка стрелочки для поля выбора партикла (сглаженная, не пиксельная)
+    // Иконка стрелочки для поля выбора партикла
     private static final Identifier TEX_ARROW   = Identifier.of("lexoravisauls", "textures/gui/text.png");
 
     // ─── Типы партиклов ──────────────────────────────────────────────────────
@@ -109,7 +107,7 @@ public class TargetHudRenderer {
 
         public final String     label;
         public final Identifier texture;
-        public final boolean    tinted; // true = красится в цвет темы, false = свои цвета текстуры
+        public final boolean    tinted;
 
         ParticleType(String label, Identifier texture, boolean tinted) {
             this.label = label;
@@ -136,8 +134,8 @@ public class TargetHudRenderer {
 
     private static float hudAlpha       = 0f;
     private static float healthAnim     = 1f;
-    private static float absAnim        = 0f;  // Анимация поглощения
-    private static float armorAnim      = 0f;  // Анимация брони
+    private static float absAnim        = 0f;
+    private static float armorAnim      = 0f;
     private static float smoothedHealth = -1f;
 
     // ЖЕЛЕ-АНИМАЦИЯ
@@ -146,7 +144,7 @@ public class TargetHudRenderer {
 
     // ─── Задержка перед исчезновением (linger) ─────────────────────────────────
     private static long       lastSeenMs = 0L;
-    private static final long LINGER_MS  = 1000L; // держим HUD ещё 1 сек после потери цели с прицела
+    private static final long LINGER_MS  = 1000L;
 
     // Частицы
     private static final Random            RNG         = new Random();
@@ -165,20 +163,18 @@ public class TargetHudRenderer {
     // ─── Плавное покраснение при ударе ────────────────────────────────────────
     private static float smoothedHurt = 0f;
 
-    // ─── Круговые полоски (справа от лица, вместо горизонтальной полосы) ──────
-    private static final float RING_OUTER  = 16f;   // Сделали круг еще больше
-    private static final float RING_THICK  = 3.5f;  // Сделали линию круга еще шире
-    private static final float ABS_THICK   = 1.4f;  // (Больше не используется)
-    private static final float ARMOR_THICK = 1.2f;  // (Больше не используется)
+    // ─── Круговые полоски ──────────────────────────────────────────────────────
+    private static final float RING_OUTER  = 16f;
+    private static final float RING_THICK  = 3.5f;
 
     // ─── Остров брони + экипировки (снизу, отдельный блок) ───────────────────
-    private static final float EQUIP_ICON_SIZE  = 11f;   // было 14, уменьшено
-    private static final float EQUIP_ISLAND_GAP = 3f;    // было 4
+    private static final float EQUIP_ICON_SIZE  = 11f;
+    private static final float EQUIP_ISLAND_GAP = 3f;
 
     // ─── Селектор партикла (виджет для панели настроек) ───────────────────────
     private static final float PARTICLE_ROW_H    = 20f;
     private static final float PARTICLE_OPTION_H = 16f;
-    private static float       particleListAnim  = 0f; // 0..1, плавное раскрытие/закрытие списка
+    private static float       particleListAnim  = 0f;
 
     private static final class HitParticle {
         float x, y, vx, vy, size, life, maxLife, angle, spin;
@@ -215,7 +211,6 @@ public class TargetHudRenderer {
         }
         if (preview && currentTarget == null) lastTarget = mc.player;
 
-        // Держим HUD видимым ещё LINGER_MS после того, как цель пропала с прицела
         boolean lingering = !preview && currentTarget == null && lastTarget != null
                 && (System.currentTimeMillis() - lastSeenMs) < LINGER_MS;
 
@@ -223,7 +218,7 @@ public class TargetHudRenderer {
 
         hudAlpha += ((visible ? 1f : 0f) - hudAlpha) * 0.025f;
 
-        // ── ЖЕЛЕ-АНИМАЦИЯ ПОЯВЛЕНИЯ (замедлено ещё ~в 4 раза поверх прошлого замедления) ──
+        // ── ЖЕЛЕ-АНИМАЦИЯ ПОЯВЛЕНИЯ ──
         float targetScale = visible ? 1.0f : 0.0f;
         float tension = visible ? 0.035f : 0.02f;
         float dampening = visible ? 0.55f : 0.40f;
@@ -341,15 +336,12 @@ public class TargetHudRenderer {
         float fx = baseX + FACE_PAD;
         float fy = baseY + FACE_PAD;
 
-        // Плавное покраснение: быстрое (но не мгновенное) нарастание, плавное затухание.
-        // "Damage Tint" выключен -> rawHurt всегда 0, и smoothedHurt просто плавно уйдёт в 0
-        // (а не будет продолжать краснеть, как было раньше — это был баг).
         boolean damageTintOn = LexoraGui.moduleStates.getOrDefault("Damage Tint", true);
         float rawHurt = (damageTintOn && display.hurtTime > 0) ? 1f : 0f;
         if (rawHurt > smoothedHurt) {
-            smoothedHurt = MathHelper.lerp(0.6f, smoothedHurt, rawHurt); // быстрый, но сглаженный подъём
+            smoothedHurt = MathHelper.lerp(0.6f, smoothedHurt, rawHurt);
         } else {
-            smoothedHurt = MathHelper.lerp(0.12f, smoothedHurt, 0f); // плавное затухание
+            smoothedHurt = MathHelper.lerp(0.12f, smoothedHurt, 0f);
         }
 
         drawFaceSlot(context, faceTex, fx, fy, alpha, hasAlpha, smoothedHurt);
@@ -357,16 +349,15 @@ public class TargetHudRenderer {
         updateParticles(display, fx + 2f, fy + 2f, FACE_SIZE - 4f);
         drawParticles(context, alpha);
 
-        // Имя + расстояние (в текстовой зоне сразу после лица)
+        // Имя + расстояние
         drawInfo(context, baseX, baseY, alpha, name, smoothedHealth, targetAbs, smoothedDistance);
 
-        // Кольцо HP/поглощения/брони — справа, после текста
+        // Кольцо HP/поглощения/брони
         float ringCx = baseX + WIDTH - RING_OUTER - 8f;
         float ringCy = baseY + HEIGHT / 2f;
         drawRingBars(context, ringCx, ringCy, alpha, healthAnim, absAnim, armorAnim, finalScale);
 
-        // Остров экипировки + брони снизу (с блюром, анимируется быстрее чем основной HUD)
-        // Используем animScale^2 — при исчезновении пропадает быстрее
+        // Остров экипировки + брони снизу
         float islandScale = animScale * animScale;
         drawEquipmentIsland(context, ms, baseX, baseY, alpha, display, islandScale);
 
@@ -380,31 +371,16 @@ public class TargetHudRenderer {
     // =========================================================================
 
     private static void drawPanel(DrawContext ctx, int x, int y, int alpha) {
-        boolean blurEnabled = LexoraGui.moduleStates.getOrDefault("Target HUD Blur", true);
-
-        if (blurEnabled) {
-            int bgColor = (a(alpha * 0.70f) << 24) | 0x141416;
-            try {
-                ctx.draw(); // <--- ДОБАВИТЬ ЭТО
-                com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(ctx, x, y, WIDTH, HEIGHT, 5f, 15f, bgColor);
-            } catch (Throwable ignored) {
-                rr(ctx, x, y, WIDTH, HEIGHT, 5f, bgColor);
-            }
-        } else {
-            int solidColor = (alpha << 24) | 0x000000;
-            rr(ctx, x, y, WIDTH, HEIGHT, 5f, solidColor);
-        }
+        boolean blurEnabled = ClientData.moduleStates.containsKey("Target HUD Blur")
+                ? ClientData.moduleStates.get("Target HUD Blur")
+                : LexoraGui.moduleStates.getOrDefault("Target HUD Blur", true);
+        HudThemeHelper.drawHudPanel(ctx, x, y, WIDTH, HEIGHT, 5f, alpha, blurEnabled);
     }
-
-    // =========================================================================
-    //  ЛИЦО (Увеличена краснота)
-    // =========================================================================
 
     private static void drawFaceSlot(DrawContext ctx, Identifier tex,
                                      float x, float y, int alpha,
                                      boolean playerSkin, float hurtPct) {
-        rr(ctx, x, y, FACE_SIZE, FACE_SIZE, 5f,
-                (a(alpha * 0.80f) << 24) | 0x1A1A26);
+        rr(ctx, x, y, FACE_SIZE, FACE_SIZE, 5f, HudThemeHelper.getSlotBgColor(alpha));
 
         drawFace(ctx, tex, x, y, FACE_SIZE, playerSkin, 5f,
                 (alpha << 24) | 0xFFFFFF, hurtPct);
@@ -431,7 +407,6 @@ public class TargetHudRenderer {
 
         if (hurtPct > 0.02f) {
             int baseA  = (color >>> 24) & 0xFF;
-            // Усиление красноты в 3 раза
             int ha     = (int) Math.min(baseA, (hurtPct * 3.0f * baseA));
             RoundedRectShader.drawTextured(ctx, tex,
                     x, y, size, size, radius,
@@ -445,41 +420,33 @@ public class TargetHudRenderer {
 
     private static void drawInfo(DrawContext ctx, int x, int y, int alpha, String name,
                                  float hp, float abs, float dist) {
-        // Текст от RIGHT_X, ширина до кольца (кольцо занимает правые ~36px)
         float textX  = x + RIGHT_X;
         float availW = WIDTH - RIGHT_X - RING_OUTER * 2f - 14f;
 
         String dispName = clip(name, availW, FONT_NAME);
-        str(ctx, dispName, textX, y + 9f, FONT_NAME, (alpha << 24) | 0xFFFFFF);
+        str(ctx, dispName, textX, y + 9f, FONT_NAME, HudThemeHelper.getTextColor(alpha));
 
-        // Расстояние — плавный текст
         String distText = String.format(java.util.Locale.US, "%.1fm", dist);
-        int dimA = (a(alpha * 0.75f) << 24) | 0xAABBCC;
-        str(ctx, distText, textX, y + 22f, FONT_INFO, dimA);
+        str(ctx, distText, textX, y + 22f, FONT_INFO, HudThemeHelper.getSecondaryTextColor(alpha));
 
-        // Если есть поглощение — маленький золотой текст
         if (abs > 0.1f) {
             String absText = String.format(java.util.Locale.US, "+%.0f\u2764", abs);
-            int absA = (a(alpha * 0.85f) << 24) | 0xFBBF24;
+            int absA = (a(alpha * 0.85f) << 24) | (HudThemeHelper.isDark() ? 0xFBBF24 : 0xD97706);
             str(ctx, absText, textX, y + 32f, FONT_INFO, absA);
         }
     }
-
-    // =========================================================================
-    //  КРУГОВЫЕ ПОЛОСКИ HP И ПОГЛОЩЕНИЯ
-    // =========================================================================
 
     private static void drawRingBars(DrawContext ctx,
                                      float cx, float cy, int alpha,
                                      float hpFrac, float absFrac, float armorFrac,
                                      float scale) {
-
         float roHp = RING_OUTER;
         float riHp = roHp - RING_THICK;
 
-        // ── 1. Фон кольца (темный) ───────────────────────────────────────────
+        // ── 1. Фон кольца (адаптируется под тему) ───────────────────────────
+        int ringBg = HudThemeHelper.isDark() ? 0x1E1E1E : 0xD5D9E2;
         ArcShader.drawRing(ctx, cx, cy, roHp, riHp,
-                (a(alpha * 0.30f) << 24) | 0x1E1E1E);
+                (a(alpha * 0.30f) << 24) | ringBg);
 
         // ── 2. Основное HP ───────────────────────────────────────────────────
         if (hpFrac > 0.005f) {
@@ -499,27 +466,21 @@ public class TargetHudRenderer {
         if (disp != null) {
             float hp = disp.getHealth();
 
-            // Если здоровье целое (20.0), пишем "20", если с долями (15.6) — пишем "15.6"
             String hpTxt = (hp == (int) hp)
                     ? String.valueOf((int) hp)
                     : String.format(java.util.Locale.US, "%.1f", hp);
 
-            // Немного увеличиваем размер шрифта, так как круг стал больше
             float  fSize   = FONT_INFO + 2.5f;
             float  tw      = strW(hpTxt, fSize);
             int    hpColor = getHealthColor(hpFrac);
 
-            // Идеальное центрирование внутри кольца
             str(ctx, hpTxt,
                     cx - tw / 2f,
-                    cy - fSize / 2f + 0.5f, // +0.5f для точной визуальной центровки MSDF
+                    cy - fSize / 2f + 0.5f,
                     fSize,
                     (alpha << 24) | hpColor);
         }
     }
-
-    // drawArcFill удалён — заменён на ArcShader.drawArcFraction / drawRing
-    // Один SDF draw call вместо сотен pill-сегментов.
 
     // =========================================================================
     //  ОСТРОВ ЭКИПИРОВКИ + БРОНИ (снизу)
@@ -530,12 +491,11 @@ public class TargetHudRenderer {
                                             LivingEntity display, float islandScale) {
         if (islandScale < 0.02f) return;
 
-        // Собираем предметы: mainHand + offHand + 4 слота брони (без прочности!)
+        // Собираем предметы: mainHand + offHand + 4 слота брони
         java.util.List<ItemStack> items = new java.util.ArrayList<>();
         ItemStack mainHand = display.getMainHandStack();
         ItemStack offHand  = display.getOffHandStack();
 
-        // Броня: helmet, chestplate, leggings, boots
         for (net.minecraft.entity.EquipmentSlot slot : new net.minecraft.entity.EquipmentSlot[]{
                 net.minecraft.entity.EquipmentSlot.HEAD,
                 net.minecraft.entity.EquipmentSlot.CHEST,
@@ -550,14 +510,13 @@ public class TargetHudRenderer {
         if (items.isEmpty()) return;
 
         float iconS   = EQUIP_ICON_SIZE;
-        float pad     = 4f;   // уменьшен padding
-        float gap     = 2f;   // уменьшен gap
+        float pad     = 4f;
+        float gap     = 2f;
         float islandW = pad * 2f + items.size() * iconS + (items.size() - 1) * gap;
         float islandH = iconS + pad * 2f;
         float islandX = baseX + (WIDTH - islandW) / 2f;
         float islandY = baseY + HEIGHT + EQUIP_ISLAND_GAP;
 
-        // Анимация масштаба острова — появляется/исчезает быстрее основного HUD
         float pivIslandX = islandX + islandW / 2f;
         float pivIslandY = islandY + islandH / 2f;
         int   islandAlpha = MathHelper.clamp((int)(alpha * islandScale), 0, 255);
@@ -567,25 +526,13 @@ public class TargetHudRenderer {
         ctx.getMatrices().scale(islandScale, islandScale, 1f);
         ctx.getMatrices().translate(-pivIslandX, -pivIslandY, 0f);
 
-        // Фон с блюром (такой же как основной HUD)
-        // Фон с блюром (такой же как основной HUD)
-        boolean blurEnabled = LexoraGui.moduleStates.getOrDefault("Target HUD Blur", true);
-        int bgColor = (a(islandAlpha * 0.70f) << 24) | 0x141416;
-        if (blurEnabled) {
-            try {
-                ctx.draw(); // <--- ДОБАВИТЬ ЭТО
-                com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(
-                        ctx, (int) islandX, (int) islandY,
-                        (int) islandW, (int) islandH,
-                        5f, 12f, bgColor);
-            } catch (Throwable ignored) {
-                rr(ctx, islandX, islandY, islandW, islandH, 5f, bgColor);
-            }
-        } else {
-            rr(ctx, islandX, islandY, islandW, islandH, 5f, bgColor);
-        }
+        // Фон с блюром/без блюра — адаптирован под тему через HudThemeHelper
+        boolean blurEnabled = ClientData.moduleStates.containsKey("Target HUD Blur")
+                ? ClientData.moduleStates.get("Target HUD Blur")
+                : LexoraGui.moduleStates.getOrDefault("Target HUD Blur", true);
+        HudThemeHelper.drawHudPanel(ctx, islandX, islandY, islandW, islandH, 5f, islandAlpha, blurEnabled);
 
-        // Иконки предметов (БЕЗ счётчика прочности)
+        // Иконки предметов
         for (int i = 0; i < items.size(); i++) {
             float ix = islandX + pad + i * (iconS + gap);
             float iy = islandY + pad;
@@ -601,7 +548,7 @@ public class TargetHudRenderer {
             ms.pop();
         }
 
-        // Надпись "что держит в руке" (имя mainHand), аккуратно
+        // Надпись "что держит в руке"
         if (!mainHand.isEmpty()) {
             String itemName = mainHand.getName().getString();
             itemName = clip(itemName, islandW - pad * 2f, 6.5f);
@@ -610,18 +557,18 @@ public class TargetHudRenderer {
                     islandX + (islandW - tw) / 2f,
                     islandY + islandH + 2f,
                     6.5f,
-                    (a(islandAlpha * 0.65f) << 24) | 0xCCCCCC);
+                    HudThemeHelper.getSecondaryTextColor(islandAlpha));
         }
 
-        ctx.getMatrices().pop(); // закрываем scale острова
+        ctx.getMatrices().pop();
     }
 
     private static int getHealthColor(float fraction) {
         fraction = MathHelper.clamp(fraction, 0f, 1f);
         if (fraction >= 0.5f) {
-            return blendRgb(0xFACC15, 0x4ADE80, (fraction - 0.5f) * 2f); // Желтый -> Зеленый
+            return blendRgb(0xFACC15, 0x4ADE80, (fraction - 0.5f) * 2f);
         } else {
-            return blendRgb(0xF87171, 0xFACC15, fraction * 2f); // Красный -> Желтый
+            return blendRgb(0xF87171, 0xFACC15, fraction * 2f);
         }
     }
 
@@ -650,10 +597,10 @@ public class TargetHudRenderer {
         int panelAlpha = (int)(alpha * anim);
         if (panelAlpha < 5) return;
 
-        rr(ctx, px, py, USING_SIZE, USING_SIZE, 5f,
-                (a(panelAlpha * 0.92f) << 24) | 0x000000);
-        rr(ctx, px + 1f, py + 1f, USING_SIZE - 2f, USING_SIZE - 2f, 4f,
-                (a(panelAlpha * 0.25f) << 24) | 0x1A1A28);
+        boolean blurEnabled = ClientData.moduleStates.containsKey("Target HUD Blur")
+                ? ClientData.moduleStates.get("Target HUD Blur")
+                : LexoraGui.moduleStates.getOrDefault("Target HUD Blur", true);
+        HudThemeHelper.drawHudPanel(ctx, px, py, USING_SIZE, USING_SIZE, 5f, panelAlpha, blurEnabled);
 
         if (progress > 1f) {
             drawArcProgress(ctx, px, py, USING_SIZE, USING_SIZE, progress, panelAlpha);
@@ -792,15 +739,6 @@ public class TargetHudRenderer {
     // =========================================================================
     //  СЕЛЕКТОР ТИПА ПАРТИКЛА (виджет для панели настроек Target HUD)
     // =========================================================================
-    // К самому игровому HUD это не относится — это готовый виджет для ЭКРАНА
-    // НАСТРОЕК, там же, где рисуются тумблеры "Target HUD Blur" / "Damage Tint".
-    //
-    //   renderParticleSelector(...)  — рисует поле + (если open) список вариантов
-    //   hitTestParticleSelector(...) — обрабатывает клики по этому виджету:
-    //        -2        клик по самому полю      → переключи свой флаг "open"
-    //        -1        клик мимо списка (open)  → закрой список
-    //        >= 0      индекс выбранного пункта → сохрани и закрой список
-    //        MIN_VALUE клик мимо виджета вообще → передай обработку дальше
 
     public static void renderParticleSelector(DrawContext ctx, float x, float y, float width, boolean open,
                                               int mouseX, int mouseY) {
@@ -819,13 +757,11 @@ public class TargetHudRenderer {
         ParticleType[] all  = ParticleType.values();
         float listH  = all.length * PARTICLE_OPTION_H;
         int   accent = ModernTheme.accent(0f) & 0xFFFFFF;
-        int   listA  = (int)(255 * particleListAnim); // альфа всего списка на время анимации
+        int   listA  = (int)(255 * particleListAnim);
 
-        // Список — самостоятельный элемент: сам решает, вниз ему открыться или вверх,
-        // если снизу не хватает места на экране (не зависит от родительской панели).
         boolean upward = shouldOpenUpward(y);
         float   listY  = listOriginY(y, upward, listH);
-        float   pivotY = upward ? (listY + listH) : listY; // растёт от края, ближнего к полю
+        float   pivotY = upward ? (listY + listH) : listY;
 
         ctx.getMatrices().push();
         ctx.getMatrices().translate(x + width / 2f, pivotY, 0f);
@@ -871,7 +807,6 @@ public class TargetHudRenderer {
         return Integer.MIN_VALUE;
     }
 
-    /** Не влезает ли список вниз от поля — тогда его нужно открыть вверх. */
     private static boolean shouldOpenUpward(float fieldY) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.getWindow() == null) return false;
@@ -884,7 +819,6 @@ public class TargetHudRenderer {
         return upward ? (fieldY - listH - 2f) : (fieldY + PARTICLE_ROW_H + 2f);
     }
 
-    /** Полная высота виджета с учётом открытого списка — пригодится для раскладки панели. */
     public static float particleSelectorHeight(boolean open) {
         return open ? PARTICLE_ROW_H + 2f + ParticleType.values().length * PARTICLE_OPTION_H : PARTICLE_ROW_H;
     }
@@ -902,8 +836,6 @@ public class TargetHudRenderer {
         ctx.getMatrices().pop();
     }
 
-    // Отдельный от texQuad путь отрисовки — тут специально GL_LINEAR вместо GL_NEAREST,
-    // чтобы иконка была гладкой, а не пиксельной (в отличие от лица/партиклов).
     private static void drawSmoothIcon(DrawContext ctx, Identifier tex,
                                        float x, float y, float w, float h, int color) {
         if (((color >>> 24) & 0xFF) <= 3) return;
