@@ -32,12 +32,15 @@ public final class LiteApiFeatureControl {
     private static final String CLIENT_ID = "lexora";
     private static final Gson GSON = new Gson();
     private static final Logger LOGGER = LoggerFactory.getLogger("Lexora-LiteAPI");
-    private static final long MIN_REQUEST_INTERVAL_MS = 10_500L;
+    private static final long MIN_REQUEST_INTERVAL_MS = 11_000L;    // 11 сек (лимит HolyWorld 10.5 сек)
+    private static final long REQUEST_TIMEOUT_MS = 15_000L;          // 15 сек таймаут ответа сервера
+    private static final long PERIODIC_CHECK_INTERVAL_MS = 45_000L;  // Автоматический репарс каждые 45 секунд
 
     private static long lastRequestSentAt = 0L;
+    private static long lastSuccessfulCheckAt = 0L;
     private static volatile boolean needsFeatureCheck = false;
 
-    private record PendingCheck(Set<String> requestedFeatures, RequestCallback callback) {}
+    private record PendingCheck(Set<String> requestedFeatures, RequestCallback callback, long sentAt) {}
     private static final Map<String, PendingCheck> pendingRequests = new ConcurrentHashMap<>();
 
     /** Модули, запрещённые сервером HolyWorld */
@@ -72,6 +75,10 @@ public final class LiteApiFeatureControl {
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             needsFeatureCheck = true;
+            lastRequestSentAt = 0L;
+            lastSuccessfulCheckAt = 0L;
+            pendingRequests.clear();
+            logStatus("§7Подключение к серверу, ожидание готовности канала liteapi:feature-control...", true);
             trySendPendingCheck();
         });
 
@@ -79,17 +86,59 @@ public final class LiteApiFeatureControl {
             restoreAllBlocked();
             needsFeatureCheck = false;
             lastRequestSentAt = 0L;
+            lastSuccessfulCheckAt = 0L;
+            pendingRequests.clear();
+            logStatus("§7Отключение от сервера. Блок-лист HolyWorld сброшен.", false);
         });
+    }
+
+    public static void logStatus(String msg, boolean toChat) {
+        String clean = msg.replaceAll("§[0-9a-fk-or]", "");
+        LOGGER.debug("[LiteAPI] {}", clean);
     }
 
     /**
      * Вызывается каждый тик клиента из LexoravisaulsClient.
      * 1. Гарантирует постоянный контроль (enforceBlocklist) — запрещённые функции невозможно включить.
-     * 2. Автоматически повторяет запрос checkFeatures, если канал был временно недоступен или действовал кулдаун.
+     * 2. Отслеживает таймаут зависших/недошедших запросов (15 сек) и перезапускает их.
+     * 3. Выполняет автоматический репарс/повторную проверку каждые 45 секунд.
+     * 4. Автоматически повторяет запрос checkFeatures, если канал был временно недоступен или действовал кулдаун.
      */
     public static void tick() {
         enforceBlocklist();
 
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.getNetworkHandler() == null) return;
+
+        long now = System.currentTimeMillis();
+
+        // 1. Проверяем зависшие/потерянные запросы, на которые сервер не прислал ответ за 15 секунд
+        if (!pendingRequests.isEmpty()) {
+            boolean timedOut = false;
+            Iterator<Map.Entry<String, PendingCheck>> it = pendingRequests.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<String, PendingCheck> entry = it.next();
+                if (now - entry.getValue().sentAt() > REQUEST_TIMEOUT_MS) {
+                    it.remove();
+                    timedOut = true;
+                    logStatus("§eЗапрос checkFeatures id=" + entry.getKey().substring(0, Math.min(8, entry.getKey().length())) + " не получил ответа за 15с. Повторная отправка...", true);
+                    if (entry.getValue().callback() != null) {
+                        entry.getValue().callback().onError("TIMEOUT", "Сервер HolyWorld не ответил за 15 секунд");
+                    }
+                }
+            }
+            if (timedOut) {
+                needsFeatureCheck = true;
+            }
+        }
+
+        // 2. Автоматический периодический репарс (повторная проверка каждые 45 секунд)
+        if (lastSuccessfulCheckAt > 0 && (now - lastSuccessfulCheckAt >= PERIODIC_CHECK_INTERVAL_MS)) {
+            needsFeatureCheck = true;
+            logStatus("§7[Репарс] Запуск плановой проверки (каждые 45с)...", false);
+        }
+
+        // 3. Отправка повторного запроса, если запланирован
         if (needsFeatureCheck) {
             trySendPendingCheck();
         }
@@ -184,14 +233,14 @@ public final class LiteApiFeatureControl {
         request.addProperty("method", "checkFeatures");
         request.add("payload", payload);
 
-        pendingRequests.put(requestId, new PendingCheck(requestedFeatures, callback));
+        pendingRequests.put(requestId, new PendingCheck(requestedFeatures, callback, now));
 
         lastRequestSentAt = now;
         needsFeatureCheck = false; // Запрос успешно отправлен в сеть
 
         String json = GSON.toJson(request);
         ClientPlayNetworking.send(new FeatureControlPayload(json));
-        LOGGER.info("Отправлен checkFeatures на HolyWorld ({} функций)", requestedFeatures.size());
+        logStatus("§fОтправлен запрос §bcheckFeatures §fна HolyWorld (§e" + requestedFeatures.size() + "§f функций)...", true);
     }
 
     private static void handleIncoming(String json) {
@@ -212,6 +261,7 @@ public final class LiteApiFeatureControl {
         RequestCallback cb = pending != null ? pending.callback() : null;
 
         if (ok) {
+            lastSuccessfulCheckAt = System.currentTimeMillis();
             JsonObject payload = obj.getAsJsonObject("payload");
             Set<String> blocklist = new HashSet<>();
             if (payload != null && payload.has("blocklist")) {
@@ -222,12 +272,21 @@ public final class LiteApiFeatureControl {
             }
             applyBlocklist(requestedFeatures, blocklist);
 
+            if (blocklist.isEmpty()) {
+                logStatus("§aОтвет от HolyWorld получен! Все проверенные функции разрешены.", true);
+            } else {
+                logStatus("§aОтвет от HolyWorld получен! §fЗаблокировано функций: §c" + blocklist.size() + " §7" + blocklist, true);
+            }
+
             if (cb != null) cb.onSuccess(blocklist);
         } else {
             String error = obj.has("error") ? obj.get("error").getAsString() : "UNKNOWN";
             String message = obj.has("message") ? obj.get("message").getAsString() : null;
             if (cb != null) cb.onError(error, message);
-            LOGGER.warn("checkFeatures error={} message={}", error, message);
+            logStatus("§cHolyWorld вернул ошибку: " + error + (message != null ? " (" + message + ")" : "") + ". Повтор через 11с...", true);
+
+            // Если сервер вернул ошибку (кулдаун или сбой) — автоматически повторяем запрос
+            needsFeatureCheck = true;
         }
     }
 
