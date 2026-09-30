@@ -192,6 +192,12 @@ public final class LyricsManager {
         return lines != null && !lines.isEmpty();
     }
 
+    /** Возвращает копию списка текущих строк караоке (или пустой список) */
+    public static List<LyricLine> getLines() {
+        List<LyricLine> l = lines;
+        return l != null ? new ArrayList<>(l) : Collections.emptyList();
+    }
+
     /** Упреждение звука (80 мс) для идеального попадания в бит и вокал */
     public static final long AUDIO_LEAD_MS = 80L;
 

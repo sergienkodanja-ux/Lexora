@@ -4,9 +4,12 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.lexoravisauls.client.core.ClientData;
+import com.lexoravisauls.client.gui.LexoraGui;
+import com.lexoravisauls.client.gui.LexoraModuleSource;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.packet.CustomPayload;
@@ -20,71 +23,38 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Интеграция с LiteAPI "Feature Control" HolyWorld (wiki.holyworld.me/api).
- * Написано под Minecraft 1.21.4 / Fabric API 0.110.x, где весь обмен идёт
- * через CustomPayload + PayloadTypeRegistry (старый "сырой PacketByteBuf"
- * API в registerGlobalReceiver в этой версии больше не существует).
- *
- * Протокол HolyWorld (payload = обычная UTF-8 JSON строка):
- *  - Канал: liteapi:feature-control
- *  - Метод: checkFeatures
- *  - Запрос:  {"id","method":"checkFeatures","payload":{"client","features":[...]}}
- *  - Ответ:   {"id","ok":true,"payload":{"blocklist":[...]}}
- *          или {"id","ok":false,"error","message"}
- *  - Rate limit: 1 запрос / 10 сек на игрока.
- *
- * Модуль НЕ хранит своё состояние отдельно — он читает/пишет напрямую
- * в ClientData.moduleStates (тот же Map<String, Boolean>, который
- * использует и LexoraGui, и ModernClickGui через ModernGuiRegistry).
+ * Поддерживает автоматический повторный опрос, постоянный контроль (enforceBlocklist)
+ * и отправку ВСЕХ известных модулей (как включённых, так и выключенных).
  */
 public final class LiteApiFeatureControl {
 
     public static final Identifier CHANNEL = Identifier.of("liteapi", "feature-control");
-
-    /**
-     * Стабильный ID клиента для сервера. НЕ менять между версиями мода —
-     * по этой строке HolyWorld хранит персональные блокировки для Lexora.
-     * Сверить с Зако/HolyWorld перед боевым релизом.
-     */
     private static final String CLIENT_ID = "lexora";
-
     private static final Gson GSON = new Gson();
     private static final Logger LOGGER = LoggerFactory.getLogger("Lexora-LiteAPI");
     private static final long MIN_REQUEST_INTERVAL_MS = 10_500L;
 
     private static long lastRequestSentAt = 0L;
+    private static volatile boolean needsFeatureCheck = false;
 
-    /**
-     * Помимо callback'а храним набор модулей, про которые реально спросили сервер в этом
-     * запросе. Нужно в applyBlocklist(), чтобы не снимать блокировку с модуля, который в
-     * конкретно ЭТОМ запросе не участвовал — раньше это и приводило к произвольному
-     * включению/выключению функций.
-     */
     private record PendingCheck(Set<String> requestedFeatures, RequestCallback callback) {}
     private static final Map<String, PendingCheck> pendingRequests = new ConcurrentHashMap<>();
 
-    /** Модули (те же строки, что ключи ClientData.moduleStates), которые сейчас запрещены сервером. */
+    /** Модули, запрещённые сервером HolyWorld */
     private static volatile Set<String> blockedModules = Collections.emptySet();
 
-    /** Состояние модулей до блокировки, чтобы вернуть его при выходе с сервера. */
+    /** Состояние модулей до блокировки для восстановления при выходе */
     private static final Map<String, Boolean> preBlockStates = new ConcurrentHashMap<>();
 
     private LiteApiFeatureControl() {}
 
-    // =========================================================================
-    // Определение пакета (CustomPayload). Один класс используется и для
-    // запроса, и для ответа — оба направления шлют просто "сырую" JSON-строку,
-    // разбор происходит вручную через Gson внутри handleIncoming/send.
-    // =========================================================================
-
     public record FeatureControlPayload(String json) implements CustomPayload {
-        public static final CustomPayload.Id<FeatureControlPayload> ID =
-                new CustomPayload.Id<>(CHANNEL);
+        public static final CustomPayload.Id<FeatureControlPayload> ID = new CustomPayload.Id<>(CHANNEL);
 
-        public static final PacketCodec<PacketByteBuf, FeatureControlPayload> CODEC =
-                PacketCodec.of(
-                        (payload, buf) -> writeUtf8(buf, payload.json()),
-                        buf -> new FeatureControlPayload(readUtf8(buf))
-                );
+        public static final PacketCodec<PacketByteBuf, FeatureControlPayload> CODEC = PacketCodec.of(
+                (payload, buf) -> writeUtf8(buf, payload.json()),
+                buf -> new FeatureControlPayload(readUtf8(buf))
+        );
 
         @Override
         public CustomPayload.Id<? extends CustomPayload> getId() {
@@ -92,74 +62,113 @@ public final class LiteApiFeatureControl {
         }
     }
 
-    /**
-     * Вызывать один раз при инициализации мода (в LexoravisaulsClient.onInitializeClient()).
-     */
     public static void init() {
-        // Регистрация типа пакета обязательна на обоих направлениях (C2S — мы отправляем,
-        // S2C — мы получаем), иначе canSend/registerGlobalReceiver выбросят IllegalArgumentException.
         PayloadTypeRegistry.playC2S().register(FeatureControlPayload.ID, FeatureControlPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(FeatureControlPayload.ID, FeatureControlPayload.CODEC);
 
-        // Новая сигнатура: обработчик получает готовый payload-объект и Context,
-        // вызывается уже на render thread — client.execute(...) не нужен.
         ClientPlayNetworking.registerGlobalReceiver(FeatureControlPayload.ID, (payload, context) -> {
             handleIncoming(payload.json());
         });
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-            // ВАЖНО: на прокси-сети HolyWorld (хаб <-> арены <-> анархия) JOIN срабатывает
-            // на КАЖДОМ переходе между бэкенд-серверами, а не только при первом входе в сеть
-            // (в логе это видно по повторяющимся "Loaded X advancements"/"Stopping worker
-            // threads" по нескольку раз за сессию, с разным числом advancements на разных
-            // бэкендах). Раньше здесь стоял restoreAllBlocked(), поэтому заблокированная
-            // функция на долю секунды включалась обратно на каждом таком переходе, пока не
-            // приходил ответ новой проверки — это и есть "то пропадали то возвращались".
-            // Теперь состояние модулей не трогаем на JOIN: они остаются как есть, пока свежая
-            // проверка явно не подтвердит снятие блокировки (см. applyBlocklist).
-            requestFeatureCheck(currentlyActiveModuleNames(), null);
+            needsFeatureCheck = true;
+            trySendPendingCheck();
         });
 
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-            // А это уже настоящий выход из сети HolyWorld (не переход между бэкендами) —
-            // здесь безопасно снять все блокировки и обнулить троттлинг для следующего входа.
             restoreAllBlocked();
+            needsFeatureCheck = false;
             lastRequestSentAt = 0L;
         });
     }
 
-    /** Имена модулей, которые сейчас включены (true) в ClientData.moduleStates. */
-    private static Collection<String> currentlyActiveModuleNames() {
-        List<String> names = new ArrayList<>();
-        for (Map.Entry<String, Boolean> e : ClientData.moduleStates.entrySet()) {
-            if (Boolean.TRUE.equals(e.getValue())) {
-                names.add(e.getKey());
-            }
+    /**
+     * Вызывается каждый тик клиента из LexoravisaulsClient.
+     * 1. Гарантирует постоянный контроль (enforceBlocklist) — запрещённые функции невозможно включить.
+     * 2. Автоматически повторяет запрос checkFeatures, если канал был временно недоступен или действовал кулдаун.
+     */
+    public static void tick() {
+        enforceBlocklist();
+
+        if (needsFeatureCheck) {
+            trySendPendingCheck();
         }
-        return names;
     }
 
-    /** Запросить проверку конкретного набора имён модулей. Уважает rate limit сервера. */
+    /**
+     * Постоянный контроль: выключает любые заблокированные сервером модули,
+     * даже если их попытались включить через бинд, конфиг или чит.
+     */
+    public static void enforceBlocklist() {
+        if (blockedModules.isEmpty()) return;
+
+        for (String blocked : blockedModules) {
+            if (Boolean.TRUE.equals(ClientData.moduleStates.get(blocked))) {
+                ClientData.moduleStates.put(blocked, false);
+            }
+            if (Boolean.TRUE.equals(LexoraGui.moduleStates.get(blocked))) {
+                LexoraGui.moduleStates.put(blocked, false);
+            }
+        }
+    }
+
+    /**
+     * Собрать полный список ВСЕХ функций Lexora (включённых и выключенных).
+     * Это решает главную проблему: HolyWorld должен знать обо ВСЕХ доступных
+     * клиенту модулях, чтобы вернуть запрещённые.
+     */
+    public static Set<String> getAllKnownFeatures() {
+        Set<String> all = new LinkedHashSet<>();
+        if (LexoraGui.categories != null) {
+            for (List<String> list : LexoraGui.categories.values()) {
+                if (list != null) all.addAll(list);
+            }
+        }
+        for (List<String> list : LexoraModuleSource.getCategoriesRaw().values()) {
+            if (list != null) all.addAll(list);
+        }
+        all.addAll(ClientData.moduleStates.keySet());
+        all.addAll(LexoraGui.moduleStates.keySet());
+        return all;
+    }
+
+    private static void trySendPendingCheck() {
+        if (!needsFeatureCheck) return;
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.getNetworkHandler() == null) return;
+
+        long now = System.currentTimeMillis();
+        if (now - lastRequestSentAt < MIN_REQUEST_INTERVAL_MS) {
+            return; // Дождёмся окончания кулдауна в tick()
+        }
+
+        if (!ClientPlayNetworking.canSend(FeatureControlPayload.ID)) {
+            return; // Дождёмся готовности канала в tick()
+        }
+
+        Set<String> allFeatures = getAllKnownFeatures();
+        if (allFeatures.isEmpty()) return;
+
+        requestFeatureCheck(allFeatures, null);
+    }
+
     public static void requestFeatureCheck(Collection<String> moduleNames, RequestCallback callback) {
         long now = System.currentTimeMillis();
         if (now - lastRequestSentAt < MIN_REQUEST_INTERVAL_MS) {
-            // Раньше при callback == null (именно так уходит автопроверка на JOIN) этот
-            // выход был абсолютно безмолвным — ни строчки в лог. Судя по логу, вместе с
-            // CHANNEL_UNAVAILABLE ниже это и есть причина, почему за 5+ срабатываний JOIN
-            // за сессию в логе есть только один успешный "Применён блок-лист".
-            LOGGER.debug("checkFeatures пропущен: троттлинг ({} мс с прошлого запроса)", now - lastRequestSentAt);
-            if (callback != null) callback.onError("CLIENT_THROTTLED", "Слишком частые запросы, подождите");
+            needsFeatureCheck = true;
+            LOGGER.debug("checkFeatures отложен: троттлинг ({} мс с прошлого запроса)", now - lastRequestSentAt);
+            if (callback != null) callback.onError("CLIENT_THROTTLED", "Слишком частые запросы, повтор запланирован");
             return;
         }
+
         if (!ClientPlayNetworking.canSend(FeatureControlPayload.ID)) {
-            // Тоже теперь видно в логе. На HolyWorld это ожидаемо: не все бэкенды сети
-            // регистрируют канал liteapi:feature-control — в логе рядом видно тот же эффект
-            // на соседнем канале: "[Lexora Badge] Server does not support Lexora networking".
-            LOGGER.debug("checkFeatures пропущен: канал {} недоступен на этом бэкенде", CHANNEL);
-            if (callback != null) callback.onError("CHANNEL_UNAVAILABLE", "Канал liteapi:feature-control недоступен");
+            needsFeatureCheck = true;
+            LOGGER.debug("checkFeatures отложен: канал {} пока недоступен на бэкенде", CHANNEL);
+            if (callback != null) callback.onError("CHANNEL_UNAVAILABLE", "Канал liteapi:feature-control пока недоступен");
             return;
         }
-        if (moduleNames.isEmpty()) return;
+
+        if (moduleNames == null || moduleNames.isEmpty()) return;
 
         String requestId = UUID.randomUUID().toString();
         Set<String> requestedFeatures = new HashSet<>(moduleNames);
@@ -178,8 +187,11 @@ public final class LiteApiFeatureControl {
         pendingRequests.put(requestId, new PendingCheck(requestedFeatures, callback));
 
         lastRequestSentAt = now;
+        needsFeatureCheck = false; // Запрос успешно отправлен в сеть
+
         String json = GSON.toJson(request);
         ClientPlayNetworking.send(new FeatureControlPayload(json));
+        LOGGER.info("Отправлен checkFeatures на HolyWorld ({} функций)", requestedFeatures.size());
     }
 
     private static void handleIncoming(String json) {
@@ -190,9 +202,6 @@ public final class LiteApiFeatureControl {
             return;
         }
         if (obj == null || !obj.has("id") || !obj.has("ok")) {
-            if (obj != null && obj.has("event")) {
-                LOGGER.debug("Получено push-событие {} по каналу {} — сейчас не обрабатывается", obj.get("event"), CHANNEL);
-            }
             return;
         }
 
@@ -207,7 +216,9 @@ public final class LiteApiFeatureControl {
             Set<String> blocklist = new HashSet<>();
             if (payload != null && payload.has("blocklist")) {
                 JsonArray arr = payload.getAsJsonArray("blocklist");
-                for (int i = 0; i < arr.size(); i++) blocklist.add(arr.get(i).getAsString());
+                for (int i = 0; i < arr.size(); i++) {
+                    blocklist.add(arr.get(i).getAsString());
+                }
             }
             applyBlocklist(requestedFeatures, blocklist);
 
@@ -220,19 +231,6 @@ public final class LiteApiFeatureControl {
         }
     }
 
-    /**
-     * @param requestedFeatures модули, о которых реально спросили сервер в этом запросе.
-     *                          Сервер отвечает блок-листом только по ним ("сервер возвращает
-     *                          только те функции из вашего списка, которые заблокированы") —
-     *                          значит и снимать блокировку мы вправе только с модулей из
-     *                          этого же списка. Раньше сравнение шло со ВСЕМ набором
-     *                          blockedModules, а в запрос попадают только активные модули
-     *                          (currentlyActiveModuleNames()) — то есть заблокированный и
-     *                          потому выключенный модуль физически не мог туда попасть.
-     *                          Любой последующий запрос из-за этого выглядел так, будто
-     *                          сервер его больше не блокирует, и модуль включался обратно сам.
-     * @param newBlocklist модули из requestedFeatures, которые сервер считает заблокированными.
-     */
     private static void applyBlocklist(Set<String> requestedFeatures, Set<String> newBlocklist) {
         Set<String> stillBlocked = new HashSet<>();
 
@@ -241,6 +239,7 @@ public final class LiteApiFeatureControl {
                 Boolean prevState = preBlockStates.remove(name);
                 if (prevState != null) {
                     ClientData.moduleStates.put(name, prevState);
+                    LexoraGui.moduleStates.put(name, prevState);
                 }
             } else {
                 stillBlocked.add(name);
@@ -253,24 +252,30 @@ public final class LiteApiFeatureControl {
                 preBlockStates.put(name, current != null && current);
             }
             ClientData.moduleStates.put(name, false);
+            LexoraGui.moduleStates.put(name, false);
         }
 
         stillBlocked.addAll(newBlocklist);
         blockedModules = Collections.unmodifiableSet(stillBlocked);
-        LOGGER.info("Применён блок-лист HolyWorld (проверяли {}): заблокировано {}", requestedFeatures, newBlocklist);
+        enforceBlocklist();
+
+        LOGGER.info("Применён блок-лист HolyWorld: заблокировано {}", newBlocklist);
     }
 
     private static void restoreAllBlocked() {
         for (Map.Entry<String, Boolean> e : preBlockStates.entrySet()) {
             ClientData.moduleStates.put(e.getKey(), e.getValue());
+            LexoraGui.moduleStates.put(e.getKey(), e.getValue());
         }
         preBlockStates.clear();
         blockedModules = Collections.emptySet();
+        needsFeatureCheck = false;
+        lastRequestSentAt = 0L;
     }
 
-    /** Модуль запрещён на текущем сервере? Используется в ModernGuiRegistry. */
+    /** Модуль запрещён на текущем сервере? */
     public static boolean isBlocked(String moduleName) {
-        return blockedModules.contains(moduleName);
+        return moduleName != null && blockedModules.contains(moduleName);
     }
 
     public static Set<String> getBlockedModules() {

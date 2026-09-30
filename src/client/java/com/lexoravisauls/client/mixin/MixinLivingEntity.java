@@ -46,12 +46,34 @@ public abstract class MixinLivingEntity {
     // 🔥 ФИКС: СКОРОСТЬ АНИМАЦИИ ВЗМАХА 🔥
     @Inject(method = "getHandSwingDuration", at = @At("HEAD"), cancellable = true)
     private void onGetHandSwingDuration(CallbackInfoReturnable<Integer> cir) {
-        if (LexoraGui.moduleStates.getOrDefault("View Model", false)) {
-            float speed = LexoraGui.numSettings.getOrDefault("VM Speed", 1.0f);
-            if (speed > 0 && speed != 1.0f) {
-                int vanillaDuration = 6;
-                LivingEntity entity = (LivingEntity) (Object) this; // <-- ВОТ ГЛАВНЫЙ ФИКС
+        LivingEntity entity = (LivingEntity) (Object) this;
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (entity != mc.player) {
+            return;
+        }
 
+        boolean inEditor = mc.currentScreen instanceof com.lexoravisauls.client.modules.swinganim.SwingAnimScreen;
+        boolean vmEnabled = inEditor
+                || com.lexoravisauls.client.core.ClientData.moduleStates.getOrDefault("View Model",
+                LexoraGui.moduleStates.getOrDefault("View Model", false))
+                || com.lexoravisauls.client.core.ClientData.moduleStates.getOrDefault("ViewModel",
+                LexoraGui.moduleStates.getOrDefault("ViewModel", false));
+
+        if (vmEnabled) {
+            String mode = com.lexoravisauls.client.core.ClientData.modeSettings.getOrDefault("VM Anim",
+                    LexoraGui.modeSettings.getOrDefault("VM Anim", "Standard"));
+
+            float speed;
+            if (inEditor || (com.lexoravisauls.client.modules.VMAnimations.isCustomAnimMode(mode)
+                    && (mode.toLowerCase().contains("кастом") || mode.toLowerCase().contains("custom") || mode.toLowerCase().contains("редактор")))) {
+                speed = com.lexoravisauls.client.modules.swinganim.SwingManager.getInstance().getSpeed();
+            } else {
+                speed = com.lexoravisauls.client.core.ClientData.numSettings.getOrDefault("VM Speed",
+                        LexoraGui.numSettings.getOrDefault("VM Speed", 1.0f));
+            }
+
+            if (speed > 0.05f && Math.abs(speed - 1.0f) > 0.01f) {
+                int vanillaDuration = 6;
                 if (entity.hasStatusEffect(net.minecraft.entity.effect.StatusEffects.HASTE)) {
                     vanillaDuration = 6 - (1 + entity.getStatusEffect(net.minecraft.entity.effect.StatusEffects.HASTE).getAmplifier());
                 } else if (entity.hasStatusEffect(net.minecraft.entity.effect.StatusEffects.MINING_FATIGUE)) {

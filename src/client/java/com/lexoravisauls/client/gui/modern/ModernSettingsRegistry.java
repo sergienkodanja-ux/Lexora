@@ -138,7 +138,14 @@ public class ModernSettingsRegistry {
         ));
 
         SETTINGS.put("View Model", List.of(
-                mode("VM Anim", "Режим анимации", "Standard", "Под наклоном", "Наклон", "Вращение на 360", "От себя", "Боньк"),
+                mode("VM Anim", "Режим анимации", "Standard", "Кастомный", "Под наклоном", "Наклон", "Вращение на 360", "От себя", "Боньк"),
+                button("Редактор анимаций взмаха", () -> {
+                    net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+                    if (client != null) {
+                        ClientData.modeSettings.put("VM Anim", "Кастомный");
+                        client.send(() -> client.setScreen(new com.lexoravisauls.client.modules.swinganim.SwingAnimScreen(client.currentScreen)));
+                    }
+                }),
                 toggle("VM Target Hit", "При таргете"),
                 pad2d("Right Hand X", "Right Hand Y", "Правая рука XY", -2.5f, 2.5f, -2.0f, 2.0f),
                 slider("Right Hand Z", "Правая рука Z", -1.5f, 1.5f),
@@ -175,7 +182,19 @@ public class ModernSettingsRegistry {
                 toggle("FT Снежок", "Снежок"),
                 mode("FT Трапка Скин", "Скин трапки", "Обычный", "Драконий"),
                 mode("FT Пласт Скин", "Скин пласта", "Обычный", "Драконий"),
-                toggle("FT Таймер Трапки", "Таймер трапки")
+                toggle("FT Таймер Трапки", "Таймер трапки"),
+                toggle("FT Таймер Пласта", "Таймер пласта")
+        ));
+
+        SETTINGS.put("HW Helper", List.of(
+                toggle("HW Стан", "Стан"),
+                toggle("HW Трапка", "Трапка"),
+                toggle("HW Вскрывная", "Взрывная трапка"),
+                toggle("HW Таймер Стана", "Таймер стана"),
+                toggle("HW Таймер Трапки", "Таймер трапки"),
+                toggle("HW Таймер Вскрывной", "Таймер взрывной"),
+                toggle("HW Подсветка Области", "Подсветка области"),
+                toggle("HW Реакция на Цель", "Реакция на цель")
         ));
 
         SETTINGS.put("Totem Sound", List.of(
@@ -258,8 +277,13 @@ public class ModernSettingsRegistry {
         ));
 
         SETTINGS.put("Hand Shaders", List.of(
-                mode("Hand Mode", "Эффект", "Standard", "Smoke", "Snow", "Solid", "Stripes"),
-                slider("Hand Glow %", "Свечение", 0.0f, 100.0f)
+                mode("Hand Mode", "Эффект", "Nebula", "Stars", "Web", "Plasma", "Fire", "Smoke", "Snow", "Stripes", "Solid"),
+                slider("Hand Glow %", "Свечение", 0.0f, 100.0f),
+                slider("Hand Shader Speed", "Скорость", 0.1f, 3.0f),
+                toggle("Hand Shader Only", "Только шейдер"),
+                mode("Hand Color Mode", "Цвет", "Theme", "Custom"),
+                color("Hand Custom Color", "Свой цвет").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Hand Color Mode", "Theme").equals("Custom"))
         ));
 
         SETTINGS.put("Trails", List.of(
@@ -592,6 +616,11 @@ public class ModernSettingsRegistry {
                 slider("Potions Scale", "Масштаб", 0.5f, 2.0f)
         ));
 
+        SETTINGS.put("Notifications", List.of(
+                toggle("Notifications Blur", "Размытие фона (Blur)"),
+                slider("Notifications Scale", "Масштаб", 0.5f, 2.0f)
+        ));
+
         SETTINGS.put("Fast Swap", List.of(
                 toggle("Show Hotbar Binds", "Показывать бинды на хотбаре"),
                 bind("Bind_Дезка", "Дезка"),
@@ -723,7 +752,7 @@ public class ModernSettingsRegistry {
         ));
 
         List<ModernSetting> atmosphereSettings = List.of(
-                mode("Weather Visual Mode", "Режим", "Rain", "Wet Floor"),
+                mode("Weather Visual Mode", "Режим", "Rain", "Wet Floor", "Winter"),
                 toggle("Weather Rain Only", "Только при осадках в мире"),
 
                 // --- Rain Settings ---
@@ -732,9 +761,9 @@ public class ModernSettingsRegistry {
                 slider("Rain Density", "Плотность дождя", 0.2f, 3.0f).visibleIf(() ->
                         ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Rain")),
                 slider("Rain Radius", "Радиус отрисовки", 10.0f, 48.0f).visibleIf(() ->
-                        !ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Wet Floor")),
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Rain")),
                 slider("Rain Altitude", "Высота спавна", 8.0f, 32.0f).visibleIf(() ->
-                        !ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Wet Floor")),
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Rain")),
                 slider("Rain Drop Size", "Размер капель", 0.4f, 2.5f).visibleIf(() ->
                         ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Rain")),
                 slider("Rain Fall Speed", "Скорость падения", 0.3f, 2.5f).visibleIf(() ->
@@ -753,7 +782,7 @@ public class ModernSettingsRegistry {
                 toggle("Rain Lightning", "Вспышки молний").visibleIf(() ->
                         ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Rain")),
                 toggle("Rain Sky Check", "Не спавнить под крышей").visibleIf(() ->
-                        !ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Wet Floor")),
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Rain")),
                 mode("Rain Color Mode", "Цвет дождя", "Realistic", "Client", "Custom").visibleIf(() ->
                         ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Rain")),
                 color("Rain Custom Color", "Свой цвет дождя").visibleIf(() ->
@@ -771,7 +800,28 @@ public class ModernSettingsRegistry {
                         ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Wet Floor")),
                 slider("Ripple Speed", "Скорость ряби", 0.2f, 3.0f).visibleIf(() ->
                         ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Wet Floor") &&
-                        ClientData.moduleStates.getOrDefault("Wet Ripples", false))
+                        ClientData.moduleStates.getOrDefault("Wet Ripples", false)),
+
+                // --- Winter Settings (Универсальные и удобные) ---
+                toggle("Winter Ground Snow", "Снежный покров").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                toggle("Winter Wall Snow", "Снег на стенах и в стыках").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                toggle("Winter Snowfall", "Снегопад").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                toggle("Winter Footprints", "Следы от шагов").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                toggle("Winter Frost", "Иней (броня и стены)").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                slider("Winter Density", "Интенсивность зимы", 0.5f, 2.5f).visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                slider("Winter Blizzard", "Ветер и метель", 0.0f, 1.0f).visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                mode("Winter Color Mode", "Цветовая схема", "Realistic", "Client", "Custom").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter")),
+                color("Winter Custom Color", "Свой цвет").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Weather Visual Mode", "Rain").equals("Winter") &&
+                        ClientData.modeSettings.getOrDefault("Winter Color Mode", "Realistic").equals("Custom"))
         );
         SETTINGS.put("Atmosphere", atmosphereSettings);
         SETTINGS.put("WeatherFX", atmosphereSettings);
@@ -787,6 +837,25 @@ public class ModernSettingsRegistry {
                 toggle("VD Crosshair Click", "Клик прицелом"),
                 toggle("VD Crosshair Scroll", "Скролл прицелом")
         ));
+
+        List<ModernSetting> kineticLyricsSettings = List.of(
+                toggle("Lyrics In Island", "В Dynamic Island"),
+                toggle("Lyrics In 3D", "В 3D мире"),
+                mode("Lyrics Animation", "Анимация 3D", "LyricFlow", "Typewriter", "PopScale", "KineticSlide", "Fade"),
+                mode("Lyrics Color Mode", "Цвет 3D", "Theme", "ThemeGradient", "White", "Custom"),
+                color("Lyrics Custom Color", "Кастомный цвет 3D").visibleIf(() ->
+                        ClientData.modeSettings.getOrDefault("Lyrics Color Mode", "Theme").equals("Custom")),
+                mode("Lyrics Split Mode", "Режим строк", "SmartSplit", "FullLine"),
+                slider("Lyrics Max Lines", "Макс. строк", 1.0f, 6.0f),
+                slider("Lyrics Distance", "Дистанция", 1.5f, 60.0f),
+                slider("Lyrics Scale", "Размер 3D", 0.5f, 4.0f),
+                slider("Lyrics Arc Spread", "Угол разброса", 20.0f, 85.0f),
+                slider("Lyrics Float Height", "Высота подъема", 0.1f, 2.0f),
+                slider("Lyrics Time Offset", "Смещение (мс)", -3000.0f, 3000.0f),
+                toggle("Lyrics Depth Occlusion", "3D Окклюзия (стены)")
+        );
+        SETTINGS.put("Kinetic Lyrics", kineticLyricsSettings);
+        SETTINGS.put("KineticLyrics", kineticLyricsSettings);
     }
 
     public static List<ModernSetting> get(String module) {

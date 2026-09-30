@@ -278,8 +278,17 @@ public final class LexoraSpotifyMediaInfoHelper {
     }
 
     private static Snapshot makeSnapshot(MediaInfo media) {
-        String title = safe(media.getTitle());
-        String artist = safe(media.getArtist());
+        String title = "Spotify";
+        try {
+            title = safe(media.getTitle());
+        } catch (Throwable ignored) {
+        }
+
+        String artist = "Spotify";
+        try {
+            artist = safe(media.getArtist());
+        } catch (Throwable ignored) {
+        }
 
         if (title.isBlank()) {
             title = "Spotify";
@@ -338,13 +347,14 @@ public final class LexoraSpotifyMediaInfoHelper {
     private static void applySnapshot(Snapshot snapshot) {
         String textureHash = "";
 
-        if (snapshot.artwork.length > 0) {
-            textureHash = updateCover(snapshot.artwork, snapshot.title + "|" + snapshot.artist);
+        if (snapshot.artwork != null && snapshot.artwork.length > 0) {
+            try {
+                textureHash = updateCover(snapshot.artwork, snapshot.title + "|" + snapshot.artist);
+            } catch (Throwable ignored) {
+            }
         }
 
-        if (textureHash.isBlank() && currentTexture != null) {
-            textureHash = lastCoverKey;
-        }
+        Identifier coverToUse = (!textureHash.isBlank() && currentTexture != null) ? COVER_ID : null;
 
         currentMedia = new LexoraMediaUtils.MediaInfo(
                 snapshot.title,
@@ -353,7 +363,7 @@ public final class LexoraSpotifyMediaInfoHelper {
                 snapshot.playing,
                 snapshot.position,
                 snapshot.duration,
-                textureHash.isBlank() ? null : COVER_ID,
+                coverToUse,
                 false
         );
 
@@ -361,28 +371,35 @@ public final class LexoraSpotifyMediaInfoHelper {
     }
 
     private static String updateCover(byte[] artworkPng, String mediaKey) {
+        if (artworkPng == null || artworkPng.length == 0) {
+            return "";
+        }
+
         String coverKey = mediaKey + "|" + artworkPng.length + "|" + Arrays.hashCode(artworkPng);
 
         if (coverKey.equals(lastCoverKey) && currentTexture != null) {
             return coverKey;
         }
 
-        lastCoverKey = coverKey;
-
         try (ByteArrayInputStream input = new ByteArrayInputStream(artworkPng)) {
             NativeImage image = NativeImage.read(input);
-
-            if (currentTexture != null) {
-                try {
-                    currentTexture.close();
-                } catch (Throwable ignored) {
-                }
-
-                currentTexture = null;
+            if (image == null) {
+                return "";
             }
 
-            currentTexture = new NativeImageBackedTexture(image);
-            MinecraftClient.getInstance().getTextureManager().registerTexture(COVER_ID, currentTexture);
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null || client.getTextureManager() == null) {
+                try {
+                    image.close();
+                } catch (Throwable ignored) {}
+                return "";
+            }
+
+            NativeImageBackedTexture newTexture = new NativeImageBackedTexture(image);
+            // TextureManager.registerTexture автоматически закрывает и заменяет старую текстуру COVER_ID
+            client.getTextureManager().registerTexture(COVER_ID, newTexture);
+            currentTexture = newTexture;
+            lastCoverKey = coverKey;
 
             return coverKey;
         } catch (Throwable throwable) {
@@ -411,6 +428,7 @@ public final class LexoraSpotifyMediaInfoHelper {
         currentMedia = null;
         currentSession = null;
         lastSeenMs = 0L;
+        lastCoverKey = "";
     }
 
     private static String safe(String value) {

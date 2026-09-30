@@ -5,6 +5,8 @@ import com.lexoravisauls.client.modules.PvPSave;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
+import net.minecraft.network.packet.s2c.play.InventoryS2CPacket;
+import net.minecraft.network.packet.s2c.play.ScreenHandlerSlotUpdateS2CPacket;
 import net.minecraft.text.Text;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
@@ -18,9 +20,21 @@ public class MixinClientPlayNetworkHandler {
 
     private long lastPopTime = 0;
 
-    // 🔥 ИНЖЕКТ 1: ОТМЕНА КОМАНД (PvP Save)
+    // 🌐 АВТО-РАСКЛАДКА КОМАНД (.фр ыуфкср -> /ah search)
+    @Inject(method = "sendChatMessage", at = @At("HEAD"), cancellable = true)
+    private void onSendChatMessage(String message, CallbackInfo ci) {
+        if (com.lexoravisauls.client.modules.AutoLayout.handleChatMessage(message, (ClientPlayNetworkHandler)(Object)this)) {
+            ci.cancel();
+        }
+    }
+
+    // 🔥 ИНЖЕКТ 1: ОТМЕНА КОМАНД (PvP Save) & АВТО-РАСКЛАДКА
     @Inject(method = "sendChatCommand", at = @At("HEAD"), cancellable = true)
     private void onSendCommand(String command, CallbackInfo ci) {
+        if (com.lexoravisauls.client.modules.AutoLayout.handleChatCommand(command, (ClientPlayNetworkHandler)(Object)this)) {
+            ci.cancel();
+            return;
+        }
         if (PvPSave.handleCommand(command)) ci.cancel();
     }
 
@@ -71,6 +85,23 @@ public class MixinClientPlayNetworkHandler {
                         stack
                 );
             }
+        }
+    }
+
+    // ⚡ ИНЖЕКТ 3: ПЕРЕХВАТ ПАКЕТОВ ОБНОВЛЕНИЯ СЛОТОВ И ИНВЕНТАРЯ (HW Helper серверные бинды)
+    @Inject(method = "onScreenHandlerSlotUpdate", at = @At("RETURN"))
+    private void onScreenHandlerSlotUpdate(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player != null) {
+            com.lexoravisauls.client.modules.HwHelper.checkInventory(mc);
+        }
+    }
+
+    @Inject(method = "onInventory", at = @At("RETURN"))
+    private void onInventory(InventoryS2CPacket packet, CallbackInfo ci) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player != null) {
+            com.lexoravisauls.client.modules.HwHelper.checkInventory(mc);
         }
     }
 }

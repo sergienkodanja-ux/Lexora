@@ -3,13 +3,9 @@ package com.lexoravisauls.client.mixin;
 import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.modules.VMAnimations;
-import com.lexoravisauls.client.utils.HandShaderCopy;
-import com.lexoravisauls.client.utils.HandShaderRenderer;
-import com.lexoravisauls.client.utils.LexoraShaders;
-import com.lexoravisauls.client.utils.ShaderUtil;
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.item.HeldItemRenderer;
 import net.minecraft.client.util.math.MatrixStack;
@@ -24,13 +20,17 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.MathHelper;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL13;
-import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import com.lexoravisauls.client.utils.HandShaderCopy;
+import com.lexoravisauls.client.utils.HandShaderRenderer;
+import com.lexoravisauls.client.utils.LexoraShaders;
+import com.lexoravisauls.client.utils.ShaderUtil;
+import com.mojang.blaze3d.systems.RenderSystem;
+import java.awt.Color;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL20;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -51,9 +51,6 @@ public abstract class MixinHeldItemRenderer {
     );
 
     @Unique
-    private static boolean lexora$handShaderActive = false;
-
-    @Unique
     private static long lexora$targetHitUntilMs = 0L;
 
     @Unique
@@ -61,28 +58,6 @@ public abstract class MixinHeldItemRenderer {
 
     @Unique
     private static final long lexora$TARGET_HIT_HOLD_MS = 2500L;
-
-    // ── Динамика поворота камеры и шлейфа для шейдера огня/дыма ─────
-    @Unique
-    private static float lexora$lastYaw = 0.0f;
-
-    @Unique
-    private static float lexora$lastPitch = 0.0f;
-
-    @Unique
-    private static float lexora$camVelX = 0.0f;
-
-    @Unique
-    private static float lexora$camVelY = 0.0f;
-
-    @Unique
-    private static float lexora$trailDecay = 0.0f;
-
-    @Unique
-    private static float lexora$trailDirX = 0.0f;
-
-    @Unique
-    private static float lexora$trailDirY = 0.0f;
 
     /*
      * Мини-фикс бага, когда предмет на 1 кадр становится огромным
@@ -534,54 +509,61 @@ public abstract class MixinHeldItemRenderer {
         }
     }
 
-    @Inject(method = "renderFirstPersonItem", at = @At("HEAD"))
-    private void onPreRenderHandShader(
-            AbstractClientPlayerEntity player,
+    // ── HAND SHADERS (BEFORE/AFTER DIFFERENCE CAPTURE) ──
+    @Unique
+    private boolean lexora$handShaderActive = false;
+
+    @Unique
+    private static boolean lexora$isHandShadersEnabled() {
+        return ClientData.moduleStates.getOrDefault("Hand Shaders", false)
+                || LexoraGui.moduleStates.getOrDefault("Hand Shaders", false);
+    }
+
+    @Inject(
+            method = "renderItem(FLnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider$Immediate;Lnet/minecraft/client/network/ClientPlayerEntity;I)V",
+            at = @At("HEAD")
+    )
+    private void lexora$onPreRenderHandShader(
             float tickDelta,
-            float pitch,
-            Hand hand,
-            float swingProgress,
-            ItemStack item,
-            float equipProgress,
             MatrixStack matrices,
-            VertexConsumerProvider vertexConsumers,
+            VertexConsumerProvider.Immediate vertexConsumers,
+            ClientPlayerEntity player,
             int light,
             CallbackInfo ci
     ) {
         lexora$handShaderActive = false;
 
-        if (!LexoraGui.moduleStates.getOrDefault("Hand Shaders", false)) {
+        if (!lexora$isHandShadersEnabled()) {
             return;
         }
 
         MinecraftClient mc = MinecraftClient.getInstance();
-
-        if (mc == null || !mc.options.getPerspective().isFirstPerson()) {
+        if (mc == null || mc.world == null || mc.player == null) {
             return;
         }
 
-        if (vertexConsumers instanceof VertexConsumerProvider.Immediate immediate) {
-            immediate.draw();
+        if (!mc.options.getPerspective().isFirstPerson()) {
+            return;
         }
 
-        int beforeTex = HandShaderCopy.captureBefore();
+        // Принудительно отрисовываем все буферизованные вершины мира до руки и предметов
+        vertexConsumers.draw();
 
+        int beforeTex = HandShaderCopy.captureBefore();
         if (beforeTex != 0) {
             lexora$handShaderActive = true;
         }
     }
 
-    @Inject(method = "renderFirstPersonItem", at = @At("RETURN"))
-    private void onPostRenderHandShader(
-            AbstractClientPlayerEntity player,
+    @Inject(
+            method = "renderItem(FLnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider$Immediate;Lnet/minecraft/client/network/ClientPlayerEntity;I)V",
+            at = @At("RETURN")
+    )
+    private void lexora$onPostRenderHandShader(
             float tickDelta,
-            float pitch,
-            Hand hand,
-            float swingProgress,
-            ItemStack item,
-            float equipProgress,
             MatrixStack matrices,
-            VertexConsumerProvider vertexConsumers,
+            VertexConsumerProvider.Immediate vertexConsumers,
+            ClientPlayerEntity player,
             int light,
             CallbackInfo ci
     ) {
@@ -589,12 +571,10 @@ public abstract class MixinHeldItemRenderer {
             return;
         }
 
-        if (vertexConsumers instanceof VertexConsumerProvider.Immediate immediate) {
-            immediate.draw();
-        }
+        // Принудительно отрисовываем вершины руки и предмета
+        vertexConsumers.draw();
 
         MinecraftClient mc = MinecraftClient.getInstance();
-
         if (mc == null) {
             lexora$handShaderActive = false;
             return;
@@ -603,126 +583,89 @@ public abstract class MixinHeldItemRenderer {
         int beforeTex = HandShaderCopy.getBeforeTex();
         int afterTex = HandShaderCopy.captureAfter();
 
-        if (beforeTex == 0 || afterTex == 0) {
-            lexora$handShaderActive = false;
+        if (beforeTex != 0 && afterTex != 0) {
+            lexora$renderHandShaderEffect(beforeTex, afterTex);
+        }
+
+        lexora$handShaderActive = false;
+    }
+
+    @Unique
+    private void lexora$renderHandShaderEffect(int beforeTex, int afterTex) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc == null) return;
+
+        ShaderUtil shader = LexoraShaders.getHandShader();
+        if (shader == null || !shader.isValid()) {
             return;
         }
 
-        float dYaw = 0.0f;
-        float dPitch = 0.0f;
-
-        // ── Мягкая инерция камеры для подсветки при разворотах ──
-        if (mc.player != null) {
-            float curYaw = mc.player.getYaw();
-            float curPitch = mc.player.getPitch();
-
-            dYaw = MathHelper.wrapDegrees(curYaw - lexora$lastYaw);
-            dPitch = curPitch - lexora$lastPitch;
-            lexora$lastYaw = curYaw;
-            lexora$lastPitch = curPitch;
-
-            // Плавное накопление скорости мыши:
-            // Мышь вправо -> dYaw > 0 -> targetVelX > 0 (в шейдере подсветка уходит влево)
-            // Мышь влево -> dYaw < 0 -> targetVelX < 0 (в шейдере подсветка уходит вправо)
-            float targetVelX = MathHelper.clamp(dYaw * 0.08f, -1.2f, 1.2f);
-            float targetVelY = MathHelper.clamp(dPitch * 0.08f, -1.2f, 1.2f);
-
-            lexora$camVelX += (targetVelX - lexora$camVelX) * 0.30f;
-            lexora$camVelY += (targetVelY - lexora$camVelY) * 0.30f;
-        }
+        int width = mc.getWindow().getFramebufferWidth();
+        int height = mc.getWindow().getFramebufferHeight();
+        if (width <= 0 || height <= 0) return;
 
         int prevProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
-        int prevActiveTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-        int prevFBO = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-
+        int prevActiveTex = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
         GL13.glActiveTexture(GL13.GL_TEXTURE0);
         int prevTex0 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
 
         GL13.glActiveTexture(GL13.GL_TEXTURE1);
         int prevTex1 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
 
-        GL13.glActiveTexture(GL13.GL_TEXTURE2);
-        int prevTex2 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-
-        int prevVAO = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
-        int prevVBO = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
-
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
-        RenderSystem.disableCull();
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-        ShaderUtil activeShader = LexoraShaders.getCurrentHandShader();
+        GL13.glActiveTexture(GL13.GL_TEXTURE0);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, beforeTex);
 
-        if (activeShader != null && activeShader.isValid()) {
-            float time = (System.currentTimeMillis() % 100000L) / 1000.0f;
-            float glowPercent = LexoraGui.numSettings.getOrDefault("Hand Glow %", 35.0f);
-            float fireStrength = LexoraGui.numSettings.getOrDefault("Fire Strength", 1.0f);
-            float fireSpeed = LexoraGui.numSettings.getOrDefault("Fire Speed", 1.0f);
+        GL13.glActiveTexture(GL13.GL_TEXTURE1);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, afterTex);
 
-            float glow = Math.max(0.0f, Math.min(2.5f, (glowPercent / 100.0f) * 1.5f * fireStrength));
-            float width = (float) mc.getWindow().getFramebufferWidth();
-            float height = (float) mc.getWindow().getFramebufferHeight();
-            float[] flameCol = lexora$getThemeOrFlameColor();
+        shader.bind();
 
-            activeShader.bind();
+        float speed = ClientData.numSettings.getOrDefault("Hand Shader Speed",
+                LexoraGui.numSettings.getOrDefault("Hand Shader Speed", 1.0f));
+        float time = (float) ((System.currentTimeMillis() % 10000000L) / 1000.0) * speed;
 
-            int currentProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+        float glowPercent = ClientData.numSettings.getOrDefault("Hand Glow %",
+                LexoraGui.numSettings.getOrDefault("Hand Glow %", 80.0f));
+        float alpha = Math.max(0.01f, glowPercent / 100.0f);
 
-            if (currentProgram == activeShader.getProgramID() && currentProgram != 0) {
-                activeShader.setUniform1f("time", time);
-                activeShader.setUniform2f("resolution", width, height);
+        boolean shaderOnly = ClientData.moduleStates.getOrDefault("Hand Shader Only",
+                LexoraGui.moduleStates.getOrDefault("Hand Shader Only", false));
 
-                GL13.glActiveTexture(GL13.GL_TEXTURE0);
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, beforeTex);
-                activeShader.setUniform1i("BeforeTexture", 0);
+        String mode = ClientData.modeSettings.getOrDefault("Hand Mode",
+                LexoraGui.modeSettings.getOrDefault("Hand Mode", "Nebula"));
+        int modeIndex = switch (mode) {
+            case "Nebula" -> 0;
+            case "Stars", "Starfield" -> 1;
+            case "Web", "Cobweb" -> 2;
+            case "Plasma" -> 3;
+            case "Fire" -> 4;
+            case "Smoke" -> 5;
+            case "Snow" -> 6;
+            case "Stripes" -> 7;
+            case "Solid" -> 8;
+            default -> 0;
+        };
 
-                GL13.glActiveTexture(GL13.GL_TEXTURE1);
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, afterTex);
-                activeShader.setUniform1i("AfterTexture", 1);
+        float[] baseColor = lexora$getHandShaderColor();
 
-                activeShader.setUniform1f("effectAlpha", glow);
+        shader.setUniform1i("BeforeTexture", 0);
+        shader.setUniform1i("AfterTexture", 1);
+        shader.setUniform1f("time", time);
+        shader.setUniform2f("screenSize", (float) width, (float) height);
+        shader.setUniform4f("baseColor", baseColor[0], baseColor[1], baseColor[2], 1.0f);
+        shader.setUniform1f("alpha", alpha);
+        shader.setUniform1i("shaderMode", modeIndex);
+        shader.setUniform1i("shaderOnlyMode", shaderOnly ? 1 : 0);
 
-                if (activeShader == LexoraShaders.snowShader) {
-                    activeShader.setUniform3f("snowColor", 1.0f, 1.0f, 1.0f);
-                    activeShader.setUniform1f("snowIntensity", 2.5f);
-                    activeShader.setUniform1f("snowSpeed", 1.5f);
-                } else if (activeShader == LexoraShaders.smokeShader) {
-                    activeShader.setUniform3f("smokeColor", flameCol[0], flameCol[1], flameCol[2]);
-                    activeShader.setUniform1f("smokeIntensity", 3.0f);
-                } else if (activeShader == LexoraShaders.stripesShader) {
-                    activeShader.setUniform3f("stripesColor1", flameCol[0], flameCol[1], flameCol[2]);
-                    activeShader.setUniform3f("stripesColor2", 0.1f, 0.0f, 0.0f);
-                    activeShader.setUniform1f("stripesWidth", 15.0f);
-                    activeShader.setUniform1f("stripesSpeed", 8.0f);
-                } else if (activeShader == LexoraShaders.solidShader) {
-                    activeShader.setUniform3f("customColor1", flameCol[0], flameCol[1], flameCol[2]);
-                    activeShader.setUniform3f("customColor2", 1.0f, 0.0f, 0.8f);
-                } else if (activeShader == LexoraShaders.fireShader) {
-                    activeShader.setUniform3f("flameColor", flameCol[0], flameCol[1], flameCol[2]);
-                    activeShader.setUniform1f("fireStrength", fireStrength);
-                    activeShader.setUniform1f("fireSpeed", fireSpeed);
-                    activeShader.setUniform2f("camOffset", lexora$camVelX, lexora$camVelY);
-                }
+        HandShaderRenderer.drawPerfectQuad();
 
-                HandShaderRenderer.drawPerfectQuad();
-            }
-
-            activeShader.unbind();
-        }
-
-        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prevFBO);
-        RenderSystem.viewport(0, 0, mc.getWindow().getFramebufferWidth(), mc.getWindow().getFramebufferHeight());
-
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, prevVBO);
-        GL30.glBindVertexArray(prevVAO);
-
-        GL20.glUseProgram(prevProgram);
-
-        GL13.glActiveTexture(GL13.GL_TEXTURE2);
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTex2);
+        shader.unbind();
 
         GL13.glActiveTexture(GL13.GL_TEXTURE1);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTex1);
@@ -730,15 +673,48 @@ public abstract class MixinHeldItemRenderer {
         GL13.glActiveTexture(GL13.GL_TEXTURE0);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, prevTex0);
 
-        GL13.glActiveTexture(prevActiveTexture);
+        GL13.glActiveTexture(prevActiveTex);
+        GL20.glUseProgram(prevProgram);
 
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-        RenderSystem.enableCull();
-        RenderSystem.depthMask(true);
+        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
         RenderSystem.enableDepthTest();
-        RenderSystem.enableBlend();
+        RenderSystem.depthMask(true);
         RenderSystem.defaultBlendFunc();
+    }
 
-        lexora$handShaderActive = false;
+    @Unique
+    private float[] lexora$getHandShaderColor() {
+        String colorMode = ClientData.modeSettings.getOrDefault("Hand Color Mode",
+                LexoraGui.modeSettings.getOrDefault("Hand Color Mode", "Theme")).trim();
+        if (colorMode.equalsIgnoreCase("Custom") || colorMode.equalsIgnoreCase("Свой цвет")) {
+            float[] custom = ClientData.colorSettings.get("Hand Custom Color");
+            if (custom == null) {
+                custom = LexoraGui.colorSettings.get("Hand Custom Color");
+            }
+            if (custom != null && custom.length >= 3) {
+                int rgb = Color.HSBtoRGB(custom[0], custom[1], custom[2]);
+                return new float[]{
+                        ((rgb >> 16) & 0xFF) / 255.0f,
+                        ((rgb >> 8) & 0xFF) / 255.0f,
+                        (rgb & 0xFF) / 255.0f
+                };
+            }
+        }
+
+        // Theme / Client color 1
+        float[] themeHsv = ClientData.colorSettings.get("Theme Color 1");
+        if (themeHsv == null) {
+            themeHsv = LexoraGui.colorSettings.get("Theme Color 1");
+        }
+        if (themeHsv != null && themeHsv.length >= 3) {
+            int rgb = Color.HSBtoRGB(themeHsv[0], themeHsv[1], themeHsv[2]);
+            return new float[]{
+                    ((rgb >> 16) & 0xFF) / 255.0f,
+                    ((rgb >> 8) & 0xFF) / 255.0f,
+                    (rgb & 0xFF) / 255.0f
+            };
+        }
+
+        return new float[]{0.5f, 0.8f, 1.0f};
     }
 }

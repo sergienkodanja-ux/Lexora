@@ -40,15 +40,28 @@ public final class LexoraModuleSource {
         ));
     }
 
-    /** Категории в порядке отображения, с модулями внутри (для группировки в поиске). */
-    public static Map<String, List<String>> getCategories() {
+    /** Исходные категории со всеми зарегистрированными модулями (для checkFeatures). */
+    public static Map<String, List<String>> getCategoriesRaw() {
         return CATEGORIES;
     }
 
-    /** Плоский список всех модулей, без категорий. */
+    /** Категории в порядке отображения, с модулями внутри (для группировки в поиске), исключая заблокированные HolyWorld. */
+    public static Map<String, List<String>> getCategories() {
+        Map<String, List<String>> filtered = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> entry : CATEGORIES.entrySet()) {
+            List<String> list = entry.getValue().stream()
+                    .filter(m -> !com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(m))
+                    .toList();
+            filtered.put(entry.getKey(), list);
+        }
+        return filtered;
+    }
+
+    /** Плоский список всех разрешённых модулей, без категорий. */
     public static List<String> getAllModuleNames() {
         return CATEGORIES.values().stream()
                 .flatMap(List::stream)
+                .filter(m -> !com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(m))
                 .toList();
     }
 }

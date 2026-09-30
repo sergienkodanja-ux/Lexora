@@ -52,16 +52,16 @@ final class KillEffectRenderer {
         float tickDelta = context.tickCounter().getTickDelta(true);
         float ageWithDelta = client.player.age + tickDelta;
 
-        Iterator<KillEffectManager.ActiveEffect<?>> it = KillEffectManager.ACTIVE.iterator();
-        while (it.hasNext()) {
-            KillEffectManager.ActiveEffect<?> active = it.next();
+        for (KillEffectManager.ActiveEffect<?> active : KillEffectManager.ACTIVE) {
             float elapsed = ageWithDelta - active.startAge;
             float progress = Math.min(1.0f, Math.max(0.0f, elapsed / active.durationTicks));
 
-            active.render(matrices, camera, consumers, camPos, progress, ageWithDelta, RANDOM);
+            try {
+                active.render(matrices, camera, consumers, camPos, progress, ageWithDelta, RANDOM);
+            } catch (Throwable ignored) {}
 
             if (elapsed >= active.durationTicks) {
-                it.remove();
+                KillEffectManager.ACTIVE.remove(active);
             }
         }
     }

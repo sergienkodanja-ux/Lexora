@@ -155,6 +155,10 @@ public class MixinChatScreen extends Screen {
                 HudManager.scoreboardX = Math.round(visualX - (baseW - visualW) / 2.0f);
                 HudManager.scoreboardY = Math.round(visualY - (baseH - visualH) / 2.0f);
             }
+            case "Notifications" -> {
+                HudManager.notifX = visualX;
+                HudManager.notifY = visualY;
+            }
         }
     }
 
@@ -183,11 +187,32 @@ public class MixinChatScreen extends Screen {
                 cir.setReturnValue(true); return;
             } else if (targetEditingHud.equals("Watermark")) {
                 if (handleSwitcherClick(mx, my, "Watermark Blur", pY + 24)) { cir.setReturnValue(true); return; }
+                if (inside(mx, my, pX + 7, pY + 46, pW - 14, 24)) { draggingScale = true; cir.setReturnValue(true); return; }
+                cir.setReturnValue(true); return;
+            } else if (targetEditingHud.equals("Notifications")) {
+                if (handleSwitcherClick(mx, my, "Notifications Blur", pY + 24)) { cir.setReturnValue(true); return; }
                 if (inside(mx, my, pX + 7, pY + 44, pW - 14, 16)) { toggleDefaultTrue("Notif Swap"); cir.setReturnValue(true); return; }
                 if (inside(mx, my, pX + 7, pY + 62, pW - 14, 16)) { toggleDefaultTrue("Notif HP"); cir.setReturnValue(true); return; }
                 if (inside(mx, my, pX + 7, pY + 80, pW - 14, 16)) { toggleDefaultTrue("Notif Armor"); cir.setReturnValue(true); return; }
                 if (inside(mx, my, pX + 7, pY + 98, pW - 14, 16)) { toggleDefaultTrue("Notif Potions"); cir.setReturnValue(true); return; }
-                if (inside(mx, my, pX + 7, pY + 118, pW - 14, 24)) { draggingScale = true; cir.setReturnValue(true); return; }
+                if (inside(mx, my, pX + 7, pY + 116, pW - 14, 16)) { toggleDefaultTrue("Notif Icons"); cir.setReturnValue(true); return; }
+                if (inside(mx, my, pX + 7, pY + 134, pW - 14, 16)) { toggleDefaultTrue("Notif Sound"); cir.setReturnValue(true); return; }
+                { // Notif Sound Mode switcher (Звук 1 / Звук 2 / Звук 3)
+                    int sndY = pY + 152;
+                    float boxW = 96f, boxH = 14f;
+                    float boxX = pX + pW - 7f - boxW, boxY = sndY - 0.5f;
+                    float third = boxW / 3f;
+                    if (mx >= boxX && mx <= boxX + third && my >= boxY && my <= boxY + boxH) {
+                        LexoraGui.modeSettings.put("Notif Sound Mode", "Звук 1"); cir.setReturnValue(true); return;
+                    }
+                    if (mx > boxX + third && mx <= boxX + third * 2 && my >= boxY && my <= boxY + boxH) {
+                        LexoraGui.modeSettings.put("Notif Sound Mode", "Звук 2"); cir.setReturnValue(true); return;
+                    }
+                    if (mx > boxX + third * 2 && mx <= boxX + boxW && my >= boxY && my <= boxY + boxH) {
+                        LexoraGui.modeSettings.put("Notif Sound Mode", "Звук 3"); cir.setReturnValue(true); return;
+                    }
+                }
+                if (inside(mx, my, pX + 7, pY + 172, pW - 14, 24)) { draggingScale = true; cir.setReturnValue(true); return; }
                 cir.setReturnValue(true); return;
             } else if (targetEditingHud.equals("Music Hud")) {
                 if (inside(mx, my, pX + 7, pY + 24, pW - 14, 16)) { toggleDefaultTrue("Music Hud Controls"); cir.setReturnValue(true); return; }
@@ -247,7 +272,7 @@ public class MixinChatScreen extends Screen {
             }
             int wX = DynamicIslandRenderer.islandX, wY = DynamicIslandRenderer.islandY;
             if (LexoraGui.moduleStates.getOrDefault("Watermark", true) && mx >= wX && mx <= wX + DynamicIslandRenderer.islandW && my >= wY && my <= wY + DynamicIslandRenderer.islandH) {
-                if (!DynamicIslandRenderer.isMusicExpanded()) { targetEditingHud = "Watermark"; editingHud = "Watermark"; pW = 140; pH = 142; pX = mx + 10; pY = my + 10; clampPanelToScreen(); cir.setReturnValue(true); return; }
+                if (!DynamicIslandRenderer.isMusicExpanded()) { targetEditingHud = "Watermark"; editingHud = "Watermark"; pW = 140; pH = 74; pX = mx + 10; pY = my + 10; clampPanelToScreen(); cir.setReturnValue(true); return; }
             }
             float targetScale = LexoraGui.numSettings.getOrDefault("Target HUD Scale", 1.0f);
             int tBaseX = HudManager.targetX == -1 ? 150 : HudManager.targetX, tBaseY = HudManager.targetY == -1 ? 150 : HudManager.targetY;
@@ -307,6 +332,13 @@ public class MixinChatScreen extends Screen {
             int sbVisualX = Math.round(sbBaseX + (sbBaseW - sbVisualW) / 2.0f), sbVisualY = Math.round(sbBaseY + (sbBaseH - sbVisualH) / 2.0f);
             if (LexoraGui.moduleStates.getOrDefault("Scoreboard HUD", false) && mx >= sbVisualX && mx <= sbVisualX + sbVisualW && my >= sbVisualY && my <= sbVisualY + sbVisualH) {
                 targetEditingHud = "Scoreboard HUD"; editingHud = "Scoreboard HUD"; pW = 140; pH = 92; pX = mx + 10; pY = my + 10; clampPanelToScreen(); cir.setReturnValue(true); return;
+            }
+            float notifScale = LexoraGui.numSettings.getOrDefault("Notifications Scale", 1.0f);
+            int notifBaseW = NotifHudRenderer.getPreviewWidth(), notifBaseH = NotifHudRenderer.HEIGHT;
+            int notifVisualW = Math.round(notifBaseW * notifScale), notifVisualH = Math.round(notifBaseH * notifScale);
+            int notifVisualX = NotifHudRenderer.getVisualX(mc.getWindow().getScaledWidth()), notifVisualY = NotifHudRenderer.getVisualY(mc.getWindow().getScaledHeight());
+            if (LexoraGui.moduleStates.getOrDefault("Notifications", true) && mx >= notifVisualX && mx <= notifVisualX + notifVisualW && my >= notifVisualY && my <= notifVisualY + notifVisualH) {
+                targetEditingHud = "Notifications"; editingHud = "Notifications"; pW = 140; pH = 200; pX = mx + 10; pY = my + 10; clampPanelToScreen(); cir.setReturnValue(true); return;
             }
         }
 
@@ -379,6 +411,13 @@ public class MixinChatScreen extends Screen {
             int sbVisualX = Math.round(sbBaseX + (sbBaseW - sbVisualW) / 2.0f), sbVisualY = Math.round(sbBaseY + (sbBaseH - sbVisualH) / 2.0f);
             if (LexoraGui.moduleStates.getOrDefault("Scoreboard HUD", false) && mx >= sbVisualX && mx <= sbVisualX + sbVisualW && my >= sbVisualY && my <= sbVisualY + sbVisualH) {
                 startDraggingHud("Scoreboard HUD", sbVisualX, sbVisualY, sbVisualW, sbVisualH, mouseX, mouseY); cir.setReturnValue(true); return;
+            }
+            float notifScale = LexoraGui.numSettings.getOrDefault("Notifications Scale", 1.0f);
+            int notifBaseW = NotifHudRenderer.getPreviewWidth(), notifBaseH = NotifHudRenderer.HEIGHT;
+            int notifVisualW = Math.round(notifBaseW * notifScale), notifVisualH = Math.round(notifBaseH * notifScale);
+            int notifVisualX = NotifHudRenderer.getVisualX(mc.getWindow().getScaledWidth()), notifVisualY = NotifHudRenderer.getVisualY(mc.getWindow().getScaledHeight());
+            if (LexoraGui.moduleStates.getOrDefault("Notifications", true) && mx >= notifVisualX && mx <= notifVisualX + notifVisualW && my >= notifVisualY && my <= notifVisualY + notifVisualH) {
+                startDraggingHud("Notifications", notifVisualX, notifVisualY, notifVisualW, notifVisualH, mouseX, mouseY); cir.setReturnValue(true); return;
             }
         }
     }
@@ -455,12 +494,19 @@ public class MixinChatScreen extends Screen {
             drawScaleSlider(context, scale, pY + 214, alphaInt, dark);
         } else if (editingHud.equals("Watermark")) {
             drawBgSwitcher(context, "Фон", "Watermark Blur", pY + 24, alphaInt, dark);
+            float scale = LexoraGui.numSettings.getOrDefault("Watermark Scale", 1.0f);
+            drawScaleSlider(context, scale, pY + 54, alphaInt, dark);
+        } else if (editingHud.equals("Notifications")) {
+            drawBgSwitcher(context, "Фон", "Notifications Blur", pY + 24, alphaInt, dark);
             drawToggleDefaultTrue(context, "Увед. о свапе", "Notif Swap", pY + 44, alphaInt, dark);
             drawToggleDefaultTrue(context, "Увед. ХП", "Notif HP", pY + 62, alphaInt, dark);
             drawToggleDefaultTrue(context, "Увед. Броня", "Notif Armor", pY + 80, alphaInt, dark);
             drawToggleDefaultTrue(context, "Увед. Зелья", "Notif Potions", pY + 98, alphaInt, dark);
-            float scale = LexoraGui.numSettings.getOrDefault("Watermark Scale", 1.0f);
-            drawScaleSlider(context, scale, pY + 126, alphaInt, dark);
+            drawToggleDefaultTrue(context, "Иконки", "Notif Icons", pY + 116, alphaInt, dark);
+            drawToggleDefaultTrue(context, "Звук", "Notif Sound", pY + 134, alphaInt, dark);
+            drawNotifSoundSwitcher(context, pY + 152, alphaInt, dark);
+            float scale = LexoraGui.numSettings.getOrDefault("Notifications Scale", 1.0f);
+            drawScaleSlider(context, scale, pY + 180, alphaInt, dark);
         } else if (editingHud.equals("Music Hud")) {
             drawToggleDefaultTrue(context, "Кнопки", "Music Hud Controls", pY + 24, alphaInt, dark);
             float scale = LexoraGui.numSettings.getOrDefault("Music Hud Scale", 1.0f);
@@ -515,10 +561,11 @@ public class MixinChatScreen extends Screen {
             case "Cooldowns" -> LexoraIcons.Icon.HOURGLASS;
             case "Potions" -> LexoraIcons.Icon.POTION;
             case "Scoreboard HUD" -> LexoraIcons.Icon.TEXT;
+            case "Notifications" -> LexoraIcons.Icon.EXCLAMATION;
             default -> LexoraIcons.Icon.GEAR;
         };
         LexoraIcons.draw(context, icon, x, y + 0.5f, 7.5f, iconColor);
-        String displayName = editingHud.equals("Watermark") ? "Dynamic Island" : editingHud + " Settings";
+        String displayName = editingHud.equals("Watermark") ? "Dynamic Island" : editingHud.equals("Notifications") ? "Notifications" : editingHud + " Settings";
         SFUI.draw(context.getMatrices(), displayName, x + 10, y, 7.5f, titleColor);
     }
 
@@ -596,8 +643,16 @@ public class MixinChatScreen extends Screen {
             int bx = Math.round(sbBaseX + (baseW - bw) / 2.0f), by = Math.round(sbBaseY + (baseH - bh) / 2.0f);
             if (inside(mouseX, mouseY, bx, by, bw, bh)) { hoveredHud = "Scoreboard HUD"; hX = bx; hY = by; hW = bw; hH = bh; }
         }
+        if (hoveredHud == null && LexoraGui.moduleStates.getOrDefault("Notifications", true)) {
+            float sc = LexoraGui.numSettings.getOrDefault("Notifications Scale", 1.0f);
+            int baseW = NotifHudRenderer.getPreviewWidth(), baseH = NotifHudRenderer.HEIGHT;
+            int bw = Math.round(baseW * sc), bh = Math.round(baseH * sc);
+            int bx = NotifHudRenderer.getVisualX(mc.getWindow().getScaledWidth());
+            int by = NotifHudRenderer.getVisualY(mc.getWindow().getScaledHeight());
+            if (inside(mouseX, mouseY, bx, by, bw, bh)) { hoveredHud = "Notifications"; hX = bx; hY = by; hW = bw; hH = bh; }
+        }
 
-        String[] allHuds = new String[]{"Info HUD", "Target HUD", "TNT Detect", "Keybinds", "Armor Status", "Inventory HUD", "Cooldowns", "Potions", "Scoreboard HUD"};
+        String[] allHuds = new String[]{"Info HUD", "Target HUD", "TNT Detect", "Keybinds", "Armor Status", "Inventory HUD", "Cooldowns", "Potions", "Scoreboard HUD", "Notifications"};
         for (String hud : allHuds) {
             float target = (hud.equals(hoveredHud)) ? 1.0f : 0.0f;
             float cur = hudHoverAnimations.getOrDefault(hud, 0f);
@@ -782,5 +837,47 @@ public class MixinChatScreen extends Screen {
         int g = (int) (fg + (tg - fg) * progress);
         int b = (int) (fb + (tb - fb) * progress);
         return (r << 16) | (g << 8) | b;
+    }
+
+    private void drawNotifSoundSwitcher(DrawContext context, int y, int alphaInt, boolean dark) {
+        int labelColor = dark ? ((alphaInt << 24) | 0xEEEEEE) : ((alphaInt << 24) | 0x1E1E24);
+        SFUI.draw(context.getMatrices(), "Режим", pX + 7, y + 2, 7.5f, labelColor);
+
+        String currentMode = LexoraGui.modeSettings.getOrDefault("Notif Sound Mode", "Звук 1");
+        int selected = "Звук 3".equals(currentMode) ? 2 : "Звук 2".equals(currentMode) ? 1 : 0;
+
+        float boxW = 96f, boxH = 14f;
+        float boxX = pX + pW - 7f - boxW, boxY = y - 0.5f;
+        int trackBg = dark ? ((alphaInt << 24) | 0x1c1c20) : ((alphaInt << 24) | 0xDCDEE6);
+        RoundedRectShader.draw(context, boxX, boxY, boxW, boxH, 4.5f, trackBg);
+
+        float pillW = 30f, pillH = 11.5f;
+        float targetPos = selected * 0.5f; // 0.0, 0.5, 1.0
+        float curPos = switcherAnimations.getOrDefault("Notif Sound Mode", targetPos);
+        curPos += (targetPos - curPos) * 0.28f;
+        if (Math.abs(curPos - targetPos) < 0.005f) curPos = targetPos;
+        switcherAnimations.put("Notif Sound Mode", curPos);
+
+        float pillMinX = boxX + 1.25f, pillMaxX = boxX + boxW - pillW - 1.25f;
+        float pillX = pillMinX + (pillMaxX - pillMinX) * curPos;
+        float pillY = boxY + 1.25f;
+        int activeBg = dark ? 0xFFFFFF : 0x111116;
+        RoundedRectShader.draw(context, pillX, pillY, pillW, pillH, 3.5f, (alphaInt << 24) | activeBg);
+
+        // 3 надписи
+        float segW = boxW / 3f;
+        String[] labels = {"Зв 1", "Зв 2", "Зв 3"};
+        for (int i = 0; i < 3; i++) {
+            float lw = SFUI.getWidth(labels[i], 5.5f);
+            float lx = boxX + segW * i + (segW - lw) / 2f;
+            float ly = boxY + 2.5f;
+            // Активный = цвет пилюли-текста, неактивный = серый
+            float dist = Math.abs(curPos - i * 0.5f);
+            float act = Math.max(0f, 1f - dist * 2.5f);
+            int cActive = dark ? 0x0C0C0E : 0xFFFFFF;
+            int cInactive = dark ? 0x888890 : 0x6B6E78;
+            int col = lerpColor(cInactive, cActive, act);
+            SFUI.draw(context.getMatrices(), labels[i], lx, ly, 5.5f, (alphaInt << 24) | col);
+        }
     }
 }

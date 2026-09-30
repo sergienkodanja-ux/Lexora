@@ -51,6 +51,7 @@ public class LexoravisaulsClient implements ClientModInitializer {
     private static boolean draggingInv = false;
     private static boolean draggingCool = false;
     private static boolean draggingKeys = false;
+    private static boolean draggingNotif = false;
 
     private static int dragOffsetX = 0;
     private static int dragOffsetY = 0;
@@ -120,6 +121,7 @@ public class LexoravisaulsClient implements ClientModInitializer {
         });
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            com.lexoravisauls.client.liteapi.LiteApiFeatureControl.tick();
             GPS.tick();
             PvpBossBarTracker.tick();
             FakePlayerManager.tick();
@@ -141,12 +143,15 @@ public class LexoravisaulsClient implements ClientModInitializer {
             AuraParticles.tick();
             MotionClones.tick();
             TapeMouse.tick(client);
+            HwHelper.checkInventory(client);
+            PvpMarkerManager.tick();
             com.lexoravisauls.client.gui.modern.ModernClickGui.HolyWorldJoiner.tick();
             HitIndicatorRenderer.onTick(client);
             TotemSoundManager.tick(client);
             RadialMenuModule.tick();
             com.lexoravisauls.client.modules.weather.WeatherFX.tick();
             com.lexoravisauls.client.modules.virtualdesktop.VirtualDesktopManager.getInstance().tick(client);
+            com.lexoravisauls.client.modules.lyrics.KineticLyrics.getInstance().tick();
 
 
 
@@ -164,7 +169,7 @@ public class LexoravisaulsClient implements ClientModInitializer {
                 ClientData.moduleStates.put("Lexora IRC", false); // Сбрасываем обратно
             }
 
-            // Умная синхронизация: отслеживаем изменения для вывода Dynamic Island
+            // Умная синхронизация: отслеживаем изменения для вывода Dynamic Island и Notifications
             for (Map.Entry<String, Boolean> entry : ClientData.moduleStates.entrySet()) {
                 String modName = entry.getKey();
                 boolean currentState = entry.getValue();
@@ -177,6 +182,7 @@ public class LexoravisaulsClient implements ClientModInitializer {
                     } else {
                         DynamicIslandManager.notifyModDisabled(modName);
                     }
+                    NotifManager.notifyModuleToggle(modName, currentState);
                     lastModuleStates.put(modName, currentState);
                 }
             }
@@ -216,6 +222,8 @@ public class LexoravisaulsClient implements ClientModInitializer {
             PartyWaypoint.render3D(context, MinecraftClient.getInstance().gameRenderer.getCamera(), tickCounter.getTickDelta(true));
             HitIndicatorRenderer.renderHud(context, tickDelta);
             TntHudRenderer.render(context, tickDelta);
+            NotifHudRenderer.render(context, tickDelta);
+            PvpMarkerManager.renderHud(context, MinecraftClient.getInstance().gameRenderer.getCamera(), tickDelta);
         });
 
         WorldRenderEvents.LAST.register(context -> {
@@ -233,10 +241,13 @@ public class LexoravisaulsClient implements ClientModInitializer {
             com.lexoravisauls.client.events.BlockOverlayRenderer.render(context.matrixStack(), context.camera(), tickDelta);
             TrailManager.onRender(context.matrixStack(), context.camera(), tickDelta);
             FtHelper.render(context.matrixStack(), context.camera(), tickDelta);
+            HwHelper.render(context.matrixStack(), context.camera(), tickDelta);
+            PvpMarkerManager.render3D(context.matrixStack(), context.camera(), tickDelta);
             AuraParticles.render(context.matrixStack(), context.camera(), tickDelta);
             MotionClones.render(context.matrixStack(), context.camera(), tickDelta);
             GPS.render3D(context.matrixStack(), context.camera(), tickDelta);
             com.lexoravisauls.client.modules.virtualdesktop.VirtualDesktopRenderer.render(context.matrixStack(), context.camera(), context.consumers(), tickDelta);
+            com.lexoravisauls.client.modules.lyrics.KineticLyrics.getInstance().render3D(context.matrixStack(), context.camera(), tickDelta);
         });
     }
 
@@ -338,6 +349,20 @@ public class LexoravisaulsClient implements ClientModInitializer {
                 dragOffsetX = (int) mouseX - HudManager.coolX;
                 dragOffsetY = (int) mouseY - HudManager.coolY;
             }
+
+            float notifScale = ClientData.numSettings.getOrDefault("Notifications Scale", 1.0f);
+            int nW = Math.round(NotifHudRenderer.getPreviewWidth() * notifScale);
+            int nH = Math.round(NotifHudRenderer.HEIGHT * notifScale);
+            int nx = NotifHudRenderer.getVisualX(client.getWindow().getScaledWidth());
+            int ny = NotifHudRenderer.getVisualY(client.getWindow().getScaledHeight());
+
+            if (ClientData.moduleStates.getOrDefault("Notifications", true)
+                    && mouseX >= nx && mouseX <= nx + nW
+                    && mouseY >= ny && mouseY <= ny + nH) {
+                draggingNotif = true;
+                dragOffsetX = (int) mouseX - nx;
+                dragOffsetY = (int) mouseY - ny;
+            }
         } else if (isMouseDown) {
 
             if (draggingPotion) {
@@ -368,6 +393,10 @@ public class LexoravisaulsClient implements ClientModInitializer {
                 HudManager.hearthX = (int) mouseX - dragOffsetX;
                 HudManager.hearthY = (int) mouseY - dragOffsetY;
             }
+            if (draggingNotif) {
+                HudManager.notifX = (int) mouseX - dragOffsetX;
+                HudManager.notifY = (int) mouseY - dragOffsetY;
+            }
         } else if (!isMouseDown && wasMouseDown) {
             draggingPotion = false;
             draggingTarget = false;
@@ -376,6 +405,7 @@ public class LexoravisaulsClient implements ClientModInitializer {
             draggingInv = false;
             draggingCool = false;
             draggingHearth = false;
+            draggingNotif = false;
 
             ConfigManager.saveConfig();
         }

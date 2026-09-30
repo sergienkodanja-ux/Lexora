@@ -52,6 +52,10 @@ public class DynamicIslandRenderer {
     private static float animPvpBoxW  = 0f;  // плавная ширина красного бокса
     private static float animPvpAlpha = 0f;  // плавный alpha PVP (0→1)
 
+    // === PVP МУЗЫКАЛЬНЫЙ ПУЗЫРЬ (Выпадающее снизу окошко с субтитрами/бегущей строкой) ===
+    private static float animPvpMusicBubble = 0f;
+    private static float pvpBubbleX = 0f, pvpBubbleY = 0f, pvpBubbleW = 0f, pvpBubbleH = 0f;
+
     // === ПАТИ-УВЕДОМЛЕНИЕ ===
     private static float animPartyNotif          = 0f;
     private static float animPartyHover          = 0f;
@@ -161,9 +165,17 @@ public class DynamicIslandRenderer {
         drawSmoothRectF(context, animPillX, animPillY, animPillW, animPillH, animPillH / 2f, pillColor);
     }
 
-private static MsdfFont getFont() {
+    public static MsdfFont getFont() {
         if (msdfFont == null) msdfFont = new MsdfFont(FONT_TEX, FONT_JSON);
         return msdfFont;
+    }
+
+    public static boolean isIslandLyricsEnabled() {
+        boolean moduleEnabled = ClientData.moduleStates.getOrDefault("Kinetic Lyrics",
+                LexoraGui.moduleStates.getOrDefault("Kinetic Lyrics", true));
+        if (!moduleEnabled) return false;
+        return ClientData.moduleStates.getOrDefault("Lyrics In Island",
+                LexoraGui.moduleStates.getOrDefault("Lyrics In Island", true));
     }
 
     private static LexoraIcons.Icon getWifiIcon(int ping) {
@@ -330,9 +342,9 @@ private static MsdfFont getFont() {
 updateAndDrawPill(context, fadeFactor * (1f - animMedia), currentColor);
     if (animMedia < 0.99f) renderDefaultIsland(context, ms, time, fadeFactor, currentColor, 1f - animMedia);
     if (animMedia > 0.01f) renderMusicIsland(context, ms, time, fadeFactor, opacity, screenWidth);
+    renderPvpMusicBubble(context, ms, time, fadeFactor, opacity, currentColor);
     // quick access categories removed
 
-    renderNotifications(context, screenWidth, blurEnabled, bgColor);
     renderPartyInviteIsland(context, screenWidth, blurEnabled, bgColor, mx, my, isFreeMouse, scale);
     renderCalloutIsland(context, screenWidth, blurEnabled, bgColor, mx, my, isFreeMouse);
 
@@ -361,155 +373,166 @@ private static int withAlphaLocal(int argb, int alpha255) {
     // =========================================================================
     private static void renderMusicIsland(DrawContext context, MatrixStack ms,
                                           long time, float fadeFactor, float opacity, int screenWidth) {
-        float e    = animExpand;
-        float invE = 1f - e;
-        int alpha  = (int)(255 * fadeFactor * opacity);
-        if (alpha <= 5) return;
+        try {
+            float e    = animExpand;
+            float invE = 1f - e;
+            int alpha  = (int)(255 * fadeFactor * opacity);
+            if (alpha <= 5) return;
 
-        float effE   = Math.max(0, (islandH - 20f) / 44f);
-        float tSize  = 14f + 34f * effE;
-        float tX     = islandX + 4f + 3f * effE;
-        float tY     = islandY + 3f + 5f * effE;
-        float tRadius = 7f - 1f * effE;
+            float effE   = Math.max(0, (islandH - 20f) / 44f);
+            float tSize  = 14f + 34f * effE;
+            float tX     = islandX + 4f + 3f * effE;
+            float tY     = islandY + 3f + 5f * effE;
+            float tRadius = 7f - 1f * effE;
 
-        String title = LexoraMediaUtils.getTitle();
-        if (title == null || title.isEmpty()) title = "Unknown Track";
-        String artist = LexoraMediaUtils.getAuthor();
-        if (artist == null || artist.isEmpty()) artist = "Unknown Artist";
-        long progress = LexoraMediaUtils.getProgress();
-        long duration = LexoraMediaUtils.getDuration();
+            String title = LexoraMediaUtils.getTitle();
+            if (title == null || title.isEmpty()) title = "Unknown Track";
+            String artist = LexoraMediaUtils.getAuthor();
+            if (artist == null || artist.isEmpty()) artist = "Unknown Artist";
+            long progress = LexoraMediaUtils.getProgress();
+            long duration = LexoraMediaUtils.getDuration();
 
-        // Обновляем LyricsManager каждый кадр
-        LyricsManager.update(title, artist, duration);
+            // Обновляем LyricsManager каждый кадр
+            try {
+                LyricsManager.update(title, artist, duration);
+            } catch (Throwable ignored) {}
 
-        // ── СВЁРНУТЫЙ РЕЖИМ (КАРАОКЕ / НАЗВАНИЕ ПЕСНИ) ─────────────────────────
-        if (invE > 0.1f) {
-            float quickAccessW = guiIconsBlockW() * animGuiOpen;
-            float titleX  = islandX + 23.5f;
-            float titleY  = islandY + 5.5f;
-            float maxTextW = Math.max(20f, islandW - 41f - quickAccessW);
-            float scissorLeft = islandX + 22.5f;
-            float scissorRight = islandX + islandW - 17.5f;
-            float scissorTop = islandY + 1f;
-            float scissorBottom = islandY + 19f;
+            // ── СВЁРНУТЫЙ РЕЖИМ (КАРАОКЕ / НАЗВАНИЕ ПЕСНИ) ─────────────────────────
+            if (invE > 0.1f) {
+                float quickAccessW = guiIconsBlockW() * animGuiOpen;
+                float titleX  = islandX + 23.5f;
+                float titleY  = islandY + 5.5f;
+                float maxTextW = Math.max(20f, islandW - 41f - quickAccessW);
+                float scissorLeft = islandX + 22.5f;
+                float scissorRight = islandX + islandW - 17.5f;
+                float scissorTop = islandY + 1f;
+                float scissorBottom = islandY + 19f;
 
-            if (scissorRight > scissorLeft + 5f) {
-                context.enableScissor((int)scissorLeft, (int)scissorTop, (int)scissorRight, (int)scissorBottom);
+                if (scissorRight > scissorLeft + 5f) {
+                    context.enableScissor((int)scissorLeft, (int)scissorTop, (int)scissorRight, (int)scissorBottom);
+                    try {
+                        int curAlpha = (int)(alpha * invE);
+                        String displayLine;
+                        float karaokeProgress = 0f;
+                        boolean isKaraoke = false;
 
-                int curAlpha = (int)(alpha * invE);
-                String displayLine;
-                float karaokeProgress = 0f;
-                boolean isKaraoke = false;
+                        // При открытом GUI или если выключен тумблер "В Dynamic Island", показываем ТОЛЬКО чистое название песни без караоке и без сдвигов
+                        boolean islandLyrics = isIslandLyricsEnabled();
+                        boolean isSinging = islandLyrics && LyricsManager.hasLyrics() && LyricsManager.isSinging(progress) && animGuiOpen < 0.15f;
 
-                // При открытом GUI показываем ТОЛЬКО чистое название песни без караоке и без сдвигов
-                boolean isSinging = LyricsManager.hasLyrics() && LyricsManager.isSinging(progress) && animGuiOpen < 0.15f;
+                        if (animGuiOpen >= 0.15f || !islandLyrics) {
+                            displayLine = title;
+                            isKaraoke = false;
+                        } else if (isSinging) {
+                            String lyric = LyricsManager.getCurrentLine(progress);
+                            karaokeProgress = LyricsManager.getLineProgress(progress);
+                            displayLine = (lyric != null && !lyric.trim().isEmpty()) ? lyric : title;
+                            isKaraoke = (lyric != null && !lyric.trim().isEmpty());
+                        } else if (LyricsManager.isFetching()) {
+                            displayLine = "♪ Загрузка текста...";
+                            isKaraoke = false;
+                        } else {
+                            displayLine = title;
+                            isKaraoke = false;
+                        }
 
-                if (animGuiOpen >= 0.15f) {
-                    displayLine = title;
-                    isKaraoke = false;
-                } else if (isSinging) {
-                    String lyric = LyricsManager.getCurrentLine(progress);
-                    karaokeProgress = LyricsManager.getLineProgress(progress);
-                    displayLine = (lyric != null && !lyric.trim().isEmpty()) ? lyric : title;
-                    isKaraoke = (lyric != null && !lyric.trim().isEmpty());
-                } else if (LyricsManager.isFetching()) {
-                    displayLine = "♪ Загрузка текста...";
-                    isKaraoke = false;
-                } else {
-                    displayLine = title;
-                    isKaraoke = false;
-                }
+                        if (lastRenderFrameTime == 0L) lastRenderFrameTime = time;
+                        float dt = Math.min(0.05f, (time - lastRenderFrameTime) / 1000f);
+                        lastRenderFrameTime = time;
 
-                if (lastRenderFrameTime == 0L) lastRenderFrameTime = time;
-                float dt = Math.min(0.05f, (time - lastRenderFrameTime) / 1000f);
-                lastRenderFrameTime = time;
+                        if (!displayLine.equals(lastRenderedLyricLine)) {
+                            prevRenderedLyricLine = lastRenderedLyricLine;
+                            prevWasKaraoke = lastWasKaraoke;
+                            lastRenderedLyricLine = displayLine;
+                            lastWasKaraoke = isKaraoke;
+                            lyricTransitionProgress = 0f;
+                        }
 
-                if (!displayLine.equals(lastRenderedLyricLine)) {
-                    prevRenderedLyricLine = lastRenderedLyricLine;
-                    prevWasKaraoke = lastWasKaraoke;
-                    lastRenderedLyricLine = displayLine;
-                    lastWasKaraoke = isKaraoke;
-                    lyricTransitionProgress = 0f;
-                }
+                        if (lyricTransitionProgress < 1.0f) {
+                            lyricTransitionProgress = Math.min(1.0f, lyricTransitionProgress + dt * 6.0f);
+                        }
 
-                if (lyricTransitionProgress < 1.0f) {
-                    lyricTransitionProgress = Math.min(1.0f, lyricTransitionProgress + dt * 6.0f);
-                }
+                        float textW = width(displayLine, FONT_SIZE);
+                        float scrollOffset = 0;
 
-                float textW = width(displayLine, FONT_SIZE);
-                float scrollOffset = 0;
+                        if (textW > maxTextW) {
+                            if (isKaraoke) {
+                                float activeX = textW * karaokeProgress;
+                                float center = maxTextW / 2f;
+                                scrollOffset = -(activeX - center);
+                                scrollOffset = Math.min(0, scrollOffset);
+                                scrollOffset = Math.max(-(textW - maxTextW), scrollOffset);
+                            } else {
+                                float maxScroll = textW - maxTextW;
+                                float cycle = (time % 8000L) / 8000f;
+                                float t = (float)(Math.sin(cycle * Math.PI * 2.0) * 0.5 + 0.5);
+                                scrollOffset = -maxScroll * t;
+                            }
+                        }
 
-                if (textW > maxTextW) {
-                    if (isKaraoke) {
-                        float activeX = textW * karaokeProgress;
-                        float center = maxTextW / 2f;
-                        scrollOffset = -(activeX - center);
-                        scrollOffset = Math.min(0, scrollOffset);
-                        scrollOffset = Math.max(-(textW - maxTextW), scrollOffset);
-                    } else {
-                        float maxScroll = textW - maxTextW;
-                        float cycle = (time % 8000L) / 8000f;
-                        float t = (float)(Math.sin(cycle * Math.PI * 2.0) * 0.5 + 0.5);
-                        scrollOffset = -maxScroll * t;
+                        int colorDone    = (curAlpha << 24) | (HudThemeHelper.isDark() ? 0xF1F1F6 : 0x0C0C10);
+                        int colorPending = (curAlpha << 24) | (HudThemeHelper.isDark() ? 0x777788 : 0x888899);
+
+                        if (lyricTransitionProgress < 1.0f && !prevRenderedLyricLine.isEmpty()) {
+                            // 🪜 ЛЕСЕНКА: Ступенчатый уход старой строки (слова улетают вверх по очереди)
+                            drawLadderExit(context, prevRenderedLyricLine, titleX + smoothKaraokeScrollOffset, titleY, FONT_SIZE, curAlpha, lyricTransitionProgress, prevWasKaraoke);
+
+                            // Плавное появление новой строки снизу
+                            float newAlphaFactor = lyricTransitionProgress;
+                            int nCurAlpha = (int)(curAlpha * newAlphaFactor);
+                            float nY = titleY + (6f * (1f - lyricTransitionProgress));
+                            int nDone = (nCurAlpha << 24) | (HudThemeHelper.isDark() ? 0xF1F1F6 : 0x0C0C10);
+                            int nPending = (nCurAlpha << 24) | (HudThemeHelper.isDark() ? 0x777788 : 0x888899);
+
+                            if (isKaraoke) {
+                                drawDynamicKaraokeLine(context, displayLine, titleX, nY, FONT_SIZE, nDone, nPending, karaokeProgress, maxTextW, dt);
+                            } else {
+                                getFont().draw(context, displayLine, titleX + scrollOffset, nY, FONT_SIZE, nDone);
+                            }
+                        } else {
+                            if (isKaraoke) {
+                                drawDynamicKaraokeLine(context, displayLine, titleX, titleY, FONT_SIZE, colorDone, colorPending, karaokeProgress, maxTextW, dt);
+                            } else {
+                                getFont().draw(context, displayLine, titleX + scrollOffset, titleY, FONT_SIZE, colorDone);
+                            }
+                        }
+                    } finally {
+                        context.disableScissor();
                     }
                 }
-
-                int colorDone    = (curAlpha << 24) | (HudThemeHelper.isDark() ? 0xF1F1F6 : 0x0C0C10);
-                int colorPending = (curAlpha << 24) | (HudThemeHelper.isDark() ? 0x777788 : 0x888899);
-
-                if (lyricTransitionProgress < 1.0f && !prevRenderedLyricLine.isEmpty()) {
-                    // 🪜 ЛЕСЕНКА: Ступенчатый уход старой строки (слова улетают вверх по очереди)
-                    drawLadderExit(context, prevRenderedLyricLine, titleX + smoothKaraokeScrollOffset, titleY, FONT_SIZE, curAlpha, lyricTransitionProgress, prevWasKaraoke);
-
-                    // Плавное появление новой строки снизу
-                    float newAlphaFactor = lyricTransitionProgress;
-                    int nCurAlpha = (int)(curAlpha * newAlphaFactor);
-                    float nY = titleY + (6f * (1f - lyricTransitionProgress));
-                    int nDone = (nCurAlpha << 24) | (HudThemeHelper.isDark() ? 0xF1F1F6 : 0x0C0C10);
-                    int nPending = (nCurAlpha << 24) | (HudThemeHelper.isDark() ? 0x777788 : 0x888899);
-
-                    if (isKaraoke) {
-                        drawDynamicKaraokeLine(context, displayLine, titleX, nY, FONT_SIZE, nDone, nPending, karaokeProgress, maxTextW, dt);
-                    } else {
-                        getFont().draw(context, displayLine, titleX + scrollOffset, nY, FONT_SIZE, nDone);
-                    }
-                } else {
-                    if (isKaraoke) {
-                        drawDynamicKaraokeLine(context, displayLine, titleX, titleY, FONT_SIZE, colorDone, colorPending, karaokeProgress, maxTextW, dt);
-                    } else {
-                        getFont().draw(context, displayLine, titleX + scrollOffset, titleY, FONT_SIZE, colorDone);
-                    }
-                }
-
-                context.disableScissor();
             }
-        }
 
-        // ── ОБЛОЖКА ТРЕКА ──────────────────────────────────────────────────────
-        Identifier thumb = LexoraMediaUtils.getThumbnail();
-        if (thumb != null) {
-            RoundedRectShader.drawTextured(context, thumb, tX, tY, tSize, tSize, tRadius, 0, 0, 1, 1, (alpha << 24) | 0xFFFFFF);
-        } else {
-            drawSmoothRectF(context, tX, tY, tSize, tSize, tRadius, (alpha << 24) | 0x282830);
-            LexoraIcons.draw(context, LexoraIcons.Icon.MONITOR, tX + (tSize - 10f)/2f, tY + (tSize - 10f)/2f, 10f, (alpha << 24) | 0x666670);
-        }
-
-        // ── ЗВУКОВОЙ ВИЗУАЛИЗАТОР (СПРАВА В СВЁРНУТОМ ВИДЕ, только если GUI закрыт) ────
-        if (invE > 0.05f && animGuiOpen < 0.1f) {
-            int   visAlpha = (int)(alpha * invE * (1f - animGuiOpen * 10f));
-            if (visAlpha > 5) {
-                float visX     = islandX + islandW - 14f;
-                boolean playing = LexoraMediaUtils.isPlaying();
-                float h1 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.015) * 3f : 2f;
-                float h2 = playing ? 4f + (float)Math.cos((time % 10000L) * 0.012 + 1.0) * 3f : 2f;
-                float h3 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.018 + 2.0) * 3f : 2f;
-                int   visColor = (visAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10);
-                float centerY  = islandY + 10f;
-                drawSmoothRect(context, (int)visX,     (int)(centerY - h1/2f), 2, (int)h1, 1f, visColor);
-                drawSmoothRect(context, (int)visX + 3, (int)(centerY - h2/2f), 2, (int)h2, 1f, visColor);
-                drawSmoothRect(context, (int)visX + 6, (int)(centerY - h3/2f), 2, (int)h3, 1f, visColor);
+            // ── ОБЛОЖКА ТРЕКА ──────────────────────────────────────────────────────
+            Identifier thumb = LexoraMediaUtils.getThumbnail();
+            boolean thumbDrawn = false;
+            if (thumb != null) {
+                try {
+                    RoundedRectShader.drawTextured(context, thumb, tX, tY, tSize, tSize, tRadius, 0, 0, 1, 1, (alpha << 24) | 0xFFFFFF);
+                    thumbDrawn = true;
+                } catch (Throwable ignored) {
+                }
             }
-        }
+            if (!thumbDrawn) {
+                drawSmoothRectF(context, tX, tY, tSize, tSize, tRadius, (alpha << 24) | 0x282830);
+                LexoraIcons.draw(context, LexoraIcons.Icon.MONITOR, tX + (tSize - 10f)/2f, tY + (tSize - 10f)/2f, 10f, (alpha << 24) | 0x666670);
+            }
+
+            // ── ЗВУКОВОЙ ВИЗУАЛИЗАТОР (СПРАВА В СВЁРНУТОМ ВИДЕ, только если GUI закрыт) ────
+            if (invE > 0.05f && animGuiOpen < 0.1f) {
+                int   visAlpha = (int)(alpha * invE * (1f - animGuiOpen * 10f));
+                if (visAlpha > 5) {
+                    float visX     = islandX + islandW - 14f;
+                    boolean playing = LexoraMediaUtils.isPlaying();
+                    float h1 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.015) * 3f : 2f;
+                    float h2 = playing ? 4f + (float)Math.cos((time % 10000L) * 0.012 + 1.0) * 3f : 2f;
+                    float h3 = playing ? 4f + (float)Math.sin((time % 10000L) * 0.018 + 2.0) * 3f : 2f;
+                    int   visColor = (visAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10);
+                    float centerY  = islandY + 10f;
+                    drawSmoothRect(context, (int)visX,     (int)(centerY - h1/2f), 2, (int)h1, 1f, visColor);
+                    drawSmoothRect(context, (int)visX + 3, (int)(centerY - h2/2f), 2, (int)h2, 1f, visColor);
+                    drawSmoothRect(context, (int)visX + 6, (int)(centerY - h3/2f), 2, (int)h3, 1f, visColor);
+                }
+            }
 
         // ── РАСШИРЕННЫЙ РЕЖИМ (ПЛЕЕР ПРИ НАВЕДЕНИИ) ──────────────────────────
         float controlsTarget = e > 0.85f ? 1f : 0f;
@@ -531,28 +554,29 @@ private static int withAlphaLocal(int argb, int alpha255) {
                 float artistY = islandY + 17f - rise;
 
                 context.enableScissor((int)afterArt, (int)islandY, (int)(afterArt + contentW), (int)(islandY + 64));
+                try {
+                    float titleW = width(title, 8.5f);
+                    float maxTitleScroll = Math.max(0, titleW - contentW);
+                    float titleScroll = 0;
+                    if (maxTitleScroll > 0) {
+                        float cycle = (time % 10000L) / 10000.0f;
+                        float wave  = MathHelper.clamp((float)Math.sin(cycle * Math.PI * 2) * 1.3f, -1f, 1f);
+                        titleScroll = -maxTitleScroll * (wave + 1f) / 2f;
+                    }
+                    drawString(context, title, afterArt + titleScroll, titleY, 8.5f, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10));
 
-                float titleW = width(title, 8.5f);
-                float maxTitleScroll = Math.max(0, titleW - contentW);
-                float titleScroll = 0;
-                if (maxTitleScroll > 0) {
-                    float cycle = (time % 10000L) / 10000.0f;
-                    float wave  = MathHelper.clamp((float)Math.sin(cycle * Math.PI * 2) * 1.3f, -1f, 1f);
-                    titleScroll = -maxTitleScroll * (wave + 1f) / 2f;
+                    float artistW = width(artist, 7.0f);
+                    float maxArtistScroll = Math.max(0, artistW - contentW);
+                    float artistScroll = 0;
+                    if (maxArtistScroll > 0) {
+                        float cycle = (time % 10000L) / 10000.0f;
+                        float wave  = MathHelper.clamp((float)Math.sin(cycle * Math.PI * 2) * 1.3f, -1f, 1f);
+                        artistScroll = -maxArtistScroll * (wave + 1f) / 2f;
+                    }
+                    drawString(context, artist, afterArt + artistScroll, artistY, 7.0f, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0x9E9EA6 : 0x444455));
+                } finally {
+                    context.disableScissor();
                 }
-                drawString(context, title, afterArt + titleScroll, titleY, 8.5f, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10));
-
-                float artistW = width(artist, 7.0f);
-                float maxArtistScroll = Math.max(0, artistW - contentW);
-                float artistScroll = 0;
-                if (maxArtistScroll > 0) {
-                    float cycle = (time % 10000L) / 10000.0f;
-                    float wave  = MathHelper.clamp((float)Math.sin(cycle * Math.PI * 2) * 1.3f, -1f, 1f);
-                    artistScroll = -maxArtistScroll * (wave + 1f) / 2f;
-                }
-                drawString(context, artist, afterArt + artistScroll, artistY, 7.0f, (expAlpha << 24) | (HudThemeHelper.isDark() ? 0x9E9EA6 : 0x444455));
-
-                context.disableScissor();
 
                 // ── Полоса времени ──
                 float p = duration > 0 ? MathHelper.clamp((float)progress / duration, 0f, 1f) : 0f;
@@ -605,7 +629,9 @@ private static int withAlphaLocal(int argb, int alpha255) {
                 LexoraIcons.draw(context, LexoraIcons.Icon.SKIP_NEXT, nextX, btnY + (btnPlay - btnSide)/2f, btnSide, sideBtnColor);
             }
         }
+    } catch (Throwable ignored) {
     }
+}
 
     // ФИКС хитбокса (часть 2): переводит "логическую" (до ms.scale) точку/границу острова
     // в реальные экранные координаты через тот же пивот (centerX, islandY), которым
@@ -630,6 +656,19 @@ private static int withAlphaLocal(int argb, int alpha255) {
 
     public static boolean mouseClicked(double mx, double my, int button) {
         if (handlePartyNotifClick(mx, my, button)) return true;
+        if (animPvpMusicBubble > 0.5f && pvpBubbleW > 0) {
+            float sw = lastScreenWidth, sc = lastHudScale;
+            float bL = toScreenX(pvpBubbleX, sw, sc), bR = toScreenX(pvpBubbleX + pvpBubbleW, sw, sc);
+            float bT = toScreenY(pvpBubbleY, sc), bB = toScreenY(pvpBubbleY + pvpBubbleH, sc);
+            if (mx >= bL && mx <= bR && my >= bT && my <= bB) {
+                if (button == 0) {
+                    LexoraMediaUtils.togglePlay();
+                } else if (button == 1) {
+                    LexoraMediaUtils.next();
+                }
+                return true;
+            }
+        }
         if (!LexoraMediaUtils.hasMedia() || animExpand < 0.5f) return false;
         float effE          = Math.max(0, (islandH - 20f) / 44f);
         float tSize         = 14f + 34f * effE;
@@ -822,77 +861,149 @@ private static int withAlphaLocal(int argb, int alpha255) {
     }
 
     // =========================================================================
-    //  ОБЫЧНЫЕ НОТИФЫ
+    //  PVP МУЗЫКАЛЬНЫЙ ПУЗЫРЬ (Выпадает вниз во время PVP, если играет музыка)
     // =========================================================================
-    private static void renderNotifications(DrawContext context, int screenWidth,
-                                            boolean blurEnabled, int bgColor) {
-        List<NotifManager.Notif> activeNotifs = NotifManager.getNotifs();
-        if (activeNotifs.isEmpty()) return;
+    private static void renderPvpMusicBubble(DrawContext context, MatrixStack ms, long time,
+                                             float fadeFactor, float opacity, int currentColor) {
+        boolean pvpActive = PvpBossBarTracker.isInPvp();
+        boolean hasMedia = LexoraMediaUtils.hasMedia();
+        float target = (pvpActive && hasMedia) ? 1.0f : 0.0f;
+        float speed = target > animPvpMusicBubble ? 0.14f : 0.22f;
+        animPvpMusicBubble += (target - animPvpMusicBubble) * speed;
 
-        float currentNotifY = islandY + islandH + 6;
-
-        for (int i = activeNotifs.size() - 1; i >= 0; i--) {
-            NotifManager.Notif notif = activeNotifs.get(i);
-            long elapsed = System.currentTimeMillis() - notif.startTime;
-
-            if (notif.isTimer) {
-                float rem = Math.max(0, notif.maxTime - elapsed) / 1000f;
-                notif.content = String.format(Locale.US, "Осталось: %.1f сек.", rem);
-            }
-
-            float alpha = 1f;
-            if (elapsed < notif.fadeTime) {
-                alpha = (float)elapsed / notif.fadeTime;
-                alpha = (float)(1.0 - Math.pow(1.0 - alpha, 3));
-            } else if (elapsed > notif.maxTime - notif.fadeTime) {
-                // ФИКС: без клампа (maxTime - elapsed) уходит в минус при просрочке,
-                // а возведение в квадрат превращает минус обратно в плюс —
-                // уведомление "вспыхивает" на полную непрозрачность вместо исчезновения.
-                float fadeOutT = (float)(notif.maxTime - elapsed) / notif.fadeTime;
-                fadeOutT = MathHelper.clamp(fadeOutT, 0f, 1f);
-                alpha = fadeOutT * fadeOutT;
-            }
-
-            int alphaInt = Math.max(0, Math.min(255, (int)(alpha * 255)));
-            if (alphaInt <= 5) continue;
-
-            float titleW   = width(notif.title,   8.0f);
-            float contentW = width(notif.content, 7.5f);
-            float targetW  = 24 + titleW + 8 + contentW + 12;
-
-            notif.velocity += (1f - notif.scale) * 0.35f;
-            notif.velocity *= 0.55f;
-            notif.scale    += notif.velocity;
-
-            if (!notif.animYSet) { notif.animY = islandY; notif.animYSet = true; }
-            notif.animY += (currentNotifY - notif.animY) * 0.25f;
-
-            float nx = (screenWidth - targetW) / 2f;
-            float ny = notif.animY;
-            float nh = 22;
-            int notifBg = (alphaInt << 24) | (bgColor & 0xFFFFFF);
-
-            context.getMatrices().push();
-            context.getMatrices().translate(screenWidth / 2f, ny + nh / 2f, 0);
-            context.getMatrices().scale(notif.scale, notif.scale, 1f);
-            context.getMatrices().translate(-screenWidth / 2f, -(ny + nh / 2f), 0);
-
-            if (blurEnabled) {
-                com.lexoravisauls.client.gui.modern.ModernGuiRender.drawLiquidGlass(
-                        context, nx, ny, targetW, nh, nh / 2f, 15f, notifBg);
-            } else {
-                drawSmoothRect(context, (int)nx, (int)ny, (int)targetW, (int)nh, nh / 2f, notifBg);
-            }
-
-            int iconColor = getNotifColor(notif.type, alphaInt);
-            drawSmoothRect(context, (int)(nx + 8), (int)(ny + 7), 8, 8, 4f, iconColor);
-            drawString(context, notif.title,   nx + 22, ny + 5.5f, 8.0f, (alphaInt << 24) | 0xFFFFFF);
-            drawString(context, "-",           nx + 22 + titleW + 2, ny + 6.0f, 7.5f, (alphaInt << 24) | 0x555555);
-            drawString(context, notif.content, nx + 22 + titleW + 8, ny + 6.0f, 7.5f, (alphaInt << 24) | 0xAAAAAA);
-
-            context.getMatrices().pop();
-            currentNotifY += (nh * notif.scale) + 4;
+        if (animPvpMusicBubble <= 0.005f) {
+            pvpBubbleW = 0f;
+            return;
         }
+
+        float alphaFactor = MathHelper.clamp(animPvpMusicBubble * 1.5f, 0f, 1f) * fadeFactor * opacity;
+        int alpha = (int)(255 * alphaFactor);
+        if (alpha <= 5) return;
+
+        String title = LexoraMediaUtils.getTitle();
+        if (title == null || title.isEmpty()) title = "Unknown Track";
+        String artist = LexoraMediaUtils.getAuthor();
+        if (artist == null) artist = "";
+        long progress = LexoraMediaUtils.getProgress();
+        long duration = LexoraMediaUtils.getDuration();
+
+        try {
+            LyricsManager.update(title, artist, duration);
+        } catch (Throwable ignored) {}
+
+        boolean islandLyrics = isIslandLyricsEnabled();
+        String displayLine;
+        boolean isKaraoke = false;
+        float karaokeProgress = 0f;
+
+        if (islandLyrics) {
+            boolean isSinging = LyricsManager.hasLyrics() && LyricsManager.isSinging(progress);
+            if (isSinging) {
+                String lyric = LyricsManager.getCurrentLine(progress);
+                if (lyric != null && !lyric.trim().isEmpty()) {
+                    displayLine = lyric;
+                    isKaraoke = true;
+                    karaokeProgress = LyricsManager.getLineProgress(progress);
+                } else {
+                    displayLine = title;
+                }
+            } else if (LyricsManager.isFetching()) {
+                displayLine = "♪ Загрузка текста...";
+            } else {
+                displayLine = title + (artist.isEmpty() ? "" : " - " + artist);
+            }
+        } else {
+            // Если тумблер выключен — "просто название музыки пишет"
+            displayLine = title + (artist.isEmpty() ? "" : " - " + artist);
+        }
+
+        float textSize = 7.5f;
+        float textW = width(displayLine, textSize);
+        float bubbleH = 18f;
+        float minW = 120f;
+        float maxW = Math.max(160f, Math.min(240f, islandW + 40f));
+        float targetBubbleW = Math.max(minW, Math.min(maxW, textW + 36f));
+
+        if (pvpBubbleW == 0f) pvpBubbleW = targetBubbleW;
+        pvpBubbleW += (targetBubbleW - pvpBubbleW) * 0.22f;
+
+        float bubbleW = pvpBubbleW;
+        float bubbleX = islandX + (islandW - bubbleW) / 2f;
+
+        // Плавная анимация опускания пузыря:
+        // Пузырь мягко выпадает из-под нижней кромки основного островка
+        float t = animPvpMusicBubble;
+        float eased = 1.0f - (float)Math.pow(1.0f - t, 3.0);
+        float startY = islandY + islandH - bubbleH + 2f;
+        float finalY = islandY + islandH + 4f;
+        float bubbleY = MathHelper.lerp(eased, startY, finalY);
+
+        pvpBubbleX = bubbleX;
+        pvpBubbleY = bubbleY;
+        pvpBubbleH = bubbleH;
+
+        ms.push();
+
+        // 1. Аккуратная подложка панели как у других худов (без полоски сверху)
+        boolean blurEnabled = LexoraGui.moduleStates.getOrDefault("Watermark Blur", true);
+        float radius = bubbleH / 2.0f;
+        HudThemeHelper.drawHudPanel(context, bubbleX, bubbleY, bubbleW, bubbleH, radius, (int)(255 * alphaFactor), blurEnabled);
+
+        // 2. Мини-эквалайзер слева (3 прыгающие полоски в такт)
+        float eqX = bubbleX + 7f;
+        float eqCenterY = bubbleY + bubbleH / 2f;
+        boolean playing = LexoraMediaUtils.isPlaying();
+        float h1 = playing ? 3.0f + (float)Math.sin((time % 5000L) * 0.020) * 2.5f : 2f;
+        float h2 = playing ? 3.8f + (float)Math.cos((time % 5000L) * 0.016 + 1.0) * 3.0f : 2f;
+        float h3 = playing ? 3.0f + (float)Math.sin((time % 5000L) * 0.024 + 2.0) * 2.5f : 2f;
+        int eqColor = withAlphaLocal(HudThemeHelper.isDark() ? 0xFFFFFF : 0x0C0C10, (int)(220 * alphaFactor));
+        drawSmoothRect(context, (int)eqX,     (int)(eqCenterY - h1 / 2f), 2, (int)h1, 1f, eqColor);
+        drawSmoothRect(context, (int)eqX + 3, (int)(eqCenterY - h2 / 2f), 2, (int)h2, 1f, eqColor);
+        drawSmoothRect(context, (int)eqX + 6, (int)(eqCenterY - h3 / 2f), 2, (int)h3, 1f, eqColor);
+
+        // 3. Бегущая строка / субтитры с отсечением (scissor)
+        float textStartX = bubbleX + 19f;
+        float textEndX = bubbleX + bubbleW - 7f;
+        float availW = textEndX - textStartX;
+
+        if (availW > 10f) {
+            context.enableScissor((int)textStartX, (int)bubbleY, (int)textEndX, (int)(bubbleY + bubbleH));
+            try {
+                float lineTextW = width(displayLine, textSize);
+                float scrollOffset = 0f;
+                if (lineTextW > availW) {
+                    if (isKaraoke) {
+                        float activeX = lineTextW * karaokeProgress;
+                        float center = availW / 2f;
+                        scrollOffset = -(activeX - center);
+                        scrollOffset = Math.min(0, scrollOffset);
+                        scrollOffset = Math.max(-(lineTextW - availW), scrollOffset);
+                    } else {
+                        float maxScroll = lineTextW - availW;
+                        float cycle = (time % 8000L) / 8000f;
+                        float wave = (float)(Math.sin(cycle * Math.PI * 2.0) * 0.5 + 0.5);
+                        scrollOffset = -maxScroll * wave;
+                    }
+                } else {
+                    scrollOffset = (availW - lineTextW) / 2f;
+                }
+
+                int colorDone    = (alpha << 24) | (HudThemeHelper.isDark() ? 0xF1F1F6 : 0x0C0C10);
+                int colorPending = (alpha << 24) | (HudThemeHelper.isDark() ? 0x777788 : 0x888899);
+                float textY = bubbleY + (bubbleH - textSize) / 2f - 0.5f;
+
+                if (isKaraoke) {
+                    float dt = 0.016f;
+                    drawDynamicKaraokeLine(context, displayLine, textStartX, textY, textSize, colorDone, colorPending, karaokeProgress, availW, dt);
+                } else {
+                    getFont().draw(context, displayLine, textStartX + scrollOffset, textY, textSize, colorDone);
+                }
+            } finally {
+                context.disableScissor();
+            }
+        }
+
+        ms.pop();
     }
 
     // =========================================================================
@@ -1128,16 +1239,6 @@ private static int withAlphaLocal(int argb, int alpha255) {
         RoundedRectShader.draw(context, Math.round(x), Math.round(y), Math.round(w), Math.round(h), radius, color);
     }
 
-    private static int getNotifColor(NotifManager.NotifType type, int alpha) {
-        int color = switch (type) {
-            case MODULE_ON,  SUCCESS -> 0x22C55E;
-            case MODULE_OFF, ERROR   -> 0xEF4444;
-            case WARNING             -> 0xF59E0B;
-            case SWAP                -> 0x9333EA;
-        };
-        return (alpha << 24) | color;
-    }
-
     private static void drawString(DrawContext context, String text, float x, float y, float size, int color) {
         if (text == null || text.trim().isEmpty()) return;
         getFont().draw(context.getMatrices(), text, x, y, size, color);
@@ -1235,90 +1336,95 @@ private static int withAlphaLocal(int argb, int alpha255) {
     private static void drawDynamicKaraokeLine(DrawContext context, String line, float baseX, float baseY, float fontSize,
                                                int colorDone, int colorPending, float progress, float maxViewW, float dt) {
         if (line == null || line.trim().isEmpty()) return;
-        MsdfFont font = getFont();
-        String[] words = line.split("\\s+");
-        if (words.length == 0) return;
+        try {
+            MsdfFont font = getFont();
+            String[] words = line.split("\\s+");
+            if (words.length == 0) return;
 
-        float spaceW = 0.25f * fontSize;
-        float[] wordWidths = new float[words.length];
-        float totalW = 0f;
-        for (int i = 0; i < words.length; i++) {
-            wordWidths[i] = font.getWidth(words[i], fontSize);
-            totalW += wordWidths[i] + (i > 0 ? spaceW : 0f);
-        }
-
-        float progressX = font.computeNaturalProgressX(line, fontSize, progress);
-
-        // Находим активное слово, которое поётся прямо сейчас
-        int activeIdx = -1;
-        float curWordX = 0f;
-        float activeFactor = 0f;
-
-        for (int i = 0; i < words.length; i++) {
-            float wStart = curWordX;
-            float wEnd = curWordX + wordWidths[i];
-            if (progressX >= wStart && progressX <= wEnd) {
-                activeIdx = i;
-                float inWord = (wEnd > wStart) ? ((progressX - wStart) / (wEnd - wStart)) : 0.5f;
-                activeFactor = (float) Math.sin(inWord * Math.PI);
-                break;
-            } else if (progressX > wEnd && (i == words.length - 1 || progressX < wEnd + spaceW)) {
-                activeIdx = i;
-                activeFactor = 0.3f;
+            float spaceW = 0.25f * fontSize;
+            float[] wordWidths = new float[words.length];
+            float totalW = 0f;
+            for (int i = 0; i < words.length; i++) {
+                wordWidths[i] = font.getWidth(words[i], fontSize);
+                totalW += wordWidths[i] + (i > 0 ? spaceW : 0f);
             }
-            curWordX += wordWidths[i] + spaceW;
-        }
 
-        // Плавное следование камеры (непрерывное скольжение без рывков по словам)
-        float targetScrollOffset = 0f;
-        if (totalW > maxViewW) {
-            targetScrollOffset = -(progressX - (maxViewW * 0.35f));
-            targetScrollOffset = Math.min(0f, Math.max(-(totalW - maxViewW), targetScrollOffset));
-        }
+            float progressX = font.computeNaturalProgressX(line, fontSize, progress);
 
-        if (Math.abs(smoothKaraokeScrollOffset - targetScrollOffset) > 60f) {
-            smoothKaraokeScrollOffset = targetScrollOffset;
-        } else {
-            smoothKaraokeScrollOffset = MathHelper.lerp(dt * 8.0f, smoothKaraokeScrollOffset, targetScrollOffset);
-        }
+            // Находим активное слово, которое поётся прямо сейчас
+            int activeIdx = -1;
+            float curWordX = 0f;
+            float activeFactor = 0f;
 
-        curWordX = 0f;
-        MatrixStack matrices = context.getMatrices();
+            for (int i = 0; i < words.length; i++) {
+                float wStart = curWordX;
+                float wEnd = curWordX + wordWidths[i];
+                if (progressX >= wStart && progressX <= wEnd) {
+                    activeIdx = i;
+                    float inWord = (wEnd > wStart) ? ((progressX - wStart) / (wEnd - wStart)) : 0.5f;
+                    activeFactor = (float) Math.sin(inWord * Math.PI);
+                    break;
+                } else if (progressX > wEnd && (i == words.length - 1 || progressX < wEnd + spaceW)) {
+                    activeIdx = i;
+                    activeFactor = 0.3f;
+                }
+                curWordX += wordWidths[i] + spaceW;
+            }
 
-        for (int i = 0; i < words.length; i++) {
-            float wStart = curWordX;
-            float wEnd = curWordX + wordWidths[i];
-            float drawX = baseX + smoothKaraokeScrollOffset + curWordX;
-            float drawY = baseY;
+            // Плавное следование камеры (непрерывное скольжение без рывков по словам)
+            float targetScrollOffset = 0f;
+            if (totalW > maxViewW) {
+                targetScrollOffset = -(progressX - (maxViewW * 0.35f));
+                targetScrollOffset = Math.min(0f, Math.max(-(totalW - maxViewW), targetScrollOffset));
+            }
 
-            boolean isActive = (i == activeIdx);
-            float scale = isActive ? (1.0f + 0.08f * activeFactor) : 1.0f;
-
-            float wordProgress;
-            if (progressX >= wEnd) {
-                wordProgress = 1.0f;
-            } else if (progressX <= wStart) {
-                wordProgress = 0.0f;
+            if (Math.abs(smoothKaraokeScrollOffset - targetScrollOffset) > 60f) {
+                smoothKaraokeScrollOffset = targetScrollOffset;
             } else {
-                wordProgress = (wEnd > wStart) ? ((progressX - wStart) / (wEnd - wStart)) : 0.5f;
+                smoothKaraokeScrollOffset = MathHelper.lerp(dt * 8.0f, smoothKaraokeScrollOffset, targetScrollOffset);
             }
 
-            if (scale > 1.001f) {
-                matrices.push();
-                float pivotX = drawX + wordWidths[i] / 2f;
-                float pivotY = drawY + 3.5f;
-                matrices.translate(pivotX, pivotY, 0);
-                matrices.scale(scale, scale, 1.0f);
-                matrices.translate(-pivotX, -pivotY, 0);
+            curWordX = 0f;
+            MatrixStack matrices = context.getMatrices();
 
-                font.drawKaraoke(context, words[i], drawX, drawY - (0.4f * activeFactor), fontSize, colorDone, colorPending, wordProgress);
-                matrices.pop();
-            } else {
-                font.drawKaraoke(context, words[i], drawX, drawY, fontSize, colorDone, colorPending, wordProgress);
+            for (int i = 0; i < words.length; i++) {
+                float wStart = curWordX;
+                float wEnd = curWordX + wordWidths[i];
+                float drawX = baseX + smoothKaraokeScrollOffset + curWordX;
+                float drawY = baseY;
+
+                boolean isActive = (i == activeIdx);
+                float scale = isActive ? (1.0f + 0.08f * activeFactor) : 1.0f;
+
+                float wordProgress;
+                if (progressX >= wEnd) {
+                    wordProgress = 1.0f;
+                } else if (progressX <= wStart) {
+                    wordProgress = 0.0f;
+                } else {
+                    wordProgress = (wEnd > wStart) ? ((progressX - wStart) / (wEnd - wStart)) : 0.5f;
+                }
+
+                if (scale > 1.001f) {
+                    matrices.push();
+                    float pivotX = drawX + wordWidths[i] / 2f;
+                    float pivotY = drawY + 3.5f;
+                    matrices.translate(pivotX, pivotY, 0);
+                    matrices.scale(scale, scale, 1.0f);
+                    matrices.translate(-pivotX, -pivotY, 0);
+
+                    try {
+                        font.drawKaraoke(context, words[i], drawX, drawY - (0.4f * activeFactor), fontSize, colorDone, colorPending, wordProgress);
+                    } finally {
+                        matrices.pop();
+                    }
+                } else {
+                    font.drawKaraoke(context, words[i], drawX, drawY, fontSize, colorDone, colorPending, wordProgress);
+                }
+
+                curWordX += wordWidths[i] + spaceW;
             }
-
-            curWordX += wordWidths[i] + spaceW;
-        }
+        } catch (Throwable ignored) {}
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1328,32 +1434,34 @@ private static int withAlphaLocal(int argb, int alpha255) {
     private static void drawLadderExit(DrawContext context, String line, float baseX, float baseY, float fontSize,
                                        int baseAlpha, float transitionProgress, boolean wasKaraoke) {
         if (line == null || line.trim().isEmpty()) return;
-        MsdfFont font = getFont();
-        String[] words = line.split("\\s+");
-        if (words.length == 0) return;
+        try {
+            MsdfFont font = getFont();
+            String[] words = line.split("\\s+");
+            if (words.length == 0) return;
 
-        float spaceW = 0.25f * fontSize;
-        float curWordX = 0f;
-        int n = words.length;
+            float spaceW = 0.25f * fontSize;
+            float curWordX = 0f;
+            int n = words.length;
 
-        for (int i = 0; i < n; i++) {
-            float wordW = font.getWidth(words[i], fontSize);
-            float drawX = baseX + curWordX;
+            for (int i = 0; i < n; i++) {
+                float wordW = font.getWidth(words[i], fontSize);
+                float drawX = baseX + curWordX;
 
-            // Каждое следующее слово начинает взлетать чуть позже предыдущего (лесенка)
-            float staggerStart = (float) i / (float) n * 0.40f;
-            float p = Math.max(0f, Math.min(1f, (transitionProgress - staggerStart) / (1f - staggerStart)));
+                // Каждое следующее слово начинает взлетать чуть позже предыдущего (лесенка)
+                float staggerStart = (float) i / (float) n * 0.40f;
+                float p = Math.max(0f, Math.min(1f, (transitionProgress - staggerStart) / (1f - staggerStart)));
 
-            float easeY = p * p * (3f - 2f * p);
-            float drawY = baseY - (10f * easeY);
+                float easeY = p * p * (3f - 2f * p);
+                float drawY = baseY - (10f * easeY);
 
-            int wordAlpha = (int)(baseAlpha * (1f - p));
-            if (wordAlpha > 5) {
-                int color = (wordAlpha << 24) | 0xFFFFFF;
-                font.draw(context, words[i], drawX, drawY, fontSize, color);
+                int wordAlpha = (int)(baseAlpha * (1f - p));
+                if (wordAlpha > 5) {
+                    int color = (wordAlpha << 24) | 0xFFFFFF;
+                    font.draw(context, words[i], drawX, drawY, fontSize, color);
+                }
+
+                curWordX += wordW + spaceW;
             }
-
-            curWordX += wordW + spaceW;
-        }
+        } catch (Throwable ignored) {}
     }
 }

@@ -4,6 +4,7 @@ import com.lexoravisauls.client.core.BindManager;
 import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.ItemSwapWheelScreen;
 import com.lexoravisauls.client.gui.LexoraGui;
+import com.lexoravisauls.client.inventorymanager.ItemIdentity;
 import com.lexoravisauls.client.utils.NotifManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.item.ItemStack;
@@ -55,6 +56,8 @@ public class ItemSwap {
     private static boolean wasKeyPressed = false;
     private static long lastSwapTime = 0L;
     private static String targetItemType = "";
+    private static ItemSwapWheelScreen.WheelSlotData activeTargetSlotData = null;
+    private static String targetDisplayName = "";
     private static int lastPlayerAge = -1;
 
     private static SwapPhase phase = SwapPhase.IDLE;
@@ -237,19 +240,70 @@ public class ItemSwap {
     }
 
     /**
-     * Публичный метод для запуска свапа на конкретный предмет (например, из кругового меню).
+     * Запуск свапа для конкретного сектора колеса (тройной свап).
+     * Сохраняет и сравнивает как название, так и точный вид (Item ID + скин головы/NBT).
      */
-    public static void triggerSwapToItem(String targetItem) {
+    public static void triggerSwapToSector(int sector) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.interactionManager == null || mc.getNetworkHandler() == null) return;
         if (phase != SwapPhase.IDLE) return;
+
+        ItemSwapWheelScreen.WheelSlotData target = ItemSwapWheelScreen.getWheelSlot(sector);
+        if (target == null || target.isEmpty()) return;
+
+        // Если нужный предмет уже в левой руке
+        if (matchesCandidate(mc.player.getOffHandStack(), target)) {
+            return;
+        }
+
+        activeTargetSlotData = target;
+        targetDisplayName = target.displayName;
+        targetItemType = target.displayName;
+
+        // 1. Поиск в хотбаре (слоты 0..8) — быстрый и безопасный путь
+        Optional<Integer> hotbar = findInHotbar(mc, target);
+        if (hotbar.isPresent()) {
+            startHotbarSwap(mc, hotbar.get());
+            return;
+        }
+
+        // 2. Поиск в основном инвентаре (слоты 9..35) — тихий клик без открытия GUI
+        Optional<Integer> inv = findInInventory(mc, target);
+        if (inv.isPresent()) {
+            startInventorySwap(mc, inv.get());
+            return;
+        }
+
+        NotifManager.show("Предмет [" + target.displayName + "] не найден!",
+                "Ошибка", NotifManager.NotifType.ERROR);
+    }
+
+    /**
+     * Публичный метод для запуска свапа на конкретный предмет (например, из кругового меню или бинда).
+     */
+    public static void triggerSwapToItem(String targetItem) {
         if (targetItem == null || targetItem.isEmpty() || targetItem.equalsIgnoreCase("Пусто")) return;
+
+        // Проверяем, соответствует ли targetItem одному из 3 секторов колеса
+        for (int i = 0; i < 3; i++) {
+            ItemSwapWheelScreen.WheelSlotData slot = ItemSwapWheelScreen.getWheelSlot(i);
+            if (slot != null && slot.displayName != null && slot.displayName.equalsIgnoreCase(targetItem)) {
+                triggerSwapToSector(i);
+                return;
+            }
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player == null || mc.interactionManager == null || mc.getNetworkHandler() == null) return;
+        if (phase != SwapPhase.IDLE) return;
 
         // Если нужный предмет уже в левой руке
         if (isMatchingItem(mc.player.getOffHandStack(), targetItem)) {
             return;
         }
 
+        activeTargetSlotData = null;
+        targetDisplayName = targetItem;
         targetItemType = targetItem;
 
         // 1. Поиск в хотбаре (слоты 0..8) — быстрый и безопасный путь
@@ -318,6 +372,24 @@ public class ItemSwap {
         return isMatchingItem(offhand, typeA) ? typeA : typeB;
     }
 
+    private static Optional<Integer> findInHotbar(MinecraftClient mc, ItemSwapWheelScreen.WheelSlotData target) {
+        for (int i = 0; i < 9; i++) {
+            if (matchesCandidate(mc.player.getInventory().getStack(i), target)) {
+                return Optional.of(i);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Integer> findInInventory(MinecraftClient mc, ItemSwapWheelScreen.WheelSlotData target) {
+        for (int i = 9; i < 36; i++) {
+            if (matchesCandidate(mc.player.playerScreenHandler.getSlot(i).getStack(), target)) {
+                return Optional.of(i);
+            }
+        }
+        return Optional.empty();
+    }
+
     private static Optional<Integer> findInHotbar(MinecraftClient mc, String type) {
         for (int i = 0; i < 9; i++) {
             if (isValidSwapCandidate(mc.player.getInventory().getStack(i), type)) {
@@ -334,6 +406,92 @@ public class ItemSwap {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Точное сопоставление кандидата со слотом колеса:
+     * Проверяет не только обобщенный тип, но и Item ID, кастомное название, текстуру головы (скин сферы).
+     */
+    public static boolean matchesCandidate(ItemStack candidate, ItemSwapWheelScreen.WheelSlotData target) {
+        if (candidate == null || candidate.isEmpty() || target == null || target.isEmpty()) {
+            return false;
+        }
+
+        // 1. Пресеты (Тотем, Щит, Чар. яблоко, Эндер перл и т.д.)
+        if (target.isPreset) {
+            return isValidSwapCandidate(candidate, target.displayName);
+        }
+
+        // 2. Проверка Item ID (minecraft:player_head, minecraft:shield и т.д.)
+        if (target.itemId != null && !target.itemId.isEmpty() && !target.itemId.equals("minecraft:air")) {
+            String candId = ItemIdentity.idOf(candidate);
+            if (!candId.equalsIgnoreCase(target.itemId)) {
+                return false;
+            }
+        }
+
+        // 3. Проверка кастомного / отображаемого имени
+        String targetName = target.customName;
+        if (targetName == null || targetName.isEmpty()) {
+            targetName = target.displayName;
+        }
+
+        if (targetName != null && !targetName.isEmpty() && !targetName.equalsIgnoreCase("Пусто")) {
+            String candName = candidate.getName().getString();
+            String candClean = cleanItemName(candName);
+            String targetClean = cleanItemName(targetName);
+
+            if (!targetClean.isEmpty()) {
+                boolean nameMatches = candClean.equalsIgnoreCase(targetClean)
+                        || candName.equalsIgnoreCase(targetName);
+
+                if (!nameMatches) {
+                    if (candClean.length() >= 4 && targetClean.length() >= 4) {
+                        if (candClean.contains(targetClean) || targetClean.contains(candClean)) {
+                            nameMatches = true;
+                        }
+                    }
+                }
+
+                if (!nameMatches) {
+                    return false;
+                }
+            }
+        }
+
+        // 4. Отпечаток скина головы для сфер / шаров / кастомных голов
+        if (target.skinKey != null && !target.skinKey.isEmpty()) {
+            String candSkin = ItemIdentity.skinFingerprint(candidate);
+            if (!candSkin.isEmpty() && !candSkin.equals(target.skinKey)) {
+                return false;
+            }
+        }
+
+        // 5. CustomModelData
+        if (target.modelKey != null && !target.modelKey.isEmpty()) {
+            String candModel = ItemIdentity.customModelFingerprint(candidate);
+            if (!candModel.equals(target.modelKey)) {
+                return false;
+            }
+        }
+
+        // 6. Зелья
+        if (target.potionKey != null && !target.potionKey.isEmpty()) {
+            String candPotion = ItemIdentity.potionFingerprint(candidate);
+            if (!candPotion.equals(target.potionKey)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static String cleanItemName(String s) {
+        if (s == null) return "";
+        String clean = s.replaceAll("§[0-9a-fk-orA-FK-OR]", "");
+        clean = clean.replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", " ").trim().toLowerCase();
+        clean = clean.replaceAll("\\s+", " ");
+        return clean;
     }
 
     /**
@@ -391,10 +549,10 @@ public class ItemSwap {
         }
 
         // Поиск по названию (для кастомных предметов из инвентаря)
-        String cleanStackName = stack.getName().getString()
-                .replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", "").trim().toLowerCase();
-        String cleanTarget = type.replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", "").trim().toLowerCase();
-        if (!cleanTarget.isEmpty() && (cleanStackName.contains(cleanTarget) || cleanTarget.contains(cleanStackName))) {
+        String cleanStackName = cleanItemName(stack.getName().getString());
+        String cleanTarget = cleanItemName(type);
+        if (!cleanTarget.isEmpty() && (cleanStackName.equalsIgnoreCase(cleanTarget)
+                || cleanStackName.contains(cleanTarget) || cleanTarget.contains(cleanStackName))) {
             return true;
         }
 
@@ -410,8 +568,8 @@ public class ItemSwap {
 
     private static void sendSuccessNotif(MinecraftClient mc) {
         ItemStack offhand = mc.player.getOffHandStack();
-        String name = offhand.isEmpty() ? targetItemType : offhand.getName().getString();
-        NotifManager.show("Свапнул на " + name, "Успешно", NotifManager.NotifType.SWAP);
+        String name = !offhand.isEmpty() ? offhand.getName().getString() : (!targetDisplayName.isEmpty() ? targetDisplayName : targetItemType);
+        NotifManager.show("Свапнул на " + name, "Успешно", NotifManager.NotifType.SWAP, offhand.isEmpty() ? null : offhand.copy());
     }
 
     public static boolean isSwapping() {
@@ -433,5 +591,7 @@ public class ItemSwap {
         pendingInvSlot = -1;
         targetHotbarSlot = -1;
         prevSelectedSlot = -1;
+        activeTargetSlotData = null;
+        targetDisplayName = "";
     }
 }

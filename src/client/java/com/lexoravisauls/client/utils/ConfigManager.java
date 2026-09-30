@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.gui.HudManager;
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.events.DynamicIslandRenderer;
@@ -112,6 +113,8 @@ public class ConfigManager {
             // BUG FIX: scoreboardX/Y теперь тоже сохраняются (раньше только загружались)
             positions.addProperty("scoreboardX", HudManager.scoreboardX);
             positions.addProperty("scoreboardY", HudManager.scoreboardY);
+            positions.addProperty("notifX", HudManager.notifX);
+            positions.addProperty("notifY", HudManager.notifY);
 
 
 
@@ -162,21 +165,30 @@ public class ConfigManager {
             if (root.has("Modules")) {
                 JsonObject modules = root.getAsJsonObject("Modules");
                 for (String key : modules.keySet()) {
-                    LexoraGui.moduleStates.put(key, modules.get(key).getAsBoolean());
+                    boolean val = modules.get(key).getAsBoolean();
+                    if (val && com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(key)) {
+                        val = false;
+                    }
+                    LexoraGui.moduleStates.put(key, val);
+                    ClientData.moduleStates.put(key, val);
                 }
             }
 
             if (root.has("Sliders")) {
                 JsonObject sliders = root.getAsJsonObject("Sliders");
                 for (String key : sliders.keySet()) {
-                    LexoraGui.numSettings.put(key, sliders.get(key).getAsFloat());
+                    float val = sliders.get(key).getAsFloat();
+                    LexoraGui.numSettings.put(key, val);
+                    ClientData.numSettings.put(key, val);
                 }
             }
 
             if (root.has("Modes")) {
                 JsonObject modes = root.getAsJsonObject("Modes");
                 for (String key : modes.keySet()) {
-                    LexoraGui.modeSettings.put(key, modes.get(key).getAsString());
+                    String val = modes.get(key).getAsString();
+                    LexoraGui.modeSettings.put(key, val);
+                    ClientData.modeSettings.put(key, val);
                 }
             }
 
@@ -187,14 +199,18 @@ public class ConfigManager {
                     float h = color.has("h") ? color.get("h").getAsFloat() : 0f;
                     float s = color.has("s") ? color.get("s").getAsFloat() : 1f;
                     float v = color.has("v") ? color.get("v").getAsFloat() : 1f;
-                    LexoraGui.colorSettings.put(key, new float[]{h, s, v});
+                    float[] arr = new float[]{h, s, v};
+                    LexoraGui.colorSettings.put(key, arr);
+                    ClientData.colorSettings.put(key, arr);
                 }
             }
 
             if (root.has("Binds")) {
                 JsonObject binds = root.getAsJsonObject("Binds");
                 for (String key : binds.keySet()) {
-                    LexoraGui.moduleBinds.put(key, binds.get(key).getAsInt());
+                    int val = binds.get(key).getAsInt();
+                    LexoraGui.moduleBinds.put(key, val);
+                    ClientData.moduleBinds.put(key, val);
                 }
             }
 
@@ -226,7 +242,9 @@ public class ConfigManager {
                 if (positions.has("hearthX")) HudManager.hearthX = positions.get("hearthX").getAsInt();
                 if (positions.has("hearthY")) HudManager.hearthY = positions.get("hearthY").getAsInt();
                 if (positions.has("scoreboardY")) HudManager.scoreboardY = positions.get("scoreboardY").getAsInt();
-                if (positions.has("scoreboardX")) HudManager. scoreboardX = positions.get("scoreboardX").getAsInt();
+                if (positions.has("scoreboardX")) HudManager.scoreboardX = positions.get("scoreboardX").getAsInt();
+                if (positions.has("notifX")) HudManager.notifX = positions.get("notifX").getAsInt();
+                if (positions.has("notifY")) HudManager.notifY = positions.get("notifY").getAsInt();
             }
 
             LexoraGui.savedThemes.clear();
@@ -257,6 +275,7 @@ public class ConfigManager {
                 }
             }
 
+            com.lexoravisauls.client.liteapi.LiteApiFeatureControl.enforceBlocklist();
             currentConfig = name;
             updateConfigList();
         } catch (Exception e) {

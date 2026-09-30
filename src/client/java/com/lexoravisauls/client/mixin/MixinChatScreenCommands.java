@@ -17,7 +17,16 @@ public class MixinChatScreenCommands {
 
         boolean handled = GPS.handleLocalCommand(chatText);
 
-
+        if (!handled && chatText != null) {
+            String trimmed = chatText.trim().toLowerCase();
+            if (trimmed.equals(".swing") || trimmed.equals(".swings") || trimmed.equals(".anim") || trimmed.equals(".editor")) {
+                if (client != null) {
+                    com.lexoravisauls.client.core.ClientData.modeSettings.put("VM Anim", "Кастомный");
+                    client.send(() -> client.setScreen(new com.lexoravisauls.client.modules.swinganim.SwingAnimScreen()));
+                }
+                handled = true;
+            }
+        }
 
         if (handled) {
             if (addToHistory && client != null && client.inGameHud != null) {

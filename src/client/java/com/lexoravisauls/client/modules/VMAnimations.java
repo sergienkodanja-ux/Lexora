@@ -116,6 +116,14 @@ public class VMAnimations {
             return true;
         }
 
+        // Кастомная анимация из Редактора Взмаха (Rockstar Swing Animation Editor)
+        if (m.contains("кастом") || m.contains("custom") || m.contains("редактор") || m.contains("editor")) {
+            com.lexoravisauls.client.modules.swinganim.SwingTransformations trans =
+                    com.lexoravisauls.client.modules.swinganim.SwingManager.getInstance().transformations(effectiveSwing);
+            applyTransformations(matrices, trans, arm);
+            return true;
+        }
+
         // Совместимость со старыми конфигами
         if (m.contains("боньк") || m.contains("bonk")) {
             applyCurvePreset(matrices, BONK, effectiveSwing, arm);
@@ -123,6 +131,38 @@ public class VMAnimations {
         }
 
         return false;
+    }
+
+    public static void applyTransformations(MatrixStack matrices, com.lexoravisauls.client.modules.swinganim.SwingTransformations trans, Arm arm) {
+        float anchorX = trans.anchorX();
+        float anchorY = trans.anchorY();
+        float anchorZ = trans.anchorZ();
+
+        float moveX   = trans.moveX();
+        float moveY   = trans.moveY();
+        float moveZ   = trans.moveZ();
+
+        float rotateX = trans.rotateX();
+        float rotateY = trans.rotateY();
+        float rotateZ = trans.rotateZ();
+
+        if (arm == Arm.LEFT) {
+            anchorX = -anchorX;
+            moveX = -moveX;
+            rotateY = -rotateY;
+            rotateZ = -rotateZ;
+        }
+
+        matrices.translate(anchorX, anchorY, anchorZ);
+        matrices.translate(moveX, moveY, moveZ);
+        matrices.multiply(
+                new Quaternionf().rotationXYZ(
+                        (float) Math.toRadians(rotateX),
+                        (float) Math.toRadians(rotateY),
+                        (float) Math.toRadians(rotateZ)
+                )
+        );
+        matrices.translate(-anchorX, -anchorY, -anchorZ);
     }
 
     private static void applyCurvePreset(MatrixStack matrices, SwingPreset preset, float effectiveSwing, Arm arm) {

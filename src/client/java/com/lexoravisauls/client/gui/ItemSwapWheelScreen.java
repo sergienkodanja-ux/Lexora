@@ -4,6 +4,8 @@ import com.lexoravisauls.client.core.BindManager;
 import com.lexoravisauls.client.core.ClientData;
 import com.lexoravisauls.client.events.RoundedRectShader;
 import com.lexoravisauls.client.gui.modern.ModernGuiRender;
+import com.lexoravisauls.client.inventorymanager.ItemIdentity;
+import com.lexoravisauls.client.inventorymanager.LoadoutSlotData;
 import com.lexoravisauls.client.modules.ItemSwap;
 import com.lexoravisauls.client.utils.ConfigManager;
 import com.mojang.blaze3d.platform.GlStateManager.DstFactor;
@@ -13,6 +15,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgramKeys;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.BufferRenderer;
 import net.minecraft.client.render.VertexFormat.DrawMode;
@@ -51,6 +54,28 @@ public class ItemSwapWheelScreen extends Screen {
     private boolean wasBindHeld = false;
 
     private static final int SECTOR_COUNT = 3;
+
+    public static class WheelSlotData {
+        public String displayName = "Пусто";
+        public String itemId = "";
+        public String customName = "";
+        public String skinKey = "";
+        public String skinName = "";
+        public String skinId = "";
+        public String skinTextureValue = "";
+        public String skinTextureSignature = "";
+        public String potionKey = "";
+        public String modelKey = "";
+        public String loreKey = "";
+        public boolean isPreset = false;
+
+        public boolean isEmpty() {
+            return displayName == null || displayName.isEmpty() || displayName.equalsIgnoreCase("Пусто");
+        }
+    }
+
+    private static final WheelSlotData[] wheelSlots = new WheelSlotData[SECTOR_COUNT];
+    private static final ItemStack[] cachedWheelStacks = new ItemStack[SECTOR_COUNT];
 
     // Геометрия бублика
     private static final float RADIUS_OUTER = 80.0f;
@@ -178,10 +203,9 @@ public class ItemSwapWheelScreen extends Screen {
 
         // 3. Тултип наведенного предмета
         if (configuringSector == -1 && hoveredSector != -1 && !closing) {
-            String itemName = ClientData.modeSettings.getOrDefault("Item Swap Wheel " + hoveredSector,
-                    LexoraGui.modeSettings.getOrDefault("Item Swap Wheel " + hoveredSector, getDefaultItemForSector(hoveredSector)));
-            if (itemName != null && !itemName.isEmpty() && !itemName.equalsIgnoreCase("Пусто")) {
-                context.drawTooltip(this.textRenderer, Text.literal(itemName), mouseX, mouseY);
+            WheelSlotData data = getWheelSlot(hoveredSector);
+            if (!data.isEmpty()) {
+                context.drawTooltip(this.textRenderer, Text.literal(data.displayName), mouseX, mouseY);
             }
         }
 
@@ -359,9 +383,7 @@ public class ItemSwapWheelScreen extends Screen {
             int nx = nodeCoords[i][0];
             int ny = nodeCoords[i][1];
 
-            String itemName = ClientData.modeSettings.getOrDefault("Item Swap Wheel " + i,
-                    LexoraGui.modeSettings.getOrDefault("Item Swap Wheel " + i, getDefaultItemForSector(i)));
-            ItemStack stack = getStackForName(itemName);
+            ItemStack stack = getStackForSector(i);
 
             float glowT = sectorGlowAnim[i];
 
@@ -503,11 +525,9 @@ public class ItemSwapWheelScreen extends Screen {
      */
     private void onBindReleased() {
         if (hoveredSector != -1) {
-            String item = ClientData.modeSettings.getOrDefault("Item Swap Wheel " + hoveredSector,
-                    LexoraGui.modeSettings.getOrDefault("Item Swap Wheel " + hoveredSector, getDefaultItemForSector(hoveredSector)));
-
-            if (item != null && !item.isEmpty() && !item.equalsIgnoreCase("Пусто")) {
-                ItemSwap.triggerSwapToItem(item);
+            WheelSlotData data = getWheelSlot(hoveredSector);
+            if (!data.isEmpty()) {
+                ItemSwap.triggerSwapToSector(hoveredSector);
                 closing = true;
             } else {
                 // Если слот пустой — открываем инвентарь для выбора предмета
@@ -541,7 +561,7 @@ public class ItemSwapWheelScreen extends Screen {
                 for (int i = 0; i < presets.size() && i < 9; i++) {
                     int sx = startX + i * slotSize;
                     if (mouseX >= sx && mouseX < sx + 17 && mouseY >= presetY && mouseY < presetY + 17) {
-                        applySelectedItem(presets.get(i).name);
+                        applySelectedPreset(presets.get(i).name);
                         return true;
                     }
                 }
@@ -557,7 +577,7 @@ public class ItemSwapWheelScreen extends Screen {
                         if (mouseX >= sx && mouseX < sx + 17 && mouseY >= sy && mouseY < sy + 17) {
                             ItemStack stack = mc.player.getInventory().getStack(slotIdx);
                             if (!stack.isEmpty()) {
-                                applySelectedItem(getItemDisplayName(stack));
+                                applySelectedStack(stack);
                                 return true;
                             }
                         }
@@ -571,7 +591,7 @@ public class ItemSwapWheelScreen extends Screen {
                     if (mouseX >= sx && mouseX < sx + 17 && mouseY >= hotbarSlotsY && mouseY < hotbarSlotsY + 17) {
                         ItemStack stack = mc.player.getInventory().getStack(col);
                         if (!stack.isEmpty()) {
-                            applySelectedItem(getItemDisplayName(stack));
+                            applySelectedStack(stack);
                             return true;
                         }
                     }
@@ -583,7 +603,7 @@ public class ItemSwapWheelScreen extends Screen {
             int clearW = 75;
             int clearX = px + 12;
             if (mouseX >= clearX && mouseX <= clearX + clearW && mouseY >= btnY && mouseY <= btnY + 14) {
-                applySelectedItem("Пусто");
+                clearSelectedSector();
                 return true;
             }
 
@@ -607,7 +627,7 @@ public class ItemSwapWheelScreen extends Screen {
                 return true;
             } else if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
                 // ПКМ -> очистить привязку
-                applySelectedItem("Пусто");
+                clearSector(hoveredSector);
                 return true;
             }
         }
@@ -615,27 +635,28 @@ public class ItemSwapWheelScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
-    private void applySelectedItem(String name) {
+    private void applySelectedStack(ItemStack stack) {
         int sec = configuringSector >= 0 ? configuringSector : hoveredSector;
         if (sec >= 0) {
-            ClientData.modeSettings.put("Item Swap Wheel " + sec, name);
-            LexoraGui.modeSettings.put("Item Swap Wheel " + sec, name);
-            ConfigManager.saveConfig();
+            setSectorFromStack(sec, stack);
         }
         configuringSector = -1;
     }
 
-    private String getItemDisplayName(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return "Пусто";
-        if (stack.getItem() == Items.TOTEM_OF_UNDYING) return "Тотем";
-        if (stack.getItem() == Items.PLAYER_HEAD) return "Шар";
-        if (stack.getItem() == Items.SHIELD) return "Щит";
-        if (stack.getItem() == Items.GOLDEN_APPLE) return "Золотое яблоко";
-        if (stack.getItem() == Items.ENCHANTED_GOLDEN_APPLE) return "Чар. яблоко";
-        if (stack.getItem() == Items.ENDER_PEARL) return "Эндер перл";
+    private void applySelectedPreset(String presetName) {
+        int sec = configuringSector >= 0 ? configuringSector : hoveredSector;
+        if (sec >= 0) {
+            setSectorPreset(sec, presetName);
+        }
+        configuringSector = -1;
+    }
 
-        String clean = stack.getName().getString().replaceAll("[^a-zA-Zа-яА-ЯёЁ0-9\\s\\-]", "").trim();
-        return clean.isEmpty() ? stack.getItem().getName().getString() : clean;
+    private void clearSelectedSector() {
+        int sec = configuringSector >= 0 ? configuringSector : hoveredSector;
+        if (sec >= 0) {
+            clearSector(sec);
+        }
+        configuringSector = -1;
     }
 
     @Override
@@ -791,7 +812,7 @@ public class ItemSwapWheelScreen extends Screen {
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
-    private static String getDefaultItemForSector(int index) {
+    public static String getDefaultItemForSector(int index) {
         return switch (index) {
             case 0 -> "Тотем";
             case 1 -> "Шар";
@@ -800,7 +821,205 @@ public class ItemSwapWheelScreen extends Screen {
         };
     }
 
-    private static ItemStack getStackForName(String name) {
+    public static WheelSlotData getWheelSlot(int sector) {
+        if (sector < 0 || sector >= SECTOR_COUNT) return new WheelSlotData();
+        if (wheelSlots[sector] != null) return wheelSlots[sector];
+
+        String prefix = "Item Swap Wheel " + sector;
+        String name = getModeSetting(prefix, getDefaultItemForSector(sector));
+        if (name == null || name.isEmpty() || name.equalsIgnoreCase("Пусто")) {
+            WheelSlotData empty = new WheelSlotData();
+            wheelSlots[sector] = empty;
+            cachedWheelStacks[sector] = ItemStack.EMPTY;
+            return empty;
+        }
+
+        WheelSlotData data = new WheelSlotData();
+        data.displayName = name;
+        data.itemId = getModeSetting(prefix + "_Id", "");
+        data.customName = getModeSetting(prefix + "_CustomName", "");
+        data.skinKey = getModeSetting(prefix + "_SkinKey", "");
+        data.skinTextureValue = getModeSetting(prefix + "_SkinVal", "");
+        data.skinTextureSignature = getModeSetting(prefix + "_SkinSig", "");
+        data.skinName = getModeSetting(prefix + "_SkinName", "");
+        data.skinId = getModeSetting(prefix + "_SkinId", "");
+        data.potionKey = getModeSetting(prefix + "_PotionKey", "");
+        data.modelKey = getModeSetting(prefix + "_ModelKey", "");
+        data.loreKey = getModeSetting(prefix + "_LoreKey", "");
+        data.isPreset = "true".equalsIgnoreCase(getModeSetting(prefix + "_Preset", "false"));
+
+        if (data.itemId.isEmpty()) {
+            initLegacyOrPresetData(data, name);
+        }
+
+        reconstructCachedStack(sector, data);
+        wheelSlots[sector] = data;
+        return data;
+    }
+
+    public static ItemStack getStackForSector(int sector) {
+        if (sector < 0 || sector >= SECTOR_COUNT) return ItemStack.EMPTY;
+        if (cachedWheelStacks[sector] != null && !cachedWheelStacks[sector].isEmpty()) {
+            return cachedWheelStacks[sector];
+        }
+        getWheelSlot(sector);
+        if (cachedWheelStacks[sector] != null && !cachedWheelStacks[sector].isEmpty()) {
+            return cachedWheelStacks[sector];
+        }
+        return ItemStack.EMPTY;
+    }
+
+    public static void setSectorFromStack(int sector, ItemStack stack) {
+        if (sector < 0 || sector >= SECTOR_COUNT) return;
+        if (stack == null || stack.isEmpty()) {
+            clearSector(sector);
+            return;
+        }
+
+        WheelSlotData data = new WheelSlotData();
+        data.itemId = ItemIdentity.idOf(stack);
+        data.customName = ItemIdentity.customNameOf(stack);
+        data.displayName = resolveDisplayName(stack);
+        data.skinKey = ItemIdentity.skinFingerprint(stack);
+        data.skinName = ItemIdentity.skinName(stack);
+        data.skinId = ItemIdentity.skinId(stack);
+        data.skinTextureValue = ItemIdentity.skinTextureValue(stack);
+        data.skinTextureSignature = ItemIdentity.skinTextureSignature(stack);
+        data.potionKey = ItemIdentity.potionFingerprint(stack);
+        data.modelKey = ItemIdentity.customModelFingerprint(stack);
+        data.loreKey = ItemIdentity.loreFingerprint(stack);
+        data.isPreset = false;
+
+        wheelSlots[sector] = data;
+        cachedWheelStacks[sector] = stack.copy();
+        cachedWheelStacks[sector].setCount(1);
+
+        saveSectorToSettings(sector, data);
+    }
+
+    public static void setSectorPreset(int sector, String presetName) {
+        if (sector < 0 || sector >= SECTOR_COUNT) return;
+        WheelSlotData data = new WheelSlotData();
+        data.displayName = presetName;
+        data.isPreset = true;
+        initLegacyOrPresetData(data, presetName);
+
+        wheelSlots[sector] = data;
+        cachedWheelStacks[sector] = getFallbackStackForName(presetName);
+
+        saveSectorToSettings(sector, data);
+    }
+
+    public static void clearSector(int sector) {
+        if (sector < 0 || sector >= SECTOR_COUNT) return;
+        WheelSlotData data = new WheelSlotData();
+        data.displayName = "Пусто";
+        wheelSlots[sector] = data;
+        cachedWheelStacks[sector] = ItemStack.EMPTY;
+        saveSectorToSettings(sector, data);
+    }
+
+    private static void saveSectorToSettings(int sector, WheelSlotData data) {
+        String prefix = "Item Swap Wheel " + sector;
+        String name = data.displayName != null ? data.displayName : "Пусто";
+
+        setModeSetting(prefix, name);
+        setModeSetting(prefix + "_Id", data.itemId != null ? data.itemId : "");
+        setModeSetting(prefix + "_CustomName", data.customName != null ? data.customName : "");
+        setModeSetting(prefix + "_SkinKey", data.skinKey != null ? data.skinKey : "");
+        setModeSetting(prefix + "_SkinVal", data.skinTextureValue != null ? data.skinTextureValue : "");
+        setModeSetting(prefix + "_SkinSig", data.skinTextureSignature != null ? data.skinTextureSignature : "");
+        setModeSetting(prefix + "_SkinName", data.skinName != null ? data.skinName : "");
+        setModeSetting(prefix + "_SkinId", data.skinId != null ? data.skinId : "");
+        setModeSetting(prefix + "_PotionKey", data.potionKey != null ? data.potionKey : "");
+        setModeSetting(prefix + "_ModelKey", data.modelKey != null ? data.modelKey : "");
+        setModeSetting(prefix + "_LoreKey", data.loreKey != null ? data.loreKey : "");
+        setModeSetting(prefix + "_Preset", data.isPreset ? "true" : "false");
+
+        ConfigManager.saveConfig();
+    }
+
+    private static void reconstructCachedStack(int sector, WheelSlotData data) {
+        if (data == null || data.isEmpty()) {
+            cachedWheelStacks[sector] = ItemStack.EMPTY;
+            return;
+        }
+
+        // 1. Голова с кастомной текстурой (HolyWorld сферы, шары и талисманы)
+        if ("minecraft:player_head".equalsIgnoreCase(data.itemId) && data.skinTextureValue != null && !data.skinTextureValue.isEmpty()) {
+            LoadoutSlotData lsd = new LoadoutSlotData(0, data.itemId, data.customName, 1, data.skinKey);
+            lsd.setSkinData(data.skinName, data.skinId, data.skinTextureValue, data.skinTextureSignature);
+            ItemStack stack = ItemIdentity.templateStack(lsd);
+            if (data.customName != null && !data.customName.isEmpty()) {
+                stack.set(DataComponentTypes.CUSTOM_NAME, Text.literal(data.customName));
+            }
+            cachedWheelStacks[sector] = stack;
+            return;
+        }
+
+        // 2. Предмет по ID
+        if (data.itemId != null && !data.itemId.isEmpty() && !data.itemId.equals("minecraft:air")) {
+            ItemStack stack = new ItemStack(ItemIdentity.itemFromId(data.itemId), 1);
+            if (data.customName != null && !data.customName.isEmpty()) {
+                stack.set(DataComponentTypes.CUSTOM_NAME, Text.literal(data.customName));
+            }
+            cachedWheelStacks[sector] = stack;
+            return;
+        }
+
+        // 3. Fallback
+        cachedWheelStacks[sector] = getFallbackStackForName(data.displayName);
+    }
+
+    private static void initLegacyOrPresetData(WheelSlotData data, String name) {
+        data.isPreset = true;
+        if ("Тотем".equalsIgnoreCase(name)) {
+            data.itemId = "minecraft:totem_of_undying";
+        } else if ("Шар".equalsIgnoreCase(name) || "Голова".equalsIgnoreCase(name)) {
+            data.itemId = "minecraft:player_head";
+        } else if ("Щит".equalsIgnoreCase(name)) {
+            data.itemId = "minecraft:shield";
+        } else if ("Золотое яблоко".equalsIgnoreCase(name) || "Яблоко".equalsIgnoreCase(name)) {
+            data.itemId = "minecraft:golden_apple";
+        } else if ("Чар. яблоко".equalsIgnoreCase(name)) {
+            data.itemId = "minecraft:enchanted_golden_apple";
+        } else if ("Эндер перл".equalsIgnoreCase(name) || "Перл".equalsIgnoreCase(name)) {
+            data.itemId = "minecraft:ender_pearl";
+        } else if ("Зелье".equalsIgnoreCase(name)) {
+            data.itemId = "minecraft:splash_potion";
+        } else {
+            data.isPreset = false;
+            data.customName = name;
+        }
+    }
+
+    public static String resolveDisplayName(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return "Пусто";
+
+        Text custom = stack.get(DataComponentTypes.CUSTOM_NAME);
+        if (custom != null && !custom.getString().trim().isEmpty()) {
+            return custom.getString().trim();
+        }
+
+        if (stack.getItem() == Items.TOTEM_OF_UNDYING) return "Тотем";
+        if (stack.getItem() == Items.SHIELD) return "Щит";
+        if (stack.getItem() == Items.GOLDEN_APPLE) return "Золотое яблоко";
+        if (stack.getItem() == Items.ENCHANTED_GOLDEN_APPLE) return "Чар. яблоко";
+        if (stack.getItem() == Items.ENDER_PEARL) return "Эндер перл";
+        if (stack.getItem() == Items.SPLASH_POTION || stack.getItem() == Items.POTION) return "Зелье";
+
+        if (stack.getItem() == Items.PLAYER_HEAD) {
+            String skinName = ItemIdentity.skinName(stack);
+            if (skinName != null && !skinName.isEmpty()) {
+                return "Шар (" + skinName + ")";
+            }
+            return "Шар";
+        }
+
+        return stack.getName().getString();
+    }
+
+    private static ItemStack getFallbackStackForName(String name) {
         if (name == null || name.isEmpty() || name.equalsIgnoreCase("Пусто")) return ItemStack.EMPTY;
         if ("Тотем".equalsIgnoreCase(name)) return new ItemStack(Items.TOTEM_OF_UNDYING);
         if ("Шар".equalsIgnoreCase(name) || "Голова".equalsIgnoreCase(name)) return new ItemStack(Items.PLAYER_HEAD);
@@ -810,6 +1029,17 @@ public class ItemSwapWheelScreen extends Screen {
         if ("Эндер перл".equalsIgnoreCase(name) || "Перл".equalsIgnoreCase(name)) return new ItemStack(Items.ENDER_PEARL);
         if ("Зелье".equalsIgnoreCase(name)) return new ItemStack(Items.SPLASH_POTION);
         return new ItemStack(Items.TOTEM_OF_UNDYING);
+    }
+
+    private static void setModeSetting(String key, String value) {
+        ClientData.modeSettings.put(key, value);
+        LexoraGui.modeSettings.put(key, value);
+    }
+
+    private static String getModeSetting(String key, String def) {
+        if (ClientData.modeSettings.containsKey(key)) return ClientData.modeSettings.get(key);
+        if (LexoraGui.modeSettings.containsKey(key)) return LexoraGui.modeSettings.get(key);
+        return def;
     }
 
     private record ItemOption(String name, ItemStack stack) {}

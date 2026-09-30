@@ -229,6 +229,22 @@ public final class BindManager {
             if (isActionBindKey(key)) continue;
 
             String stateKey = resolveModuleStateKey(key);
+            if (com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(key)
+                    || com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(stateKey)) {
+                ClientData.moduleStates.put(stateKey, false);
+                LexoraGui.moduleStates.put(stateKey, false);
+                boolean down = isBindDown(window, bind);
+                if (down) {
+                    if (!previouslyPressedModules.contains(key)) {
+                        previouslyPressedModules.add(key);
+                        com.lexoravisauls.client.utils.NotifManager.show("HolyWorld", "Функция '" + key + "' запрещена сервером!", com.lexoravisauls.client.utils.NotifManager.NotifType.ERROR);
+                    }
+                } else {
+                    previouslyPressedModules.remove(key);
+                }
+                continue;
+            }
+
             BindMode mode = getModuleBindMode(key);
             boolean down = isBindDown(window, bind);
 

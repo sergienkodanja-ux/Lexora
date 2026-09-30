@@ -37,10 +37,10 @@ public final class KillEffectManager {
     /** Flip to true if you need to re-diagnose the trigger chain again. */
     private static final boolean DEBUG = false;
 
-    private static final java.util.Map<UUID, Long> LAST_TRIGGERED = new java.util.HashMap<>();
+    private static final java.util.Map<UUID, Long> LAST_TRIGGERED = new java.util.concurrent.ConcurrentHashMap<>();
     private static final double PROXIMITY_FALLBACK_RANGE = 16.0;
 
-    static final List<ActiveEffect<?>> ACTIVE = new ArrayList<>();
+    static final List<ActiveEffect<?>> ACTIVE = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static final Random RANDOM = new Random();
     private static boolean initialized = false;
 

@@ -24,10 +24,12 @@ public abstract class MixinArmorFeatureRenderer<S extends BipedEntityRenderState
             return;
         }
         ArmorDurabilityColor.beginTint(stack);
+        com.lexoravisauls.client.modules.weather.winter.WinterArmorFrost.beginFrost(stack);
     }
 
     @Inject(method = "renderArmor", at = @At("RETURN"))
     private void lexora$endTint(MatrixStack matrices, VertexConsumerProvider vertexConsumers, ItemStack stack, EquipmentSlot slot, int light, A armorModel, CallbackInfo ci) {
+        com.lexoravisauls.client.modules.weather.winter.WinterArmorFrost.endFrost(matrices, vertexConsumers, light, armorModel);
         ArmorDurabilityColor.endTint();
     }
 }

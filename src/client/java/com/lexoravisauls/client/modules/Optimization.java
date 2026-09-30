@@ -11,13 +11,14 @@ import net.minecraft.util.math.Vec3d;
 
 public class Optimization {
 
+    // ── СОСТОЯНИЕ МОДУЛЯ ─────────────────────────────────────────────────────
     public static boolean isEnabled() {
         return ClientData.moduleStates.getOrDefault("Optimization", false)
                 || LexoraGui.moduleStates.getOrDefault("Optimization", false);
     }
 
     public static boolean getSetting(String key, boolean def) {
-        if (!isEnabled()) return def;
+        if (!isEnabled()) return false;
         return ClientData.moduleStates.getOrDefault(key,
                 LexoraGui.moduleStates.getOrDefault(key, def));
     }
@@ -26,6 +27,64 @@ public class Optimization {
         if (!isEnabled()) return def;
         return ClientData.numSettings.getOrDefault(key,
                 LexoraGui.numSettings.getOrDefault(key, def));
+    }
+
+    // ── КАДРЫ, ТАЙМИНГИ И ДИНАМИЧЕСКОЕ КАЧЕСТВО (FRAME SYNC & FPS) ───────────
+    private static final int SAMPLES = 60;
+    private static final long[] frameTimes = new long[SAMPLES];
+    private static int frameIndex = 0;
+    private static int frameCount = 0;
+    private static int currentFps = 60;
+    private static float qualityLevel = 1.0F;
+
+    public static boolean isFrameSync() {
+        return getSetting("Opt Frame Sync", true);
+    }
+
+    public static void sampleFrame() {
+        if (!isEnabled() || !isFrameSync()) {
+            currentFps = 60;
+            qualityLevel = 1.0F;
+            return;
+        }
+        long now = System.nanoTime();
+        frameTimes[frameIndex] = now;
+        frameIndex = (frameIndex + 1) % SAMPLES;
+        if (frameCount < SAMPLES) {
+            frameCount++;
+        }
+        if (frameCount < 2) {
+            currentFps = 60;
+            qualityLevel = 1.0F;
+            return;
+        }
+        int newest = (frameIndex - 1 + SAMPLES) % SAMPLES;
+        int oldest = frameCount < SAMPLES ? 0 : frameIndex;
+        long dt = frameTimes[newest] - frameTimes[oldest];
+        if (dt > 0L) {
+            currentFps = (int) Math.round((frameCount - 1) * 1_000_000_000.0D / dt);
+        }
+        if (currentFps >= 55) {
+            qualityLevel = 1.0F;
+        } else if (currentFps >= 35) {
+            qualityLevel = 0.7F;
+        } else if (currentFps >= 20) {
+            qualityLevel = 0.45F;
+        } else {
+            qualityLevel = 0.25F;
+        }
+    }
+
+    public static int getEstimatedFps() {
+        return currentFps;
+    }
+
+    public static float getQualityLevel() {
+        return isEnabled() ? qualityLevel : 1.0F;
+    }
+
+    public static boolean isAdaptiveBlurEnabled() {
+        return getSetting("Opt Adaptive Blur", true);
     }
 
     // ── ЧАСТИЦЫ ─────────────────────────────────────────────────────────────
@@ -57,6 +116,28 @@ public class Optimization {
         return isNoAllParticles() || getSetting("Opt Totem Particles", false);
     }
 
+    public static boolean isParticleDistanceCullEnabled() {
+        return getSetting("Opt Particle Dist Cull", true);
+    }
+
+    public static float getParticleCullDistanceSq() {
+        float dist = getNum("Opt Particle Dist", 36.0f);
+        return dist * dist;
+    }
+
+    public static boolean isParticlePosTooFar(double x, double y, double z) {
+        if (!isEnabled() || !isParticleDistanceCullEnabled()) return false;
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.gameRenderer == null || mc.gameRenderer.getCamera() == null) return false;
+        var camera = mc.gameRenderer.getCamera();
+        var camPos = camera.getPos();
+        if (camPos == null) return false;
+        double dx = x - camPos.x;
+        double dy = y - camPos.y;
+        double dz = z - camPos.z;
+        return (dx * dx + dy * dy + dz * dz) > getParticleCullDistanceSq();
+    }
+
     public static boolean shouldCancelParticle(ParticleEffect effect) {
         if (!isEnabled()) return false;
         if (isNoAllParticles()) return true;
@@ -83,6 +164,13 @@ public class Optimization {
             return true;
         }
         return false;
+    }
+
+    public static boolean shouldCancelParticle(ParticleEffect effect, double x, double y, double z) {
+        if (!isEnabled()) return false;
+        if (isNoAllParticles()) return true;
+        if (isParticlePosTooFar(x, y, z)) return true;
+        return shouldCancelParticle(effect);
     }
 
     // ── СУЩНОСТИ И БРОНЯ ────────────────────────────────────────────────────
@@ -172,5 +260,52 @@ public class Optimization {
         }
 
         return false;
+    }
+
+    // ── ДИНАМИЧЕСКИЙ ЛИМИТ ПРОРИСОВКИ ЧАНКОВ (RENDER DISTANCE GOVERNOR) ───────
+    private static int savedViewDistance = -1;
+    private static int appliedCap = -1;
+
+    public static boolean isLimitRenderDistanceEnabled() {
+        return getSetting("Opt Limit Render Distance", false);
+    }
+
+    public static void checkRenderDistance() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.options == null) return;
+
+        boolean enabled = isEnabled() && isLimitRenderDistanceEnabled();
+        var option = mc.options.getViewDistance();
+        int current = option.getValue();
+
+        if (enabled) {
+            // Если качество просело (FPS < 35) или прорисовка завышена при лагах
+            int targetCap = qualityLevel < 0.45F ? 8 : (qualityLevel < 0.7F ? 10 : 12);
+            if (current > targetCap) {
+                if (savedViewDistance < 0) {
+                    savedViewDistance = current;
+                }
+                appliedCap = targetCap;
+                option.setValue(targetCap);
+                return;
+            }
+        } else {
+            restoreRenderDistance();
+        }
+    }
+
+    public static void restoreRenderDistance() {
+        if (savedViewDistance < 0) return;
+        try {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc.options != null) {
+                int current = mc.options.getViewDistance().getValue();
+                if (appliedCap < 0 || current == appliedCap) {
+                    mc.options.getViewDistance().setValue(savedViewDistance);
+                }
+            }
+        } catch (Throwable ignored) {}
+        savedViewDistance = -1;
+        appliedCap = -1;
     }
 }

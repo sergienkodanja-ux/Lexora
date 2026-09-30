@@ -96,8 +96,8 @@ public class LexoraGui extends Screen {
     private final Map<String, int[]> huePickerBounds = new HashMap<>();
 
     static {
-        categories.put("HUD", Arrays.asList("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Saturation HUD", "GPS", "Scoreboard HUD", "Lexora IRC","Emotes","Hit Indicator","TNT Detect"));
-        categories.put("Visual", Arrays.asList("Crosshair", "Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones","Kill Effect","Motion Blur", "Taksa", "Atmosphere", "Virtual Desktop"));
+        categories.put("HUD", Arrays.asList("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Saturation HUD", "GPS", "Scoreboard HUD", "Lexora IRC","Emotes","Hit Indicator","TNT Detect", "Notifications"));
+        categories.put("Visual", Arrays.asList("Crosshair", "Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "HW Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones","Kill Effect","Motion Blur", "Taksa", "Atmosphere", "Virtual Desktop", "Kinetic Lyrics"));
         categories.put("Utils", Arrays.asList("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter","Healing Helper", "Streamer Mode", "No Render", "Optimization", "Zoom", "Tape Mouse","Self Nametags","Armor Durability","Totem Sound"));
         categories.put("Color", Arrays.asList("Gradient Theme"));
         categories.put("Config Manager", new ArrayList<>());
@@ -135,6 +135,19 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("Only On Crit")) moduleStates.put("Only On Crit", false);
         if (!moduleStates.containsKey("Watermark")) moduleStates.put("Watermark", true);
         if (!moduleStates.containsKey("Gradient Theme")) moduleStates.put("Gradient Theme", true);
+        if (!moduleStates.containsKey("Kinetic Lyrics")) moduleStates.put("Kinetic Lyrics", true);
+        if (!moduleStates.containsKey("Lyrics In Island")) moduleStates.put("Lyrics In Island", true);
+        if (!moduleStates.containsKey("Lyrics In 3D")) moduleStates.put("Lyrics In 3D", true);
+        if (!modeSettings.containsKey("Lyrics Animation")) modeSettings.put("Lyrics Animation", "LyricFlow");
+        if (!modeSettings.containsKey("Lyrics Color Mode")) modeSettings.put("Lyrics Color Mode", "Theme");
+        if (!modeSettings.containsKey("Lyrics Split Mode")) modeSettings.put("Lyrics Split Mode", "SmartSplit");
+        if (!numSettings.containsKey("Lyrics Max Lines")) numSettings.put("Lyrics Max Lines", 3.0f);
+        if (!numSettings.containsKey("Lyrics Distance")) numSettings.put("Lyrics Distance", 5.0f);
+        if (!numSettings.containsKey("Lyrics Scale")) numSettings.put("Lyrics Scale", 1.0f);
+        if (!numSettings.containsKey("Lyrics Arc Spread")) numSettings.put("Lyrics Arc Spread", 70.0f);
+        if (!numSettings.containsKey("Lyrics Float Height")) numSettings.put("Lyrics Float Height", 0.5f);
+        if (!numSettings.containsKey("Lyrics Time Offset")) numSettings.put("Lyrics Time Offset", 0.0f);
+        if (!moduleStates.containsKey("Lyrics Depth Occlusion")) moduleStates.put("Lyrics Depth Occlusion", true);
 
         if (!moduleStates.containsKey("Saturation HUD")) moduleStates.put("Saturation HUD", true);
 
@@ -171,7 +184,10 @@ public class LexoraGui extends Screen {
         if (!moduleStates.containsKey("Notif Armor")) moduleStates.put("Notif Armor", true);
         if (!moduleStates.containsKey("Notif Potions")) moduleStates.put("Notif Potions", true);
         if (!moduleStates.containsKey("Notif Solid Bg")) moduleStates.put("Notif Solid Bg", false);
+        if (!moduleStates.containsKey("Notif Icons")) moduleStates.put("Notif Icons", true);
+        if (!moduleStates.containsKey("Notif Sound")) moduleStates.put("Notif Sound", true);
         if (!numSettings.containsKey("Notif Scale")) numSettings.put("Notif Scale", 1.0f);
+        if (!modeSettings.containsKey("Notif Sound Mode")) modeSettings.put("Notif Sound Mode", "Звук 1");
 
         if (!moduleStates.containsKey("Hearth Hud")) moduleStates.put("Hearth Hud", false);
         if (!moduleStates.containsKey("Hearth Hud Solid")) moduleStates.put("Hearth Hud Solid", false);
@@ -324,6 +340,24 @@ public class LexoraGui extends Screen {
         if (!modeSettings.containsKey("FT Трапка Скин")) modeSettings.put("FT Трапка Скин", "Обычный");
         if (!modeSettings.containsKey("FT Пласт Скин")) modeSettings.put("FT Пласт Скин", "Обычный");
         if (!moduleStates.containsKey("FT Таймер Трапки")) moduleStates.put("FT Таймер Трапки", true);
+        if (!moduleStates.containsKey("FT Таймер Пласта")) moduleStates.put("FT Таймер Пласта", true);
+
+        if (!moduleStates.containsKey("HW Helper")) moduleStates.put("HW Helper", false);
+        if (!moduleStates.containsKey("HW Стан")) moduleStates.put("HW Стан", true);
+        if (!moduleStates.containsKey("HW Трапка")) moduleStates.put("HW Трапка", true);
+        if (!moduleStates.containsKey("HW Вскрывная")) moduleStates.put("HW Вскрывная", true);
+        if (!moduleStates.containsKey("HW Таймер Стана")) moduleStates.put("HW Таймер Стана", true);
+        if (!moduleStates.containsKey("HW Таймер Трапки")) moduleStates.put("HW Таймер Трапки", true);
+        if (!moduleStates.containsKey("HW Таймер Вскрывной")) moduleStates.put("HW Таймер Вскрывной", true);
+        if (!moduleStates.containsKey("HW Подсветка Области")) moduleStates.put("HW Подсветка Области", true);
+        if (!moduleStates.containsKey("HW Реакция на Цель")) moduleStates.put("HW Реакция на Цель", true);
+
+        if (!moduleStates.containsKey("Notifications")) moduleStates.put("Notifications", true);
+        if (!moduleStates.containsKey("Notifications Blur")) moduleStates.put("Notifications Blur", true);
+        if (!numSettings.containsKey("Notifications Scale")) numSettings.put("Notifications Scale", 1.0f);
+        if (!moduleStates.containsKey("Notif Icons")) moduleStates.put("Notif Icons", true);
+        if (!moduleStates.containsKey("Notif Sound")) moduleStates.put("Notif Sound", true);
+        if (!modeSettings.containsKey("Notif Sound Mode")) modeSettings.put("Notif Sound Mode", "Звук 1");
 
         if (!moduleStates.containsKey("Particles")) moduleStates.put("Particles", false);
         if (!moduleStates.containsKey("Part. Ambient")) moduleStates.put("Part. Ambient", true);
@@ -459,8 +493,11 @@ public class LexoraGui extends Screen {
         if (!colorSettings.containsKey("Overlay Color")) colorSettings.put("Overlay Color", new float[]{280f / 360f, 1f, 1f});
 
         if (!moduleStates.containsKey("Hand Shaders")) moduleStates.put("Hand Shaders", false);
-        if (!modeSettings.containsKey("Hand Mode")) modeSettings.put("Hand Mode", "Snow");
-        if (!numSettings.containsKey("Hand Glow %")) numSettings.put("Hand Glow %", 35.0f);
+        if (!modeSettings.containsKey("Hand Mode")) modeSettings.put("Hand Mode", "Nebula");
+        if (!numSettings.containsKey("Hand Glow %")) numSettings.put("Hand Glow %", 80.0f);
+        if (!numSettings.containsKey("Hand Shader Speed")) numSettings.put("Hand Shader Speed", 1.0f);
+        if (!moduleStates.containsKey("Hand Shader Only")) moduleStates.put("Hand Shader Only", false);
+        if (!modeSettings.containsKey("Hand Color Mode")) modeSettings.put("Hand Color Mode", "Theme");
 
         if (!moduleStates.containsKey("Atmosphere")) moduleStates.put("Atmosphere", false);
         if (!moduleStates.containsKey("WeatherFX")) moduleStates.put("WeatherFX", false);
@@ -486,6 +523,16 @@ public class LexoraGui extends Screen {
         if (!modeSettings.containsKey("Wet Quality")) modeSettings.put("Wet Quality", "Balanced");
         if (!moduleStates.containsKey("Wet Ripples")) moduleStates.put("Wet Ripples", false);
         if (!numSettings.containsKey("Ripple Speed")) numSettings.put("Ripple Speed", 1.0f);
+
+        if (!numSettings.containsKey("Winter Density")) numSettings.put("Winter Density", 1.25f);
+        if (!numSettings.containsKey("Winter Blizzard")) numSettings.put("Winter Blizzard", 0.0f);
+        if (!moduleStates.containsKey("Winter Ground Snow")) moduleStates.put("Winter Ground Snow", true);
+        if (!moduleStates.containsKey("Winter Wall Snow")) moduleStates.put("Winter Wall Snow", true);
+        if (!moduleStates.containsKey("Winter Snowfall")) moduleStates.put("Winter Snowfall", true);
+        if (!moduleStates.containsKey("Winter Footprints")) moduleStates.put("Winter Footprints", true);
+        if (!moduleStates.containsKey("Winter Frost")) moduleStates.put("Winter Frost", true);
+        if (!modeSettings.containsKey("Winter Color Mode")) modeSettings.put("Winter Color Mode", "Realistic");
+        if (!colorSettings.containsKey("Winter Custom Color")) colorSettings.put("Winter Custom Color", new float[]{0.58f, 0.15f, 0.98f});
     }
 
     public LexoraGui() {
@@ -1283,6 +1330,12 @@ private String t(String key) {
                 } else if (modName.equals("Hand Shaders")) {
                     sY = drawMiniMode(context, tr, "Hand Mode", sX, sY, sW, mx, my, fadeAlpha);
                     sY = drawMiniSlider(context, tr, "Hand Glow %", 0.0f, 100.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniSlider(context, tr, "Hand Shader Speed", 0.1f, 3.0f, sX, sY, sW, mx, my, fadeAlpha);
+                    sY = drawMiniToggle(context, tr, "Hand Shader Only", "Только шейдер", sX, sY, sW, fadeAlpha);
+                    sY = drawMiniMode(context, tr, "Hand Color Mode", sX, sY, sW, mx, my, fadeAlpha);
+                    if (modeSettings.getOrDefault("Hand Color Mode", "Theme").equals("Custom")) {
+                        sY = drawColorPicker(context, tr, "Hand Custom Color", sX, sY, sW, mx, my, fadeAlpha);
+                    }
                 } else if (modName.equals("Trails")) {
                     sY = drawMiniToggle(context, tr, "Trail Show 1st Person", t("Trail Show 1st Person"), sX, sY, sW, fadeAlpha);
                     sY = drawMiniSlider(context, tr, "Trail Length", 10.0f, 100.0f, sX, sY, sW, mx, my, fadeAlpha);
@@ -2176,10 +2229,15 @@ private String t(String key) {
                         }
 
                         if (name.equals("Hand Mode")) {
-                            String[] arr = {"Snow", "Smoke", "Solid", "Stripes"};
-                            int idx = Arrays.asList(arr).indexOf(modeSettings.getOrDefault(name, "Snow"));
+                            String[] arr = {"Nebula", "Stars", "Web", "Plasma", "Fire", "Smoke", "Snow", "Stripes", "Solid"};
+                            int idx = Arrays.asList(arr).indexOf(modeSettings.getOrDefault(name, "Nebula"));
                             if (idx < 0) idx = 0;
                             modeSettings.put(name, arr[(idx + 1) % arr.length]);
+                        }
+
+                        if (name.equals("Hand Color Mode")) {
+                            String current = modeSettings.getOrDefault(name, "Theme");
+                            modeSettings.put(name, current.equals("Theme") ? "Custom" : "Theme");
                         }
 
                         if (name.equals("FT Трапка Скин") || name.equals("FT Пласт Скин")) {
@@ -2257,6 +2315,13 @@ private String t(String key) {
 
                     if (entry.getKey().startsWith("minitog_")) {
                         String name = entry.getKey().replace("minitog_", "");
+                        if (com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(name)) {
+                            moduleStates.put(name, false);
+                            com.lexoravisauls.client.core.ClientData.moduleStates.put(name, false);
+                            com.lexoravisauls.client.utils.NotifManager.show("HolyWorld", "Функция '" + name + "' запрещена сервером!", com.lexoravisauls.client.utils.NotifManager.NotifType.ERROR);
+                            com.lexoravisauls.client.utils.SoundUtil.playCustomSound("click", 1.0f);
+                            return true;
+                        }
                         moduleStates.put(name, !moduleStates.getOrDefault(name, false));
                         if (name.equals("No Grass") && MinecraftClient.getInstance().worldRenderer != null) {
                             MinecraftClient.getInstance().worldRenderer.reload();
@@ -2278,6 +2343,13 @@ private String t(String key) {
                     // Левый клик по модулю = Включение/Выключение
                     if (expandedModule == null && entry.getKey().startsWith("mod_")) {
                         String modName = entry.getKey().replace("mod_", "");
+                        if (com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(modName)) {
+                            moduleStates.put(modName, false);
+                            com.lexoravisauls.client.core.ClientData.moduleStates.put(modName, false);
+                            com.lexoravisauls.client.utils.NotifManager.show("HolyWorld", "Функция '" + modName + "' запрещена сервером!", com.lexoravisauls.client.utils.NotifManager.NotifType.ERROR);
+                            com.lexoravisauls.client.utils.SoundUtil.playCustomSound("click", 1.0f);
+                            return true;
+                        }
                         boolean state = !moduleStates.getOrDefault(modName, false);
                         moduleStates.put(modName, state);
 

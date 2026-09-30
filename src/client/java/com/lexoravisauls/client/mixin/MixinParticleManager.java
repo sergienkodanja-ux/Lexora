@@ -35,7 +35,7 @@ public class MixinParticleManager {
         if (parameters.getType() == ParticleTypes.FIREWORK || parameters.getType() == ParticleTypes.FLASH) {
             return;
         }
-        if (Optimization.shouldCancelParticle(parameters)) {
+        if (Optimization.shouldCancelParticle(parameters, x, y, z)) {
             cir.setReturnValue(null);
         }
     }
@@ -55,7 +55,12 @@ public class MixinParticleManager {
 
     @Inject(method = "addEmitter(Lnet/minecraft/entity/Entity;Lnet/minecraft/particle/ParticleEffect;)V", at = @At("HEAD"), cancellable = true)
     private void onAddEmitter(Entity entity, ParticleEffect parameters, CallbackInfo ci) {
-        if (Optimization.shouldCancelParticle(parameters)) {
+        if (entity != null) {
+            if (Optimization.shouldCancelParticle(parameters, entity.getX(), entity.getY(), entity.getZ())) {
+                ci.cancel();
+                return;
+            }
+        } else if (Optimization.shouldCancelParticle(parameters)) {
             ci.cancel();
             return;
         }
@@ -69,7 +74,11 @@ public class MixinParticleManager {
 
     @Inject(method = "addEmitter(Lnet/minecraft/entity/Entity;Lnet/minecraft/particle/ParticleEffect;I)V", at = @At("HEAD"), cancellable = true)
     private void onAddEmitterAge(Entity entity, ParticleEffect parameters, int maxAge, CallbackInfo ci) {
-        if (Optimization.shouldCancelParticle(parameters)) {
+        if (entity != null) {
+            if (Optimization.shouldCancelParticle(parameters, entity.getX(), entity.getY(), entity.getZ())) {
+                ci.cancel();
+            }
+        } else if (Optimization.shouldCancelParticle(parameters)) {
             ci.cancel();
         }
     }

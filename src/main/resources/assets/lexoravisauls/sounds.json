@@ -17,6 +17,10 @@
   "hit_bell": { "category": "master", "sounds": [ "lexoravisauls:bell" ] },
   "hit_bonk": { "category": "master", "sounds": [ "lexoravisauls:bonk" ] },
   "notification": { "category": "player", "sounds": [ "lexoravisauls:notification" ] },
+  "notification2": { "category": "player", "sounds": [ "lexoravisauls:notification2" ] },
+  "notification3": { "category": "player", "sounds": [ "lexoravisauls:notification3" ] },
+  "module_enable": { "category": "master", "sounds": [ "lexoravisauls:module_enable" ] },
+  "module_disable": { "category": "master", "sounds": [ "lexoravisauls:module_disable" ] },
 
   "hit1": { "category": "player", "sounds": [ "lexoravisauls:hit1" ] },
   "hit2": { "category": "player", "sounds": [ "lexoravisauls:hit2" ] },

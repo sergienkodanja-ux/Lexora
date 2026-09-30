@@ -32,5 +32,8 @@ public class EngineOptimizer {
                 }
             }
         }
+
+        // 3. Динамический лимит дистанции прорисовки при просадках FPS
+        Optimization.checkRenderDistance();
     }
 }

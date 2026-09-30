@@ -40,6 +40,7 @@ public class ShaderUtil {
 
         GL20.glBindAttribLocation(program, 0, "Position");
         GL20.glBindAttribLocation(program, 1, "UV0");
+        GL20.glBindAttribLocation(program, 2, "Color");
 
         GL20.glLinkProgram(program);
 

@@ -25,6 +25,27 @@ public class MixinBackgroundRenderer {
         }
 
 
+        boolean atmosphere = ClientData.moduleStates.getOrDefault("Atmosphere",
+                LexoraGui.moduleStates.getOrDefault("Atmosphere", false));
+        if (atmosphere) {
+            String weatherMode = ClientData.modeSettings.getOrDefault("Weather Visual Mode",
+                    LexoraGui.modeSettings.getOrDefault("Weather Visual Mode", "Rain"));
+            if (weatherMode.equalsIgnoreCase("Winter")) {
+                float radius = ClientData.numSettings.getOrDefault("Winter Radius",
+                        LexoraGui.numSettings.getOrDefault("Winter Radius", 24.0f));
+                float haze = ClientData.numSettings.getOrDefault("Winter Haze",
+                        LexoraGui.numSettings.getOrDefault("Winter Haze", 0.72f));
+                float storm = ClientData.numSettings.getOrDefault("Winter Blizzard",
+                        LexoraGui.numSettings.getOrDefault("Winter Blizzard", 0.35f));
+                float fogDistance = Math.max(18.0f, radius * (2.0f - haze * 0.55f - storm * 0.28f));
+                float end = Math.min(fogDistance, viewDistance);
+                float start = Math.max(2.0f, end * 0.15f);
+
+                cir.setReturnValue(new Fog(start, end, FogShape.SPHERE, 0.784f, 0.847f, 0.910f, 1.0f));
+                return;
+            }
+        }
+
         boolean worldCustomizer = ClientData.moduleStates.getOrDefault("World Customizer",
                 LexoraGui.moduleStates.getOrDefault("World Customizer", false));
         boolean fogCustomizer = ClientData.moduleStates.getOrDefault("Fog Customizer",

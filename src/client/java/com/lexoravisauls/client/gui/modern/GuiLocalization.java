@@ -74,6 +74,8 @@ public class GuiLocalization {
         MODULE_INFO.put("Swing Animation", new String[]{"Анимация удара", "Кастомные стили взмаха мечом и предметов", "Swing Animation", "Custom sword and item swing styles"});
         MODULE_INFO.put("Trail", new String[]{"Шлейф за игроком", "Светящийся след за персонажем во время движения", "Player Trail", "Glowing trail behind character during movement"});
         MODULE_INFO.put("World Time", new String[]{"Время мира", "Установка постоянного времени суток на клиенте", "World Time", "Locks custom client-side time of day"});
+        MODULE_INFO.put("Kinetic Lyrics", new String[]{"Кинетические субтитры", "Рендерит слова трека в 3D-пространстве мира и бегущую строку в Dynamic Island", "Kinetic Lyrics", "Renders song lyrics in the 3D world and ticker subtitles in Dynamic Island"});
+        MODULE_INFO.put("KineticLyrics", new String[]{"Кинетические субтитры", "Рендерит слова трека в 3D-пространстве мира и бегущую строку в Dynamic Island", "Kinetic Lyrics", "Renders song lyrics in the 3D world and ticker subtitles in Dynamic Island"});
 
         // Utils
         MODULE_INFO.put("Auto Respawn", new String[]{"Авто Респавн", "Мгновенное возрождение после смерти", "Auto Respawn", "Instant automatic respawn after death"});

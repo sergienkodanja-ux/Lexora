@@ -2,6 +2,7 @@ package com.lexoravisauls.client.modules;
 
 import com.lexoravisauls.client.gui.LexoraGui;
 import com.lexoravisauls.client.utils.NotifManager;
+import com.lexoravisauls.client.utils.PvpMarkerManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.ShaderProgramKeys;
@@ -68,11 +69,16 @@ public class FtHelper {
     private static boolean lastPlayersInRadius = false;
     private static int activeTransitionItem = -1;
 
-    // Логика таймера трапки
+    // Логика таймеров трапки и пласта
     private static boolean trapUsePending = false;
     private static boolean lastUsePressed = false;
     private static long trapUsePendingUntil = 0L;
     private static int trapCountBeforeUse = 0;
+
+    private static boolean plastUsePending = false;
+    private static boolean lastPlastUsePressed = false;
+    private static long plastUsePendingUntil = 0L;
+    private static int plastCountBeforeUse = 0;
 
     private static class SnowballPrediction {
         List<Vec3d> trajectory;
@@ -84,23 +90,36 @@ public class FtHelper {
         }
     }
 
+    private static boolean isState(String key, boolean def) {
+        return com.lexoravisauls.client.core.ClientData.moduleStates.getOrDefault(key, LexoraGui.moduleStates.getOrDefault(key, def));
+    }
+
+    private static String getMode(String key, String def) {
+        return com.lexoravisauls.client.core.ClientData.modeSettings.getOrDefault(key, LexoraGui.modeSettings.getOrDefault(key, def));
+    }
+
     public static void render(MatrixStack matrices, Camera camera, float tickDelta) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.world == null) return;
 
-        if (!LexoraGui.moduleStates.getOrDefault("Ft Helper", false)) {
+        if (!isState("Ft Helper", false)) {
             activeTransitionItem = -1;
             trapUsePending = false;
             lastUsePressed = false;
             trapUsePendingUntil = 0L;
             trapCountBeforeUse = 0;
+            plastUsePending = false;
+            lastPlastUsePressed = false;
+            plastUsePendingUntil = 0L;
+            plastCountBeforeUse = 0;
             return;
         }
 
         ClientPlayerEntity player = mc.player;
 
-        // Обработка таймера трапки отдельно от рендера зон
+        // Обработка таймеров трапки и пласта
         handleTrapkaUse(mc, player);
+        handlePlastUse(mc, player);
 
         int activeItemIndex = resolveActiveItemIndex(player.getMainHandStack(), player.getOffHandStack());
         if (activeItemIndex == -1) {
@@ -128,7 +147,7 @@ public class FtHelper {
         } else if (activeItemIndex == IDX_SNOWBALL) {
             renderSnowballPrediction(mat, immediate, player, IDX_SNOWBALL, SNOWBALL_COLOR, tickDelta);
         } else if (activeItemIndex == IDX_TRAPKA) {
-            boolean isDragon = LexoraGui.modeSettings.getOrDefault("FT Трапка Скин", "Обычный").equals("Драконий");
+            boolean isDragon = getMode("FT Трапка Скин", "Обычный").equals("Драконий");
             Box cube = getTrapkaBox(player, tickDelta, isDragon);
             boolean highlight = hasPlayersInBox(mc, player, cube);
             updateTransition(IDX_TRAPKA, highlight, TRAPKA_COLOR, HIT_COLOR, tickDelta);
@@ -136,7 +155,7 @@ public class FtHelper {
             renderBoxFill(matrices, cube, currentOutlineColor);
             renderBox(mat, immediate, cube, currentOutlineColor);
         } else if (activeItemIndex == IDX_PLAST) {
-            boolean isDragon = LexoraGui.modeSettings.getOrDefault("FT Пласт Скин", "Обычный").equals("Драконий");
+            boolean isDragon = getMode("FT Пласт Скин", "Обычный").equals("Драконий");
             Box plane = getPlastBox(mc, player, tickDelta, isDragon);
             boolean highlight = hasPlayersInBox(mc, player, plane);
             updateTransition(IDX_PLAST, highlight, PLAST_COLOR, HIT_COLOR, tickDelta);
@@ -156,61 +175,92 @@ public class FtHelper {
         long now = System.currentTimeMillis();
 
         boolean usePressed = mc.options.useKey.isPressed();
-        boolean holdingTrapka = isHoldingTrapka(player);
+        boolean holdingTrapka = isHoldingItem(player, Items.NETHERITE_SCRAP);
 
-        // Нажал ПКМ с трапкой в руке
         if (!lastUsePressed && usePressed && holdingTrapka) {
             trapUsePending = true;
             trapUsePendingUntil = now + 500L;
-            trapCountBeforeUse = countTrapka(player);
+            trapCountBeforeUse = countItem(player, Items.NETHERITE_SCRAP);
         }
 
         lastUsePressed = usePressed;
 
         if (!trapUsePending) return;
 
-        // Вышло окно ожидания — отменяем
         if (now > trapUsePendingUntil) {
             trapUsePending = false;
             return;
         }
 
-        int currentCount = countTrapka(player);
+        int currentCount = countItem(player, Items.NETHERITE_SCRAP);
 
-        // Старт только если реально исчез 1 предмет
         if (currentCount == trapCountBeforeUse - 1) {
-            float seconds = getTrapkaTimerSeconds();
-            NotifManager.startTimer("trapka", "Трапка", seconds, NotifManager.NotifType.WARNING);
+            boolean isDragon = getMode("FT Трапка Скин", "Обычный").equals("Драконий");
+            float seconds = isDragon ? 27.4f : 15.0f;
+            if (isState("FT Таймер Трапки", true)) {
+                NotifManager.startTimer("ft_trapka", "Трапка", seconds, NotifManager.NotifType.WARNING);
+            }
+            Box cube = getTrapkaBox(player, 1.0f, isDragon);
+            Vec3d center = cube.getCenter();
+            PvpMarkerManager.addMarker("ft_trapka", "Трапка", isDragon ? "Драконья" : "Обычная",
+                    center.x, cube.maxY + 0.3, center.z,
+                    new ItemStack(Items.NETHERITE_SCRAP), seconds, TRAPKA_COLOR, cube);
             trapUsePending = false;
         }
     }
 
-    private static boolean isHoldingTrapka(ClientPlayerEntity player) {
-        return player.getMainHandStack().getItem() == Items.NETHERITE_SCRAP
-                || player.getOffHandStack().getItem() == Items.NETHERITE_SCRAP;
+    private static void handlePlastUse(MinecraftClient mc, ClientPlayerEntity player) {
+        long now = System.currentTimeMillis();
+
+        boolean usePressed = mc.options.useKey.isPressed();
+        boolean holdingPlast = isHoldingItem(player, Items.DRIED_KELP);
+
+        if (!lastPlastUsePressed && usePressed && holdingPlast) {
+            plastUsePending = true;
+            plastUsePendingUntil = now + 500L;
+            plastCountBeforeUse = countItem(player, Items.DRIED_KELP);
+        }
+
+        lastPlastUsePressed = usePressed;
+
+        if (!plastUsePending) return;
+
+        if (now > plastUsePendingUntil) {
+            plastUsePending = false;
+            return;
+        }
+
+        int currentCount = countItem(player, Items.DRIED_KELP);
+
+        if (currentCount == plastCountBeforeUse - 1) {
+            boolean isDragon = getMode("FT Пласт Скин", "Обычный").equals("Драконий");
+            float seconds = isDragon ? 30.0f : 45.0f;
+            if (isState("FT Таймер Пласта", true)) {
+                NotifManager.startTimer("ft_plast", "Пласт", seconds, NotifManager.NotifType.WARNING);
+            }
+            Box plane = getPlastBox(mc, player, 1.0f, isDragon);
+            Vec3d center = plane.getCenter();
+            PvpMarkerManager.addMarker("ft_plast", "Пласт", isDragon ? "Драконий" : "Обычный",
+                    center.x, plane.maxY + 0.3, center.z,
+                    new ItemStack(Items.DRIED_KELP), seconds, PLAST_COLOR, plane);
+            plastUsePending = false;
+        }
     }
 
-    private static int countTrapka(ClientPlayerEntity player) {
+    private static boolean isHoldingItem(ClientPlayerEntity player, Item item) {
+        return player.getMainHandStack().getItem() == item
+                || player.getOffHandStack().getItem() == item;
+    }
+
+    private static int countItem(ClientPlayerEntity player, Item item) {
         int count = 0;
-
         for (ItemStack stack : player.getInventory().main) {
-            if (!stack.isEmpty() && stack.getItem() == Items.NETHERITE_SCRAP) {
-                count += stack.getCount();
-            }
+            if (!stack.isEmpty() && stack.getItem() == item) count += stack.getCount();
         }
-
         for (ItemStack stack : player.getInventory().offHand) {
-            if (!stack.isEmpty() && stack.getItem() == Items.NETHERITE_SCRAP) {
-                count += stack.getCount();
-            }
+            if (!stack.isEmpty() && stack.getItem() == item) count += stack.getCount();
         }
-
         return count;
-    }
-
-    private static float getTrapkaTimerSeconds() {
-        String skin = LexoraGui.modeSettings.getOrDefault("FT Трапка Скин", "Обычный");
-        return skin.equals("Драконий") ? 27.4f : 15.0f;
     }
 
     private static int resolveActiveItemIndex(ItemStack mainHand, ItemStack offHand) {
@@ -219,13 +269,13 @@ public class FtHelper {
     }
 
     private static int getEnabledItemIndex(Item item) {
-        if (item == Items.ENDER_EYE && LexoraGui.moduleStates.getOrDefault("FT Дезка", true)) return IDX_DEZKA;
-        if (item == Items.SUGAR && LexoraGui.moduleStates.getOrDefault("FT Явка", true)) return IDX_YAVKA;
-        if (item == Items.FIRE_CHARGE && LexoraGui.moduleStates.getOrDefault("FT Огненный Шар", true)) return IDX_FIRE_CHARGE;
-        if (item == Items.PHANTOM_MEMBRANE && LexoraGui.moduleStates.getOrDefault("FT Божья Аура", true)) return IDX_GOD_AURA;
-        if (item == Items.NETHERITE_SCRAP && LexoraGui.moduleStates.getOrDefault("FT Трапка", true)) return IDX_TRAPKA;
-        if (item == Items.DRIED_KELP && LexoraGui.moduleStates.getOrDefault("FT Пласт", true)) return IDX_PLAST;
-        if (item == Items.SNOWBALL && LexoraGui.moduleStates.getOrDefault("FT Снежок", true)) return IDX_SNOWBALL;
+        if (item == Items.ENDER_EYE && isState("FT Дезка", true)) return IDX_DEZKA;
+        if (item == Items.SUGAR && isState("FT Явка", true)) return IDX_YAVKA;
+        if (item == Items.FIRE_CHARGE && isState("FT Огненный Шар", true)) return IDX_FIRE_CHARGE;
+        if (item == Items.PHANTOM_MEMBRANE && isState("FT Божья Аура", true)) return IDX_GOD_AURA;
+        if (item == Items.NETHERITE_SCRAP && isState("FT Трапка", true)) return IDX_TRAPKA;
+        if (item == Items.DRIED_KELP && isState("FT Пласт", true)) return IDX_PLAST;
+        if (item == Items.SNOWBALL && isState("FT Снежок", true)) return IDX_SNOWBALL;
         return -1;
     }
 

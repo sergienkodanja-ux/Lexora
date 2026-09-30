@@ -87,50 +87,57 @@ public class LexoraShaders {
     }
 
     // ── Hand: текущий шейдер ──────────────────────────────
+    public static ShaderUtil handShader;
+
+    public static ShaderUtil getHandShader() {
+        handShader = safeLoad(handShader, "hand_shader.vsh", "hand_shader.fsh");
+        return handShader;
+    }
+
     public static ShaderUtil getCurrentHandShader() {
-        init();
-        String mode = LexoraGui.modeSettings.getOrDefault("Hand Mode", "Стандарт");
-        return switch (mode) {
-            case "Стандарт", "Standard", "Fire" -> {
-                fireShader = safeLoad(fireShader, "hand.vsh", "fire.fsh");
-                yield fireShader;
-            }
-            case "Smoke" -> {
-                smokeShader = safeLoad(smokeShader, "hand.vsh", "smoke.fsh");
-                yield smokeShader;
-            }
-            case "Stripes" -> {
-                stripesShader = safeLoad(stripesShader, "hand.vsh", "stripes.fsh");
-                yield stripesShader;
-            }
-            case "Solid" -> {
-                solidShader = safeLoad(solidShader, "hand.vsh", "solid.fsh");
-                yield solidShader;
-            }
-            default -> {
-                snowShader = safeLoad(snowShader, "hand.vsh", "snow.fsh");
-                yield snowShader;
-            }
-        };
+        return getHandShader();
     }
 
     public static ShaderUtil getMaskDiffShader() {
-        maskDiffShader = safeLoad(maskDiffShader, "hand.vsh", "mask_diff.fsh");
+        maskDiffShader = safeLoad(maskDiffShader, "hand_shader.vsh", "mask_diff.fsh");
         return maskDiffShader;
     }
 
     public static ShaderUtil getHandTrailShader() {
-        handTrailShader = safeLoad(handTrailShader, "hand.vsh", "hand_trail.fsh");
+        handTrailShader = safeLoad(handTrailShader, "hand_shader.vsh", "hand_trail.fsh");
         return handTrailShader;
     }
 
     public static ShaderUtil getHandFireShader() {
-        handFireShader = safeLoad(handFireShader, "hand.vsh", "hand_fire.fsh");
+        handFireShader = safeLoad(handFireShader, "hand_shader.vsh", "hand_fire.fsh");
         return handFireShader;
+    }
+
+    // ── Snowfall shader ───────────────────────────────────
+    public static ShaderUtil snowfallShader;
+
+    public static ShaderUtil getSnowfallShader() {
+        snowfallShader = safeLoad(snowfallShader, "snowfall.vsh", "snowfall.fsh");
+        return snowfallShader;
+    }
+
+    // ── Footprint shader ──────────────────────────────────
+    public static ShaderUtil footprintShader;
+
+    public static ShaderUtil getFootprintShader() {
+        footprintShader = safeLoad(footprintShader, "footprint.vsh", "footprint.fsh");
+        return footprintShader;
     }
 
     // ── Cleanup ───────────────────────────────────────────
     public static void cleanup() {
+        deleteShader(snowfallShader);
+        snowfallShader = null;
+        com.lexoravisauls.client.modules.weather.winter.WinterSnowfall.getInstance().cleanupBuffers();
+
+        deleteShader(footprintShader);
+        footprintShader = null;
+        com.lexoravisauls.client.modules.weather.winter.WinterFootprints.getInstance().cleanupBuffers();
         // Overlay
         deleteShader(webShader);
         deleteShader(spaceShader);
@@ -138,6 +145,7 @@ public class LexoraShaders {
         webShader = spaceShader = orbShader = null;
 
         // Hand
+        deleteShader(handShader);
         deleteShader(snowShader);
         deleteShader(smokeShader);
         deleteShader(stripesShader);
@@ -146,7 +154,7 @@ public class LexoraShaders {
         deleteShader(maskDiffShader);
         deleteShader(handTrailShader);
         deleteShader(handFireShader);
-        snowShader = smokeShader = stripesShader = solidShader = fireShader = maskDiffShader = handTrailShader = handFireShader = null;
+        handShader = snowShader = smokeShader = stripesShader = solidShader = fireShader = maskDiffShader = handTrailShader = handFireShader = null;
 
         // Sky
         deleteShader(waterSkyShader);

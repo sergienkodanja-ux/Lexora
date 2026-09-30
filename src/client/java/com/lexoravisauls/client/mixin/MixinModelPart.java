@@ -20,9 +20,13 @@ public class MixinModelPart {
             result = ArmorDurabilityColor.applyTint(result);
         }
 
+        // Морозный тон инея на броне при зимнем режиме
+        if (com.lexoravisauls.client.modules.weather.winter.WinterArmorFrost.isFrostTinting()) {
+            result = com.lexoravisauls.client.modules.weather.winter.WinterArmorFrost.applyFrostTint(result);
+        }
+
         // Поверх — вспышка от Hit Color (если оба активны одновременно, например
-        // ударили моба в повреждённой броне — тона перемножатся, порядок можно поменять местами,
-        // если захочешь, чтобы durability-тон был поверх вспышки, а не наоборот)
+        // ударили моба в повреждённой броне — тона перемножатся)
         if (HitColorHandler.isHurt) {
             result = HitColorHandler.getColor(result);
         }

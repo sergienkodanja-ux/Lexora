@@ -60,6 +60,12 @@ public class WeatherFX {
                 clearRain();
             }
         }
+        if (!mode.equals("Winter")) {
+            com.lexoravisauls.client.modules.weather.winter.WinterSnowfall.getInstance().reset();
+            com.lexoravisauls.client.modules.weather.winter.WinterFootprints.getInstance().clear();
+        } else {
+            com.lexoravisauls.client.modules.weather.winter.WinterFootprints.getInstance().tick();
+        }
 
         if (++cacheTicks > 30) {
             cacheTicks = 0;
@@ -69,6 +75,8 @@ public class WeatherFX {
 
     public static void clearAll() {
         clearRain();
+        com.lexoravisauls.client.modules.weather.winter.WinterSnowfall.getInstance().reset();
+        com.lexoravisauls.client.modules.weather.winter.WinterFootprints.getInstance().clear();
         flash = 0.0f;
         lastFrameNanos = 0L;
     }
@@ -85,7 +93,7 @@ public class WeatherFX {
 
     private static String getNormalizedMode() {
         String mode = LexoraGui.modeSettings.getOrDefault("Weather Visual Mode", "Rain");
-        if (!mode.equals("Wet Floor") && !mode.equals("Rain")) {
+        if (!mode.equals("Wet Floor") && !mode.equals("Rain") && !mode.equals("Winter")) {
             mode = "Rain";
             LexoraGui.modeSettings.put("Weather Visual Mode", "Rain");
         }
@@ -131,7 +139,54 @@ public class WeatherFX {
         // 2. Volumetric Rain Render Pass (falling rain, splashes, mist, lightning)
         if (mode.equals("Rain")) {
             renderRain(matrices, camera, tickDelta);
+            return;
         }
+
+        // 3. Winter Render Pass (realistic falling snow & ground snow accumulation)
+        if (mode.equals("Winter")) {
+            clearRain();
+            renderWinter(matrices, camera, projectionMatrix, tickDelta);
+        }
+    }
+
+    private static void renderWinter(MatrixStack matrices, Camera camera, Matrix4f projectionMatrix, float tickDelta) {
+        com.lexoravisauls.client.modules.weather.winter.WinterSnowfall.Config config =
+                new com.lexoravisauls.client.modules.weather.winter.WinterSnowfall.Config();
+        config.density = LexoraGui.numSettings.getOrDefault("Winter Density", 1.25f);
+        config.blizzard = LexoraGui.numSettings.getOrDefault("Winter Blizzard", 0.0f);
+        MinecraftClient mc = MinecraftClient.getInstance();
+        int chunkDist = (mc.options != null && mc.options.getViewDistance() != null)
+                ? mc.options.getViewDistance().getValue() : 8;
+        config.radius = MathHelper.clamp(chunkDist * 3.5f + 4.0f, 22.0f, 40.0f);
+        config.height = 30.0f;
+        config.flakeSize = 0.45f;
+        config.fallSpeed = 0.9f + config.blizzard * 0.6f;
+        config.wind = 0.8f + config.blizzard * 2.2f;
+        config.opacity = 1.0f;
+        config.skyOnly = false; // Natural depth-buffer occlusion, never kill flakes prematurely
+
+        config.groundSnow = LexoraGui.moduleStates.getOrDefault("Winter Ground Snow", true);
+        config.hangingSnow = config.groundSnow;
+        config.footprints = LexoraGui.moduleStates.getOrDefault("Winter Footprints", true);
+        config.footprintDuration = 22.0f;
+        config.snowfall = LexoraGui.moduleStates.getOrDefault("Winter Snowfall", true);
+        config.wallSnow = LexoraGui.moduleStates.getOrDefault("Winter Wall Snow", true);
+        config.wallFrost = LexoraGui.moduleStates.getOrDefault("Winter Frost",
+                LexoraGui.moduleStates.getOrDefault("Winter Wall Frost", true));
+        config.groundRadius = MathHelper.clamp(chunkDist * 3.5f + 8.0f, 24.0f, 48.0f);
+        config.groundDepth = 0.09f;
+
+        String colorMode = LexoraGui.modeSettings.getOrDefault("Winter Color Mode", "Realistic");
+        if (colorMode.equals("Custom")) {
+            float[] c = LexoraGui.colorSettings.getOrDefault("Winter Custom Color", new float[]{0.58f, 0.15f, 0.98f});
+            config.color = Color.HSBtoRGB(c[0], c[1], c[2]);
+        } else if (colorMode.equals("Client")) {
+            config.color = LexoraGui.getThemeColor(0f);
+        } else {
+            config.color = 0xFFEAF4FF;
+        }
+
+        com.lexoravisauls.client.modules.weather.winter.WinterSnowfall.getInstance().render(matrices, camera, projectionMatrix, config);
     }
 
     private static void renderRain(MatrixStack matrices, Camera camera, float tickDelta) {

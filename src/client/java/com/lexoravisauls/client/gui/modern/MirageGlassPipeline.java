@@ -35,6 +35,9 @@ public class MirageGlassPipeline {
         RenderSystem.setShader(shader);
 
         float targetBlur = blur <= 0.1f ? 15.0f : blur;
+        if (com.lexoravisauls.client.modules.Optimization.isEnabled() && com.lexoravisauls.client.modules.Optimization.isAdaptiveBlurEnabled()) {
+            targetBlur *= com.lexoravisauls.client.modules.Optimization.getQualityLevel();
+        }
         float currentBlur = Math.max(0.001f, targetBlur * alpha);
 
         if (shader.getUniform("u_rect") != null) shader.getUniform("u_rect").set(tx, ty, tw, th);

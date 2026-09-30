@@ -13,7 +13,8 @@ public class ModernSetting {
         BIND,
         HEADER,
         PAD2D,
-        CROSSHAIR_CANVAS
+        CROSSHAIR_CANVAS,
+        BUTTON
     }
 
     public final Type type;
@@ -28,6 +29,7 @@ public class ModernSetting {
     public String keyY;
 
     public List<String> modes;
+    public Runnable action;
 
     public BooleanSupplier visibleRule = () -> true;
 
@@ -35,6 +37,12 @@ public class ModernSetting {
         this.type = type;
         this.key = key;
         this.label = label;
+    }
+
+    public static ModernSetting button(String label, Runnable action) {
+        ModernSetting s = new ModernSetting(Type.BUTTON, label, label);
+        s.action = action;
+        return s;
     }
 
     public static ModernSetting toggle(String key, String label) {

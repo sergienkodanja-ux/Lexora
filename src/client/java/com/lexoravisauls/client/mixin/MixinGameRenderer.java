@@ -2,6 +2,7 @@ package com.lexoravisauls.client.mixin;
 
 import com.lexoravisauls.client.gui.LexoraGui;
 import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.client.util.Window;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.LivingEntity;
@@ -16,6 +17,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(GameRenderer.class)
 public class MixinGameRenderer {
+
+    // --- FRAME TIME & FPS SAMPLER (Optimization) ---
+    @Inject(method = "render", at = @At("HEAD"))
+    private void onRenderFrame(RenderTickCounter tickCounter, boolean tick, CallbackInfo ci) {
+        com.lexoravisauls.client.modules.Optimization.sampleFrame();
+    }
 
     // --- FULL BRIGHT (Ночное зрение на максимум) ---
     @Inject(method = "getNightVisionStrength", at = @At("HEAD"), cancellable = true)
@@ -72,6 +79,15 @@ public class MixinGameRenderer {
     @Inject(method = "tiltViewWhenHurt", at = @At("HEAD"), cancellable = true)
     private void onTiltView(MatrixStack matrices, float tickDelta, CallbackInfo ci) {
         if (LexoraGui.moduleStates.getOrDefault("No Render", false) && LexoraGui.moduleStates.getOrDefault("No Hurt Cam", true)) {
+            ci.cancel();
+        }
+    }
+
+    // Запрещаем размытие экрана в редакторе анимаций взмаха
+    @Inject(method = "renderBlur", at = @At("HEAD"), cancellable = true)
+    private void onRenderBlur(CallbackInfo ci) {
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        if (client != null && client.currentScreen instanceof com.lexoravisauls.client.modules.swinganim.SwingAnimScreen) {
             ci.cancel();
         }
     }

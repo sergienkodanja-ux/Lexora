@@ -259,7 +259,9 @@ public class ElytraSwap {
     // =========================================================================
 
     private static void sendSuccessNotif() {
-        NotifManager.show("Свапнул на " + targetItemName, "Успешно!", NotifManager.NotifType.SUCCESS);
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ItemStack chest = mc.player != null ? mc.player.getEquippedStack(net.minecraft.entity.EquipmentSlot.CHEST) : null;
+        NotifManager.show("Свапнул на " + targetItemName, "Успешно!", NotifManager.NotifType.SWAP, chest != null && !chest.isEmpty() ? chest.copy() : null);
     }
 
     private static void resetState() {

@@ -149,6 +149,80 @@ public class MsdfFont {
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
+    public void draw3D(MatrixStack matrices, String text, float x, float y, float size, int color, boolean depthTest) {
+        if (fontData == null) loadFont(jsonId);
+        if (fontData == null || text == null || text.trim().isEmpty()) return;
+
+        int a = (color >> 24) & 0xFF;
+        if (a == 0) a = 255;
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+
+        ensureTextureFilter();
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableCull();
+        if (depthTest) {
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthFunc(515); // GL_LEQUAL
+            RenderSystem.depthMask(false);
+        } else {
+            RenderSystem.disableDepthTest();
+        }
+        RenderSystem.setShaderTexture(0, textureId);
+
+        applyShaderObfuscationProof();
+
+        Tessellator tess = Tessellator.getInstance();
+        BufferBuilder buf = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+        Matrix4f mat = matrices.peek().getPositionMatrix();
+
+        float cx = x;
+        float cy = y + (fontData.metrics.ascender * size);
+        boolean hasVertices = false;
+
+        for (int i = 0; i < text.length(); i++) {
+            int code = text.codePointAt(i);
+            if (code == 32) { cx += 0.25f * size; continue; }
+
+            GlyphData glyph = glyphs.get(code);
+            if (glyph == null || glyph.planeBounds == null) continue;
+
+            float u0 = glyph.atlasBounds.left / fontData.atlas.width;
+            float v0 = 1f - (glyph.atlasBounds.top / fontData.atlas.height);
+            float u1 = glyph.atlasBounds.right / fontData.atlas.width;
+            float v1 = 1f - (glyph.atlasBounds.bottom / fontData.atlas.height);
+
+            float x0 = cx + glyph.planeBounds.left * size;
+            float y0 = cy - glyph.planeBounds.top * size;
+            float x1 = cx + glyph.planeBounds.right * size;
+            float y1 = cy - glyph.planeBounds.bottom * size;
+
+            buf.vertex(mat, x0, y0, 0.0f).texture(u0, v0).color(r, g, b, a);
+            buf.vertex(mat, x0, y1, 0.0f).texture(u0, v1).color(r, g, b, a);
+            buf.vertex(mat, x1, y1, 0.0f).texture(u1, v1).color(r, g, b, a);
+            buf.vertex(mat, x1, y0, 0.0f).texture(u1, v0).color(r, g, b, a);
+
+            cx += glyph.advance * size;
+            hasVertices = true;
+        }
+
+        if (hasVertices) {
+            try {
+                BufferRenderer.drawWithGlobalProgram(buf.end());
+            } catch (Exception ignored) {}
+        }
+
+        if (depthTest) {
+            RenderSystem.depthMask(true);
+        }
+        RenderSystem.enableCull();
+        RenderSystem.enableDepthTest();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
     private void ensureTextureFilter() {
         if (!filterSet) {
             try {
@@ -302,6 +376,111 @@ public class MsdfFont {
 
         com.mojang.blaze3d.systems.RenderSystem.enableDepthTest();
         com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    public void drawKaraoke3D(MatrixStack matrices, String text, float x, float y,
+                              float size, int colorDone, int colorPending, float progress, boolean depthTest) {
+        if (fontData == null) loadFont(jsonId);
+        if (fontData == null || text == null || text.trim().isEmpty()) return;
+        progress = Math.max(0f, Math.min(1f, progress));
+
+        float progressX = computeNaturalProgressX(text, size, progress);
+
+        int aD = (colorDone >> 24) & 0xFF; if (aD == 0) aD = 255;
+        int rD = (colorDone >> 16) & 0xFF;
+        int gD = (colorDone >> 8) & 0xFF;
+        int bD = colorDone & 0xFF;
+
+        int aP = (colorPending >> 24) & 0xFF; if (aP == 0) aP = 255;
+        int rP = (colorPending >> 16) & 0xFF;
+        int gP = (colorPending >> 8) & 0xFF;
+        int bP = colorPending & 0xFF;
+
+        ensureTextureFilter();
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableCull();
+        if (depthTest) {
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthFunc(515); // GL_LEQUAL
+            RenderSystem.depthMask(false);
+        } else {
+            RenderSystem.disableDepthTest();
+        }
+        RenderSystem.setShaderTexture(0, textureId);
+        applyShaderObfuscationProof();
+
+        Tessellator tess = Tessellator.getInstance();
+        BufferBuilder buf = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+        Matrix4f mat = matrices.peek().getPositionMatrix();
+
+        float cx = 0;
+        float drawX = x;
+        float cy = y + (fontData.metrics.ascender * size);
+        boolean hasVertices = false;
+
+        for (int i = 0; i < text.length(); i++) {
+            int code = text.codePointAt(i);
+            float charW;
+            if (code == 32) {
+                charW = 0.25f * size;
+                cx += charW;
+                drawX += charW;
+                continue;
+            }
+
+            GlyphData glyph = glyphs.get(code);
+            if (glyph == null || glyph.planeBounds == null) continue;
+            charW = glyph.advance * size;
+
+            float charMid = cx + charW / 2f;
+            float t;
+            if (charMid <= progressX - charW) {
+                t = 0f;
+            } else if (charMid >= progressX + charW) {
+                t = 1f;
+            } else {
+                t = Math.max(0f, Math.min(1f, (charMid - progressX + charW) / (2f * charW)));
+            }
+
+            int r = (int)(rD + (rP - rD) * t);
+            int g = (int)(gD + (gP - gD) * t);
+            int b = (int)(bD + (bP - bD) * t);
+            int a = (int)(aD + (aP - aD) * t);
+
+            float u0 = glyph.atlasBounds.left / fontData.atlas.width;
+            float v0 = 1f - (glyph.atlasBounds.top / fontData.atlas.height);
+            float u1 = glyph.atlasBounds.right / fontData.atlas.width;
+            float v1 = 1f - (glyph.atlasBounds.bottom / fontData.atlas.height);
+
+            float x0 = drawX + glyph.planeBounds.left * size;
+            float y0 = cy - glyph.planeBounds.top * size;
+            float x1 = drawX + glyph.planeBounds.right * size;
+            float y1 = cy - glyph.planeBounds.bottom * size;
+
+            buf.vertex(mat, x0, y0, 0.0f).texture(u0, v0).color(r, g, b, a);
+            buf.vertex(mat, x0, y1, 0.0f).texture(u0, v1).color(r, g, b, a);
+            buf.vertex(mat, x1, y1, 0.0f).texture(u1, v1).color(r, g, b, a);
+            buf.vertex(mat, x1, y0, 0.0f).texture(u1, v0).color(r, g, b, a);
+
+            cx += charW;
+            drawX += charW;
+            hasVertices = true;
+        }
+
+        if (hasVertices) {
+            try {
+                BufferRenderer.drawWithGlobalProgram(buf.end());
+            } catch (Exception ignored) {}
+        }
+
+        if (depthTest) {
+            RenderSystem.depthMask(true);
+        }
+        RenderSystem.enableCull();
+        RenderSystem.enableDepthTest();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     /** Есть ли в кастомном MSDF-атласе глиф для этого юникод-кодпоинта (пробел считается всегда "своим"). */

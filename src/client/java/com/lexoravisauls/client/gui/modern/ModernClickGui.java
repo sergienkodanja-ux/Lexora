@@ -54,9 +54,9 @@ public class ModernClickGui extends Screen {
    private static final int HEADER_H = 30;
    private static final int COL_GAP = 8;
    private static final int NUM_COLS = 3;
-   public static final List<String> HUD_MODULES = List.of("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Saturation HUD", "GPS", "Scoreboard HUD", "Lexora IRC", "Emotes", "Hit Indicator", "TNT Detect");
-   public static final List<String> VISUAL_MODULES = List.of("Crosshair", "Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones", "Kill Effect", "Motion Blur", "Taksa", "Custom Swords", "Atmosphere", "Virtual Desktop", "Nametags", "Arrows");
-   public static final List<String> UTILS_MODULES = List.of("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter", "Healing Helper", "Streamer Mode", "No Render", "Optimization", "Zoom", "Tape Mouse", "Self Nametags", "Armor Durability", "Totem Sound", "TriggerBot", "AimAssist");
+   public static final List<String> HUD_MODULES = List.of("Armor Status", "Potions", "Inventory HUD", "Cooldowns", "Watermark", "Keybinds", "Target HUD", "Info HUD", "Saturation HUD", "GPS", "Scoreboard HUD", "Lexora IRC", "Emotes", "Hit Indicator", "TNT Detect", "Notifications");
+   public static final List<String> VISUAL_MODULES = List.of("Crosshair", "Target ESP", "Animations", "Aspect Ratio", "View Model", "Hit Sounds", "Ft Helper", "HW Helper", "China Hat", "Particles", "Jump Circles", "Item Physics", "Hit Color", "Hit Wave", "Prediction", "Full Bright", "Block Overlay", "Hand Shaders", "Trails", "Custom Hitboxes", "Nimb", "World Customizer", "AuraParticles", "Motion Clones", "Kill Effect", "Motion Blur", "Taksa", "Custom Swords", "Atmosphere", "Virtual Desktop", "Kinetic Lyrics");
+   public static final List<String> UTILS_MODULES = List.of("Auto Sprint", "Item Swap", "Elytra Swap", "Fake Player", "Fast EXP", "Auto Eat", "Free Look", "Auto Respawn", "Totem Indicator", "Loot Notifier", "Auto Leave", "Shift Tap", "Fast Swap", "Item Scroller", "PvP Save", "Lock Slot", "Item Highlighter", "Healing Helper", "Streamer Mode", "No Render", "Optimization", "Zoom", "Tape Mouse", "Self Nametags", "Armor Durability", "Totem Sound");
    public static final String TAB_ALL = "All";
    public static final String TAB_HUD = "HUD";
    public static final String TAB_VISUAL = "Visual";
@@ -128,6 +128,7 @@ public class ModernClickGui extends Screen {
    private final Map<String, float[]> padBounds;
    private final Map<String, String> padKeyYMap;
    private final Map<String, float[]> crosshairBounds;
+   private final Map<String, Runnable> buttonActions;
    private String bindingTarget;
    private String draggingSlider;
    private String draggingPad;
@@ -253,6 +254,7 @@ public class ModernClickGui extends Screen {
       this.padBounds = new HashMap();
       this.padKeyYMap = new HashMap();
       this.crosshairBounds = new HashMap();
+      this.buttonActions = new HashMap();
       this.bindingTarget = null;
       this.draggingSlider = null;
       this.draggingPad = null;
@@ -295,6 +297,7 @@ public class ModernClickGui extends Screen {
          case "Sound 2" -> var10000 = "2";
          case "Sound 3" -> var10000 = "3";
          case "Sound 4" -> var10000 = "4";
+         case "Sound 5" -> { playSound(enabled ? "module_enable" : "module_disable"); return; }
          default -> var10000 = "";
       }
 
@@ -437,6 +440,7 @@ public class ModernClickGui extends Screen {
       this.sliderBounds.clear();
       this.padBounds.clear();
       this.crosshairBounds.clear();
+      this.buttonActions.clear();
       int screenW = this.width;
       int screenH = this.height;
       int overlayAlpha = (int)(140.0F * this.openAnim);
@@ -792,6 +796,7 @@ public class ModernClickGui extends Screen {
             case COLOR -> var10000 = 24.0F;
             case TOGGLE -> var10000 = 20.0F;
             case BIND -> var10000 = 20.0F;
+            case BUTTON -> var10000 = 22.0F;
             default -> throw new MatchException((String)null, (Throwable)null);
          }
 
@@ -981,6 +986,20 @@ public class ModernClickGui extends Screen {
                }
 
                return y + 20.0F;
+            case BUTTON: {
+               float buttonW = w;
+               float buttonH = 16.0F;
+               float buttonY = y + 1.0F;
+               boolean bHov = this.inside(this.currentMouseX, this.currentMouseY, x, buttonY, buttonW, buttonH);
+               int bBg = bHov ? (dark ? -13290171 : -2564888) : (dark ? -14540244 : -1709840);
+               RoundedRectShader.draw(context, x, buttonY, buttonW, buttonH, 3.5F, this.withAlpha(bBg, anim));
+               SFUI.draw(context, s.label, x + (buttonW - SFUI.getWidth(s.label, 6.8F)) / 2.0F, buttonY + 4.5F, 6.8F, this.withAlpha(dark ? -1118478 : -15461352, anim));
+               if (s.action != null) {
+                  this.buttonActions.put(s.label, s.action);
+                  this.clickBounds.put("btn:" + s.label, new int[]{(int)x, (int)buttonY, (int)buttonW, (int)buttonH});
+               }
+               return y + 22.0F;
+            }
          }
       }
    }
@@ -1490,7 +1509,7 @@ public class ModernClickGui extends Screen {
       RoundedRectShader.draw(context, x, curY, w, card1H, 7.0F, this.withAlpha(cardBg, anim * switchAlpha));
       SFUI.draw(context, "Звуковые эффекты", x + 12.0F, curY + 9.0F, 8.5F, this.withAlpha(dark ? -1 : -15461352, anim * switchAlpha));
       this.drawSettingRow(context, x + 12.0F, curY + 22.0F, w - 24.0F, "Settings", ModernSetting.mode("GuiSounds", "Звуки интерфейса", "On", "Off"), dark, anim * switchAlpha);
-      this.drawSettingRow(context, x + 12.0F, curY + 54.0F, w - 24.0F, "Settings", ModernSetting.mode("ModuleSoundMode", "Стиль щелчка", "Default", "Sound 1", "Sound 2", "Sound 3", "Sound 4"), dark, anim * switchAlpha);
+      this.drawSettingRow(context, x + 12.0F, curY + 54.0F, w - 24.0F, "Settings", ModernSetting.mode("ModuleSoundMode", "Стиль щелчка", "Default", "Sound 1", "Sound 2", "Sound 3", "Sound 4", "Sound 5"), dark, anim * switchAlpha);
       curY += card1H + 12.0F;
       float card2H = 55.0F;
       RoundedRectShader.draw(context, x, curY, w, card2H, 7.0F, this.withAlpha(cardBg, anim * switchAlpha));
@@ -2227,8 +2246,16 @@ public class ModernClickGui extends Screen {
          playSound("click");
       } else if (key.startsWith("toggle:")) {
          String mod = key.substring(7);
+         if (com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(mod)) {
+            ClientData.moduleStates.put(mod, false);
+            LexoraGui.moduleStates.put(mod, false);
+            com.lexoravisauls.client.utils.NotifManager.show("HolyWorld", "Функция '" + mod + "' запрещена сервером!", com.lexoravisauls.client.utils.NotifManager.NotifType.ERROR);
+            playSound("click");
+            return;
+         }
          boolean current = (Boolean)ClientData.moduleStates.getOrDefault(mod, false);
          ClientData.moduleStates.put(mod, !current);
+         LexoraGui.moduleStates.put(mod, !current);
          playModuleToggleSound(!current);
          ConfigManager.saveConfig();
       } else if (key.startsWith("fav:")) {
@@ -2240,10 +2267,25 @@ public class ModernClickGui extends Screen {
          String target = key.substring(5);
          this.bindingTarget = target;
          playSound("click");
+      } else if (key.startsWith("btn:")) {
+         String bLabel = key.substring(4);
+         Runnable act = (Runnable)this.buttonActions.get(bLabel);
+         if (act != null) {
+            act.run();
+            playSound("click");
+         }
       } else if (key.startsWith("bool:")) {
          String sKey = key.substring(5);
+         if (com.lexoravisauls.client.liteapi.LiteApiFeatureControl.isBlocked(sKey)) {
+            ClientData.moduleStates.put(sKey, false);
+            LexoraGui.moduleStates.put(sKey, false);
+            com.lexoravisauls.client.utils.NotifManager.show("HolyWorld", "Функция '" + sKey + "' запрещена сервером!", com.lexoravisauls.client.utils.NotifManager.NotifType.ERROR);
+            playSound("click");
+            return;
+         }
          boolean cur = (Boolean)ClientData.moduleStates.getOrDefault(sKey, false);
          ClientData.moduleStates.put(sKey, !cur);
+         LexoraGui.moduleStates.put(sKey, !cur);
          playSound("click");
          ConfigManager.saveConfig();
       } else if (key.startsWith("dropdown:")) {
